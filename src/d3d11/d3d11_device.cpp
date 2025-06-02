@@ -1889,6 +1889,7 @@ namespace dxvk {
   }
   
   
+<<<<<<< HEAD
   DxvkDeviceFeatures D3D11Device::GetDeviceFeatures(
     const Rc<DxvkAdapter>&  Adapter) {
     DxvkDeviceFeatures supported = Adapter->features();
@@ -1971,6 +1972,8 @@ namespace dxvk {
   }
 
 
+=======
+>>>>>>> Remove now unused GetDeviceFeatures method
   DxvkShaderKey D3D11Device::ComputeShaderKey(
           VkShaderStageFlagBits   ShaderStage,
     const void*                   pShaderBytecode,
