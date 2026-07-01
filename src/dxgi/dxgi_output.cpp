@@ -27,7 +27,8 @@ namespace dxvk {
   : m_factory     ( factory ),
     m_adapter     ( adapter ),
     m_monitorInfo ( factory->GetMonitorInfo() ),
-    m_monitor     ( monitor ) {
+    m_monitor     ( monitor ),
+    m_destructionNotifier(this) {
     CacheMonitorData();
   }
   
@@ -55,7 +56,12 @@ namespace dxvk {
       *ppvObject = ref(this);
       return S_OK;
     }
-    
+
+    if (riid == __uuidof(ID3DDestructionNotifier)) {
+      *ppvObject = ref(&m_destructionNotifier);
+      return S_OK;
+    }
+
     if (logQueryInterfaceError(__uuidof(IDXGIOutput), riid)) {
       Logger::warn("DxgiOutput::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));

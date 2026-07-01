@@ -64,8 +64,9 @@ namespace dxvk {
     m_adapter (adapter),
     m_interop (this),
     m_index   (index),
-    m_desc    (GetAdapterDesc()) {
-    
+    m_desc    (GetAdapterDesc()),
+    m_destructionNotifier(this) {
+
   }
   
   
@@ -103,7 +104,12 @@ namespace dxvk {
       *ppvObject = ref(&m_interop);
       return S_OK;
     }
-    
+
+    if (riid == __uuidof(ID3DDestructionNotifier)) {
+      *ppvObject = ref(&m_destructionNotifier);
+      return S_OK;
+    }
+
     if (logQueryInterfaceError(__uuidof(IDXGIAdapter), riid)) {
       Logger::warn("DxgiAdapter::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
