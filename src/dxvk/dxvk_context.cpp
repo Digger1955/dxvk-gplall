@@ -1392,7 +1392,7 @@ namespace dxvk {
     // Retrieve a compatible pipeline to use for rendering
     DxvkMetaBlitPipeline pipeInfo = m_common->metaBlit().getPipeline(
       mipGenerator.getSrcViewType(), imageView->info().format,
-      VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT);
+      VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT, filter);
 
     VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
 
@@ -3516,7 +3516,7 @@ namespace dxvk {
     DxvkMetaBlitPipeline pipeInfo = m_common->metaBlit().getPipeline(
       dstView->info().viewType, dstView->info().format,
       srcView->image()->info().sampleCount,
-      dstView->image()->info().sampleCount);
+      dstView->image()->info().sampleCount, filter);
 
     VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
 
