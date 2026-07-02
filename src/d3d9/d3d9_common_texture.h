@@ -64,6 +64,7 @@ namespace dxvk {
 
     Rc<DxvkImageView> Color;
     Rc<DxvkImageView> Srgb;
+    Rc<DxvkImageView> DepthReadOnly;
   };
 
   template <typename T>
@@ -353,14 +354,8 @@ namespace dxvk {
       return m_sampleView.Pick(srgb && IsSrgbCompatible());
     }
 
-    VkImageLayout DetermineRenderTargetLayout(VkImageLayout hazardLayout) const {
-      if (unlikely(m_transitionedToHazardLayout))
-        return hazardLayout;
-
-      return m_image != nullptr &&
-             m_image->info().tiling == VK_IMAGE_TILING_OPTIMAL
-        ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        : VK_IMAGE_LAYOUT_GENERAL;
+    const Rc<DxvkImageView>& GetDepthReadOnlySampleView() const {
+      return m_sampleView.DepthReadOnly;
     }
 
     Rc<DxvkImageView> CreateView(

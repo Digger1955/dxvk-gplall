@@ -42,11 +42,14 @@ namespace dxvk {
     m_adapter         (Adapter),
     m_ordinal         (Ordinal),
     m_displayIndex    (DisplayIndex),
-    m_modeCacheFormat (D3D9Format::Unknown),
-    m_d3d9Formats     (this, Adapter, m_parent->GetOptions()) {
+    m_modeCacheFormat (D3D9Format::Unknown) {
     m_adapter->logAdapterInfo();
     CacheIdentifierInfo();
+    // D3D9VkFormatTable needs to be constructed after we've cached the
+    // identifier info and determined the proper vendorID to be used.
+    m_d3d9Formats = std::make_unique<D3D9VkFormatTable>(this, Adapter, m_parent->GetOptions());
   }
+
 
   template <size_t N>
   static void copyToStringArray(char (&dst)[N], const char* src) {
@@ -118,18 +121,27 @@ namespace dxvk {
     const bool isNvidia         = m_vendorId == uint32_t(DxvkGpuVendor::Nvidia);
     const bool isAmd            = m_vendorId == uint32_t(DxvkGpuVendor::Amd);
 
-    const bool dmap = Usage & D3DUSAGE_DMAP;
     const bool rt   = Usage & D3DUSAGE_RENDERTARGET;
     const bool ds   = Usage & D3DUSAGE_DEPTHSTENCIL;
 
-    const bool surface = RType == D3DRTYPE_SURFACE;
-    const bool texture = RType == D3DRTYPE_TEXTURE;
+    const bool surface       = RType == D3DRTYPE_SURFACE;
+    const bool texture       = RType == D3DRTYPE_TEXTURE;
+    const bool volumeTexture = RType == D3DRTYPE_VOLUMETEXTURE;
 
     const bool twoDimensional = surface || texture;
 
-    const bool srgb = (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE)) != 0;
+    const bool isDepthStencilFormat = IsDepthStencilFormat(CheckFormat);
+    const bool isLockableDepthStencilFormat = IsLockableDepthStencilFormat(CheckFormat);
 
-    if (ds && !IsDepthStencilFormat(CheckFormat))
+    if (ds && !isDepthStencilFormat)
+      return D3DERR_NOTAVAILABLE;
+
+    // Offscreen plain surfaces must only use lockable depth stencil formats
+    if (surface && !(rt || ds) && isDepthStencilFormat && !isLockableDepthStencilFormat)
+      return D3DERR_NOTAVAILABLE;
+
+    // Volume textures can not be used as render targets
+    if (rt && volumeTexture)
       return D3DERR_NOTAVAILABLE;
 
     auto& options = m_parent->GetOptions();
@@ -193,14 +205,16 @@ namespace dxvk {
       return D3DERR_NOTAVAILABLE;
 
     // I really don't want to support this...
-    if (unlikely(dmap)) {
+    if (unlikely(Usage & D3DUSAGE_DMAP)) {
       Logger::warn("D3D9Adapter::CheckDeviceFormat: D3DUSAGE_DMAP is unsupported");
       return D3DERR_NOTAVAILABLE;
     }
 
-    auto mapping = m_d3d9Formats.GetFormatMapping(CheckFormat);
+    auto mapping = GetFormatMapping(CheckFormat);
     if (mapping.FormatColor == VK_FORMAT_UNDEFINED)
       return D3DERR_NOTAVAILABLE;
+
+    const bool srgb = (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE)) != 0;
 
     if (mapping.FormatSrgb  == VK_FORMAT_UNDEFINED && srgb)
       return D3DERR_NOTAVAILABLE;
@@ -809,6 +823,16 @@ namespace dxvk {
       *pLUID = dxvk::GetAdapterLUID(m_ordinal);
 
     return D3D_OK;
+  }
+
+
+  bool D3D9Adapter::IsExtended() const {
+    return m_parent->IsExtended();
+  }
+
+
+  bool D3D9Adapter::IsD3D8Compatible() const {
+    return m_parent->IsD3D8Compatible();
   }
 
 

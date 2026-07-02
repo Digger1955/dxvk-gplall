@@ -217,6 +217,7 @@ namespace dxvk {
       srcView->info().unpackSwizzle());
 
     bool useFb = dstView->image()->info().sampleCount != VK_SAMPLE_COUNT_1_BIT
+              || srcView->image()->info().sampleCount != VK_SAMPLE_COUNT_1_BIT
               || dstView->image()->info().format != dstView->info().format
               || srcView->image()->info().format != srcView->info().format
               || !util::isIdentityMapping(mapping);
@@ -1389,8 +1390,13 @@ namespace dxvk {
     renderingInfo.pColorAttachments = &attachmentInfo;
     
     // Retrieve a compatible pipeline to use for rendering
+    auto resolveMode = filter == VK_FILTER_NEAREST
+      ? DxvkMetaBlitResolveMode::FilterNearest
+      : DxvkMetaBlitResolveMode::FilterLinear;
+
     DxvkMetaBlitPipeline pipeInfo = m_common->metaBlit().getPipeline(
-      mipGenerator.getSrcViewType(), imageView->info().format, VK_SAMPLE_COUNT_1_BIT);
+      mipGenerator.getSrcViewType(), imageView->info().format,
+      VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT, resolveMode);
 
     VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
 
@@ -3491,6 +3497,21 @@ namespace dxvk {
       uint32_t(dstOffsetsAdjusted[1].y - dstOffsetsAdjusted[0].y),
       uint32_t(dstOffsetsAdjusted[1].z - dstOffsetsAdjusted[0].z) };
 
+    // Determine resolve mode for when the source is multisampled. If
+    // there is no stretching going on, do a regular resolve.
+    auto resolveMode = filter == VK_FILTER_NEAREST
+      ? DxvkMetaBlitResolveMode::FilterNearest
+      : DxvkMetaBlitResolveMode::FilterLinear;
+
+    if (srcView->image()->info().sampleCount != VK_SAMPLE_COUNT_1_BIT) {
+      bool isSameExtent = (std::abs(dstOffsets[1].x - dstOffsets[0].x) == std::abs(srcOffsets[1].x - srcOffsets[0].x))
+                       && (std::abs(dstOffsets[1].y - dstOffsets[0].y) == std::abs(srcOffsets[1].y - srcOffsets[0].y))
+                       && (std::abs(dstOffsets[1].z - dstOffsets[0].z) == std::abs(srcOffsets[1].z - srcOffsets[0].z));
+
+      if (isSameExtent)
+        resolveMode = DxvkMetaBlitResolveMode::ResolveAverage;
+    }
+
     // Begin render pass
     VkExtent3D imageExtent = dstView->mipLevelExtent(0);
 
@@ -3513,7 +3534,8 @@ namespace dxvk {
     // Bind pipeline
     DxvkMetaBlitPipeline pipeInfo = m_common->metaBlit().getPipeline(
       dstView->info().viewType, dstView->info().format,
-      dstView->image()->info().sampleCount);
+      srcView->image()->info().sampleCount,
+      dstView->image()->info().sampleCount, resolveMode);
 
     VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
 
@@ -3562,15 +3584,27 @@ namespace dxvk {
     VkExtent3D srcExtent = srcView->mipLevelExtent(0);
 
     DxvkMetaBlitPushConstants pushConstants = { };
-    pushConstants.srcCoord0 = {
-      float(srcOffsetsAdjusted[0].x) / float(srcExtent.width),
-      float(srcOffsetsAdjusted[0].y) / float(srcExtent.height),
-      float(srcOffsetsAdjusted[0].z) / float(srcExtent.depth) };
-    pushConstants.srcCoord1 = {
-      float(srcOffsetsAdjusted[1].x) / float(srcExtent.width),
-      float(srcOffsetsAdjusted[1].y) / float(srcExtent.height),
-      float(srcOffsetsAdjusted[1].z) / float(srcExtent.depth) };
     pushConstants.layerCount = dstView->info().layerCount;
+    if (srcView->image()->info().sampleCount == VK_SAMPLE_COUNT_1_BIT) {
+      pushConstants.srcCoord0 = {
+        float(srcOffsetsAdjusted[0].x) / float(srcExtent.width),
+        float(srcOffsetsAdjusted[0].y) / float(srcExtent.height),
+        float(srcOffsetsAdjusted[0].z) / float(srcExtent.depth) };
+      pushConstants.srcCoord1 = {
+        float(srcOffsetsAdjusted[1].x) / float(srcExtent.width),
+        float(srcOffsetsAdjusted[1].y) / float(srcExtent.height),
+        float(srcOffsetsAdjusted[1].z) / float(srcExtent.depth) };
+    } else {
+      // Src coords are in texels rather than 0.0 - 1.0
+      pushConstants.srcCoord0 = {
+        float(srcOffsetsAdjusted[0].x),
+        float(srcOffsetsAdjusted[0].y),
+        float(srcOffsetsAdjusted[0].z) };
+      pushConstants.srcCoord1 = {
+        float(srcOffsetsAdjusted[1].x),
+        float(srcOffsetsAdjusted[1].y),
+        float(srcOffsetsAdjusted[1].z) };
+    }
 
     m_cmd->cmdPushConstants(DxvkCmdBuffer::ExecBuffer,
       pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT,
