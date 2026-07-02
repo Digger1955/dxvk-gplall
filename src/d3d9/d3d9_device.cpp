@@ -60,7 +60,6 @@ namespace dxvk {
     , m_submissionFence    ( new sync::Fence() )
     , m_flushTracker       ( GetMaxFlushType() )
     , m_d3d9Interop        ( this )
-    , m_d3d9On12Args       ( pAdapter->Get9On12Args() )
     , m_d3d9On12           ( this )
     , m_d3d8Bridge         ( this ) {
 
@@ -241,13 +240,8 @@ namespace dxvk {
     }
 
     if (riid == __uuidof(IDirect3DDevice9On12)) {
-      if (m_d3d9On12Args.Enable9On12) {
-        *ppvObject = ref(&m_d3d9On12);
-        return S_OK;
-      } else if (logQueryInterfaceError(__uuidof(IDirect3DDevice9), riid)) {
-        Logger::warn("D3D9DeviceEx::QueryInterface: IDirect3DDevice9On12 queried, but 9On12 not enabled for device");
-        return E_NOINTERFACE;
-      }
+      *ppvObject = ref(&m_d3d9On12);
+      return S_OK;
     }
 
     // We want to ignore this if the extended device is queried and we weren't made extended.

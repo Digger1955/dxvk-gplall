@@ -14,13 +14,11 @@ namespace dxvk {
 
   HRESULT CreateD3D9(
           bool           Extended,
-          IDirect3D9Ex** ppDirect3D9Ex,
-    const D3D9ON12_ARGS* pOverrideList,
-          uint32_t       OverrideCount) {
+          IDirect3D9Ex** ppDirect3D9Ex) {
     if (!ppDirect3D9Ex)
       return D3DERR_INVALIDCALL;
 
-    *ppDirect3D9Ex = ref(new D3D9InterfaceEx(Extended, pOverrideList, OverrideCount));
+    *ppDirect3D9Ex = ref(new D3D9InterfaceEx( Extended ));
     return D3D_OK;
   }
 }
@@ -30,13 +28,13 @@ extern "C" {
 
   DLLEXPORT IDirect3D9* __stdcall Direct3DCreate9(UINT nSDKVersion) {
     IDirect3D9Ex* pDirect3D = nullptr;
-    dxvk::CreateD3D9(false, &pDirect3D, nullptr, 0);
+    dxvk::CreateD3D9(false, &pDirect3D);
 
     return pDirect3D;
   }
 
   DLLEXPORT HRESULT __stdcall Direct3DCreate9Ex(UINT nSDKVersion, IDirect3D9Ex** ppDirect3D9Ex) {
-    return dxvk::CreateD3D9(true, ppDirect3D9Ex, nullptr, 0);
+    return dxvk::CreateD3D9(true, ppDirect3D9Ex);
   }
 
   DLLEXPORT int __stdcall D3DPERF_BeginEvent(D3DCOLOR col, LPCWSTR wszName) {
@@ -105,16 +103,12 @@ extern "C" {
 
   DLLEXPORT IDirect3D9* __stdcall Direct3DCreate9On12(UINT sdk_version, D3D9ON12_ARGS* override_list, UINT override_entry_count) {
     dxvk::Logger::warn("Direct3DCreate9On12: 9On12 functionality is unimplemented.");
-
-    IDirect3D9Ex* pDirect3D = nullptr;
-    dxvk::CreateD3D9(false, &pDirect3D, override_list, override_entry_count);
-
-    return pDirect3D;
+    return Direct3DCreate9(sdk_version);
   }
 
   DLLEXPORT HRESULT __stdcall Direct3DCreate9On12Ex(UINT sdk_version, D3D9ON12_ARGS* override_list, UINT override_entry_count, IDirect3D9Ex** output) {
     dxvk::Logger::warn("Direct3DCreate9On12Ex: 9On12 functionality is unimplemented.");
-    return dxvk::CreateD3D9(true, output, override_list, override_entry_count);
+    return Direct3DCreate9Ex(sdk_version, output);
   }
 
 }
