@@ -1006,8 +1006,6 @@ namespace dxvk {
 
     void BindViewportAndScissor();
 
-    bool IsAlphaToCoverageEnabled() const;
-
     inline bool IsNVDepthBoundsTestEnabled () {
       // NVDB is not supported by D3D8
       if (unlikely(m_isD3D8Compatible))
@@ -1016,9 +1014,7 @@ namespace dxvk {
       return m_state.renderStates[D3DRS_ADAPTIVETESS_X] == uint32_t(D3D9Format::NVDB);
     }
 
-    inline bool IsAlphaTestEnabled() {
-      return m_state.renderStates[D3DRS_ALPHATESTENABLE] && !m_atocEnabled;
-    }
+    void UpdateAlphaToCoverangeAndAlphaTest();
 
     inline bool IsZTestEnabled() {
       return m_state.renderStates[D3DRS_ZENABLE] && m_state.depthStencil != nullptr;
@@ -1032,7 +1028,7 @@ namespace dxvk {
 
     void BindDepthStencilState();
 
-    void BindDepthStencilRefrence();
+    void BindDepthStencilReference();
 
     void BindRasterizerState();
 

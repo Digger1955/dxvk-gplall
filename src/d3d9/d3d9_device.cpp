@@ -1735,19 +1735,17 @@ namespace dxvk {
       // Changing RT0 can disable ATOC and
       // potentially enable alpha test, so we
       // need to keep track of the state.
-      const bool isAtocEnabled = IsAlphaToCoverageEnabled();
-      const bool isAlphaTestEnabled = IsAlphaTestEnabled();
+      UpdateAlphaToCoverangeAndAlphaTest();
 
       if (likely(texInfo != nullptr)) {
-        if (isAlphaTestEnabled || wasAlphaTestEnabled) {
-          // We either need to enable or disable it based on the changed ATOC state
-          // or we need to recalculate the precision.
+        if (m_alphaTestEnabled) {
+          // We need to recalculate the precision.
           m_flags.set(D3D9DeviceFlag::DirtyAlphaTestState);
         }
 
         bool validSampleMask = texInfo->Desc()->MultiSample > D3DMULTISAMPLE_NONMASKABLE;
 
-        if (validSampleMask != m_flags.test(D3D9DeviceFlag::ValidSampleMask) || isAtocEnabled != wasAtocEnabled) {
+        if (validSampleMask != m_flags.test(D3D9DeviceFlag::ValidSampleMask)) {
           m_flags.clr(D3D9DeviceFlag::ValidSampleMask);
           if (validSampleMask)
             m_flags.set(D3D9DeviceFlag::ValidSampleMask);
@@ -2353,21 +2351,7 @@ namespace dxvk {
           break;
 
         case D3DRS_ALPHATESTENABLE: {
-          const bool atocEnabled = IsAlphaToCoverageEnabled();
-
-
-          if (atocEnabled != m_atocEnabled) {
-            m_flags.set(D3D9DeviceFlag::DirtyMultiSampleState);
-            m_atocEnabled = atocEnabled;
-          }
-
-          const bool alphaTestEnabled = IsAlphaTestEnabled();
-
-          if (alphaTestEnabled != m_alphaTestEnabled) {
-            m_flags.set(D3D9DeviceFlag::DirtyAlphaTestState);
-            m_alphaTestEnabled = alphaTestEnabled;
-          }
-
+          UpdateAlphaToCoverangeAndAlphaTest();
           break;
         }
 
@@ -2427,7 +2411,7 @@ namespace dxvk {
           break;
 
         case D3DRS_STENCILREF:
-          BindDepthStencilRefrence();
+          BindDepthStencilReference();
           break;
 
         case D3DRS_SCISSORTESTENABLE:
@@ -2523,20 +2507,7 @@ namespace dxvk {
               || Value == AlphaToCoverageDisable) &&
                  vendorId == amdVendorId &&
                  !m_isD3D8Compatible) {
-              const bool atocEnabled = IsAlphaToCoverageEnabled();
-
-              if (atocEnabled != m_atocEnabled) {
-                m_flags.set(D3D9DeviceFlag::DirtyMultiSampleState);
-                m_atocEnabled = atocEnabled;
-              }
-
-              const bool alphaTestEnabled = IsAlphaTestEnabled();
-
-              if (alphaTestEnabled != m_alphaTestEnabled) {
-                m_flags.set(D3D9DeviceFlag::DirtyAlphaTestState);
-                m_alphaTestEnabled = alphaTestEnabled;
-              }
-
+              UpdateAlphaToCoverangeAndAlphaTest();
               break;
             }
 
@@ -2623,20 +2594,7 @@ namespace dxvk {
 
             if (Value == AlphaToCoverageEnable
              || Value == AlphaToCoverageDisable) {
-              const bool atocEnabled = IsAlphaToCoverageEnabled();
-
-              if (atocEnabled != m_atocEnabled) {
-                m_flags.set(D3D9DeviceFlag::DirtyMultiSampleState);
-                m_atocEnabled = atocEnabled;
-              }
-
-              const bool alphaTestEnabled = IsAlphaTestEnabled();
-
-              if (alphaTestEnabled != m_alphaTestEnabled) {
-                m_flags.set(D3D9DeviceFlag::DirtyAlphaTestState);
-                m_alphaTestEnabled = alphaTestEnabled;
-              }
-
+              UpdateAlphaToCoverangeAndAlphaTest();
               break;
             }
 
@@ -7165,28 +7123,40 @@ namespace dxvk {
   }
 
 
-  bool D3D9DeviceEx::IsAlphaToCoverageEnabled() const {
-    // ATOC is not supported by D3D8
-    if (unlikely(m_isD3D8Compatible))
-      return false;
+  void D3D9DeviceEx::UpdateAlphaToCoverangeAndAlphaTest() {
+    if (likely(!m_isD3D8Compatible)) {
+      // ATOC is not supported by D3D8
+      bool alphaToCoverageEnabled = true;
 
-    const bool isAmd = m_adapter->GetVendorId() == uint32_t(DxvkGpuVendor::Amd);
+      // Check render states
+      // The AMD ATOC enable state or the Nvidia ATOC enable state with alpha test
+      // enabled (also supported by Intel) could potentially enable ATOC overall
+      const bool isAMDATOCEnabled = m_state.renderStates[D3DRS_POINTSIZE]      == uint32_t(D3D9Format::A2M1);
+      const bool isNVATOCEnabled  = m_state.renderStates[D3DRS_ADAPTIVETESS_Y] == uint32_t(D3D9Format::ATOC)
+                                      && m_state.renderStates[D3DRS_ALPHATESTENABLE] != 0;
+      const bool isAMD = m_adapter->GetVendorId() == uint32_t(DxvkGpuVendor::Amd);
+      alphaToCoverageEnabled &= (isAMD && isAMDATOCEnabled) || (!isAMD && isNVATOCEnabled);
 
-    // The AMD ATOC enable state or the Nvidia ATOC enable state with alpha test
-    // enabled (also supported by Intel) could potentially enable ATOC overall,
-    // otherwise quick return false
-    if (!((m_state.renderStates[D3DRS_POINTSIZE]       == uint32_t(D3D9Format::A2M1) && isAmd)
-       || (m_state.renderStates[D3DRS_ADAPTIVETESS_Y]  == uint32_t(D3D9Format::ATOC) && !isAmd &&
-           m_state.renderStates[D3DRS_ALPHATESTENABLE] != 0)))
-      return false;
+      // Check sample count of RT 0
+      const D3D9CommonTexture* rt0 = GetCommonTexture(m_state.renderTargets[0].ptr());
+      const bool isMultisampled = rt0 != nullptr && (
+        rt0->Desc()->MultiSample >= D3DMULTISAMPLE_2_SAMPLES
+        || (rt0->Desc()->MultiSample == D3DMULTISAMPLE_NONMASKABLE && rt0->Desc()->MultisampleQuality > 0)
+      );
+      alphaToCoverageEnabled &= isMultisampled;
 
-    const D3D9CommonTexture* rt0 = GetCommonTexture(m_state.renderTargets[0].ptr());
-    const bool isMultisampled = rt0 != nullptr && (
-      rt0->Desc()->MultiSample >= D3DMULTISAMPLE_2_SAMPLES
-      || (rt0->Desc()->MultiSample == D3DMULTISAMPLE_NONMASKABLE && rt0->Desc()->MultisampleQuality > 0)
-    );
+      if (m_atocEnabled != alphaToCoverageEnabled) {
+        m_flags.set(D3D9DeviceFlag::DirtyMultiSampleState);
+        m_atocEnabled = alphaToCoverageEnabled;
+      }
+    }
 
-    return rt0 != nullptr && isMultisampled;
+    // Update alpha test state
+    bool alphaTestEnabled = m_state.renderStates[D3DRS_ALPHATESTENABLE] && !m_atocEnabled;
+    if (m_alphaTestEnabled != alphaTestEnabled) {
+      m_flags.set(D3D9DeviceFlag::DirtyAlphaTestState);
+      m_alphaTestEnabled = alphaTestEnabled;
+    }
   }
 
 
@@ -7439,7 +7409,7 @@ namespace dxvk {
   }
 
 
-  void D3D9DeviceEx::BindDepthStencilRefrence() {
+  void D3D9DeviceEx::BindDepthStencilReference() {
     auto& rs = m_state.renderStates;
 
     uint32_t ref = uint32_t(rs[D3DRS_STENCILREF]) & 0xff;
@@ -7462,11 +7432,12 @@ namespace dxvk {
     const D3D9CommonTexture* tex = GetCommonTexture(m_state.textures[Sampler]);
 
     EmitCs([this,
-      cSlot     = slot,
-      cState    = D3D9SamplerInfo(m_state.samplerStates[Sampler]),
-      cIsCube   = tex && tex->IsCube(),
-      cIsDepth  = bool(m_textureSlotTracking.depth & (1u << Sampler)),
-      cBindId   = m_samplerBindCount
+      cSlot       = slot,
+      cState      = D3D9SamplerInfo(m_state.samplerStates[Sampler]),
+      cIsCube     = tex && tex->IsCube(),
+      cIsMultiMip = tex && (tex->Desc()->MipLevels > 1u),
+      cIsDepth    = bool(m_textureSlotTracking.depth & (1u << Sampler)),
+      cBindId     = m_samplerBindCount
     ] (DxvkContext* ctx) {
       DxvkSamplerKey key = { };
 
@@ -7492,13 +7463,14 @@ namespace dxvk {
       key.setDepthCompare(cIsDepth, VK_COMPARE_OP_LESS_OR_EQUAL);
 
       if (cState.mipFilter) {
-        // Anisotropic filtering doesn't make any sense with only one mip
         uint32_t anisotropy = cState.maxAnisotropy;
 
-        if (cState.minFilter != D3DTEXF_ANISOTROPIC)
+        // Anisotropic filtering doesn't make any sense with only one mip
+        if (cState.minFilter != D3DTEXF_ANISOTROPIC || !cIsMultiMip)
           anisotropy = 0u;
 
-        if (m_d3d9Options.samplerAnisotropy != -1 && cState.minFilter > D3DTEXF_POINT)
+        // Forcing anisotropic filtering doesn't make any sense with only one mip
+        if (m_d3d9Options.samplerAnisotropy != -1 && cIsMultiMip && cState.minFilter > D3DTEXF_POINT)
           anisotropy = m_d3d9Options.samplerAnisotropy;
 
         key.setAniso(anisotropy);
@@ -8641,7 +8613,7 @@ namespace dxvk {
     BindDepthStencilState();
 
     rs[D3DRS_STENCILREF] = 0;
-    BindDepthStencilRefrence();
+    BindDepthStencilReference();
 
     rs[D3DRS_FILLMODE]            = D3DFILL_SOLID;
     rs[D3DRS_CULLMODE]            = D3DCULL_CCW;
