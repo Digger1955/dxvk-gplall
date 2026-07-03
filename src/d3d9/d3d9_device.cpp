@@ -1700,9 +1700,6 @@ namespace dxvk {
     if (m_state.renderTargets[RenderTargetIndex] == rt)
       return D3D_OK;
 
-    const bool wasAtocEnabled = IsAlphaToCoverageEnabled();
-    const bool wasAlphaTestEnabled = IsAlphaTestEnabled();
-
     // Do a strong flush if the first render target is changed.
     ConsiderFlush(RenderTargetIndex == 0
       ? GpuFlushType::ImplicitStrongHint
