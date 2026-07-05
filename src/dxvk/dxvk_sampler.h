@@ -243,8 +243,6 @@ namespace dxvk {
    * \brief Sampler statistics
    */
   struct DxvkSamplerStats {
-    /// Number of sampler objects created
-    uint32_t totalCount = 0u;
     /// Number of samplers currently in use
     uint32_t liveCount = 0u;
   };
@@ -260,10 +258,7 @@ namespace dxvk {
   public:
 
     // Lower limit for sampler counts in Vulkan.
-    constexpr static uint32_t MaxSamplerCount = 4000u;
-
-    // Minimum number of samplers to keep alive.
-    constexpr static uint32_t MinSamplerCount = 1024u;
+    constexpr static uint32_t MaxSamplerCount = 2048u;
 
     DxvkSamplerPool(DxvkDevice* device);
 
@@ -285,7 +280,6 @@ namespace dxvk {
      */
     DxvkSamplerStats getStats() const {
       DxvkSamplerStats stats = { };
-      stats.totalCount = m_samplersTotal.load();
       stats.liveCount = m_samplersLive.load();
       return stats;
     }

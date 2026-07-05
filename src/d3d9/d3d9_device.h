@@ -159,6 +159,14 @@ namespace dxvk {
     /** Whether the texture bound to a slot has D3DUSAGE_DEPTHSTENCIL */
     uint32_t dsUsage = 0;
 
+    /** Whether the texture bound to a slot is also bound as a render target
+     * and the render target is actually used for writing. */
+    uint32_t unresolvableHazardRT = 0;
+
+    /** Whether the texture bound to a slot is also bound as the depth stencil surface
+     * and depth stencil surface is actually used for depth testing. */
+    uint32_t unresolvableHazardDS = 0;
+
     /** Whether the texture bound to a slot is also bound as a render target */
     uint32_t hazardRT = 0;
 
@@ -173,12 +181,6 @@ namespace dxvk {
 
     /** Whether there's a texture bound to a slot that needs to have its mip maps generated */
     uint32_t needsMipGen = 0;
-
-    /** `hazardRT` the last time PrepareDraw was called. Used to check if it changed.  */
-    uint32_t lastHazardRT = 0;
-
-    /** `hazardDS` the last time PrepareDraw was called Used to check if it changed. */
-    uint32_t lastHazardDS = 0;
   };
 
   struct D3D9RTSlotTracking {
@@ -940,11 +942,11 @@ namespace dxvk {
 
     void UpdateTextureBitmasks(uint32_t index, DWORD combinedUsage);
 
-    void UpdateActiveHazardsRT(uint32_t rtMask);
+    void UpdateActiveHazardsRT(uint32_t texMask);
 
     void UpdateActiveHazardsDS(uint32_t texMask);
 
-    void MarkRenderHazards();
+    void EmitFeedbackLoopBarriers();
 
     void UpdateActiveFetch4(uint32_t stateSampler);
 
@@ -1004,8 +1006,6 @@ namespace dxvk {
 
     void BindViewportAndScissor();
 
-    bool IsAlphaToCoverageEnabled() const;
-
     inline bool IsNVDepthBoundsTestEnabled () {
       // NVDB is not supported by D3D8
       if (unlikely(m_isD3D8Compatible))
@@ -1014,9 +1014,7 @@ namespace dxvk {
       return m_state.renderStates[D3DRS_ADAPTIVETESS_X] == uint32_t(D3D9Format::NVDB);
     }
 
-    inline bool IsAlphaTestEnabled() {
-      return m_state.renderStates[D3DRS_ALPHATESTENABLE] && !m_atocEnabled;
-    }
+    void UpdateAlphaToCoverangeAndAlphaTest();
 
     inline bool IsZTestEnabled() {
       return m_state.renderStates[D3DRS_ZENABLE] && m_state.depthStencil != nullptr;
@@ -1030,7 +1028,7 @@ namespace dxvk {
 
     void BindDepthStencilState();
 
-    void BindDepthStencilRefrence();
+    void BindDepthStencilReference();
 
     void BindRasterizerState();
 
@@ -1270,6 +1268,10 @@ namespace dxvk {
     DxvkCsChunkRef AllocCsChunk() {
       DxvkCsChunk* chunk = m_csChunkPool.allocChunk(DxvkCsChunkFlag::SingleUse);
       return DxvkCsChunkRef(chunk, &m_csChunkPool);
+    }
+
+    bool Is9On12Device() const {
+      return m_d3d9On12Args.Enable9On12;
     }
 
   private:
@@ -1701,6 +1703,7 @@ namespace dxvk {
     Direct3DState9                  m_state;
 
     D3D9VkInteropDevice             m_d3d9Interop;
+    D3D9ON12_ARGS                   m_d3d9On12Args = { };
     D3D9On12                        m_d3d9On12;
     DxvkD3D8Bridge                  m_d3d8Bridge;
 

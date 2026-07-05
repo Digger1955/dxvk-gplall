@@ -31,10 +31,6 @@ namespace dxvk {
       AddDirtyBox(nullptr, i);
     }
 
-    if (m_desc.Pool != D3DPOOL_DEFAULT && pSharedHandle) {
-      throw DxvkError("D3D9: Incompatible pool type for texture sharing.");
-    }
-
     if (IsPoolManaged(m_desc.Pool)) {
       SetAllNeedUpload();
     }
@@ -186,8 +182,10 @@ namespace dxvk {
        || (blockSize.Height && (pDesc->Height & (blockSize.Height - 1))))
         return D3DERR_INVALIDCALL;
     }
-    
-    if (FAILED(DecodeMultiSampleType(pDevice->GetDXVKDevice(), pDesc->MultiSample, pDesc->MultisampleQuality, nullptr)))
+
+    // Sample counts need to be valid
+    VkSampleCountFlagBits sampleCount;
+    if (FAILED(DecodeMultiSampleType(pDevice->GetDXVKDevice(), pDesc->MultiSample, pDesc->MultisampleQuality, &sampleCount)))
       return D3DERR_INVALIDCALL;
 
     // Using MANAGED pool with DYNAMIC usage is illegal
@@ -249,6 +247,10 @@ namespace dxvk {
     if ((pDesc->Usage & D3DUSAGE_AUTOGENMIPMAP) && ResourceType == D3DRTYPE_SURFACE)
       return D3DERR_INVALIDCALL;
 
+    // Auto-Mipgen is only valid on textures (for obvious reasons)
+    if ((pDesc->Usage & D3DUSAGE_AUTOGENMIPMAP) && ResourceType == D3DRTYPE_SURFACE)
+      return D3DERR_INVALIDCALL;
+
     // Use the maximum possible mip level count if the supplied
     // mip level count is either unspecified (0) or invalid
     const uint32_t maxMipLevelCount = pDesc->MultiSample <= D3DMULTISAMPLE_NONMASKABLE
@@ -271,6 +273,10 @@ namespace dxvk {
        || pDesc->Format == D3D9Format::S8_LOCKABLE)
         return D3DERR_INVALIDCALL;
     }
+
+    // A multisample RT/DS must not be lockable
+    if (pDesc->IsLockable && sampleCount > VK_SAMPLE_COUNT_1_BIT)
+        return D3DERR_INVALIDCALL;
 
     return D3D_OK;
   }
@@ -575,8 +581,10 @@ namespace dxvk {
       return VK_IMAGE_LAYOUT_GENERAL;
 
     // Otherwise, pick a layout that can be used for reading.
+    // Use DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL for a DS texture
+    // so it can be used as DS and sampled at the same time without transitioning.
     return (Usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-      ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+      ? VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
       : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   }
 
@@ -718,6 +726,10 @@ namespace dxvk {
     if (unlikely(m_mapMode == D3D9_COMMON_TEXTURE_MAP_MODE_SYSTEMMEM))
       return;
 
+    // The backend will ignore the view layout anyway for images
+    // that have GENERAL (or FEEDBACK_LOOP) as their layout.
+    // This will always be the case for images that can be sampled.
+    // So just pick UNDEFINED here.
     m_sampleView.Color = CreateView(AllLayers, Lod,
       VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_UNDEFINED, false);
 

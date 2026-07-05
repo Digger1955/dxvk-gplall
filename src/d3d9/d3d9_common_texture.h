@@ -327,6 +327,10 @@ namespace dxvk {
       return std::exchange(m_transitionedToHazardLayout, true);
     }
 
+    bool HasBeenTransitionedToHazardLayout() const {
+      return m_transitionedToHazardLayout;
+    }
+
     D3DRESOURCETYPE GetType() const {
       return m_type;
     }
@@ -351,16 +355,6 @@ namespace dxvk {
 
     const Rc<DxvkImageView>& GetSampleView(bool srgb) const {
       return m_sampleView.Pick(srgb && IsSrgbCompatible());
-    }
-
-    VkImageLayout DetermineRenderTargetLayout(VkImageLayout hazardLayout) const {
-      if (unlikely(m_transitionedToHazardLayout))
-        return hazardLayout;
-
-      return m_image != nullptr &&
-             m_image->info().tiling == VK_IMAGE_TILING_OPTIMAL
-        ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        : VK_IMAGE_LAYOUT_GENERAL;
     }
 
     Rc<DxvkImageView> CreateView(

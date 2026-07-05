@@ -226,8 +226,11 @@ namespace dxvk {
 
     bool CheckImageFormatSupport(
       const Rc<DxvkAdapter>&      Adapter,
-      VkFormat              Format,
-      VkFormatFeatureFlags2 Features) const;
+            VkFormat              Format,
+            VkFormatFeatureFlags2 Features) const;
+
+    bool m_isExtended;
+    bool m_isD3D8Compatible;
 
     bool m_d24s8Support;
     bool m_d16s8Support;

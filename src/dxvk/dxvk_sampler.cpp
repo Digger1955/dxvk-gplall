@@ -235,6 +235,10 @@ namespace dxvk {
   void DxvkSamplerPool::releaseSampler(DxvkSampler* sampler) {
     std::unique_lock lock(m_mutex);
 
+    // Always decrement live counter here since it will be incremented
+    // again whenever the sampler is reacquired.
+    m_samplersLive.store(m_samplersLive.load() - 1u);
+
     // Back off if another thread has re-aquired the sampler. This is
     // safe since the ref count can only be incremented from zero when
     // the pool is locked.
@@ -257,13 +261,6 @@ namespace dxvk {
       m_lruHead = sampler;
 
     m_lruTail = sampler;
-
-    // Don't need an atomic add for these
-    m_samplersLive.store(m_samplersLive.load() - 1u);
-
-    // Try to keep some samplers available for subsequent allocations
-    if (m_samplers.size() > MinSamplerCount)
-      destroyLeastRecentlyUsedSampler();
   }
 
 
