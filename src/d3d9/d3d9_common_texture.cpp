@@ -183,6 +183,7 @@ namespace dxvk {
         return D3DERR_INVALIDCALL;
     }
 
+    // Sample counts need to be valid
     VkSampleCountFlagBits sampleCount;
     if (FAILED(DecodeMultiSampleType(pDevice->GetDXVKDevice(), pDesc->MultiSample, pDesc->MultisampleQuality, &sampleCount)))
       return D3DERR_INVALIDCALL;
@@ -240,6 +241,10 @@ namespace dxvk {
     if (pDesc->Format == D3D9Format::ATI2
      && (pDesc->Usage & D3DUSAGE_RENDERTARGET ||
         (pDevice->IsExtended() && isPlainSurface && pDesc->Pool != D3DPOOL_SCRATCH)))
+      return D3DERR_INVALIDCALL;
+
+    // Auto-Mipgen is only valid on textures (for obvious reasons)
+    if ((pDesc->Usage & D3DUSAGE_AUTOGENMIPMAP) && ResourceType == D3DRTYPE_SURFACE)
       return D3DERR_INVALIDCALL;
 
     // Auto-Mipgen is only valid on textures (for obvious reasons)

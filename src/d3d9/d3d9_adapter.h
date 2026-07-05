@@ -19,6 +19,7 @@ namespace dxvk {
 
     D3D9Adapter(
             D3D9InterfaceEx* pParent,
+      const D3D9ON12_ARGS*   p9On12Args,
             Rc<DxvkAdapter>  Adapter,
             UINT             Ordinal,
             UINT             DisplayIndex);
@@ -93,6 +94,10 @@ namespace dxvk {
       return m_d3d9Formats->GetUnsupportedFormatInfo(Format);
     }
 
+    D3D9ON12_ARGS Get9On12Args() const {
+      return m_9On12Args;
+    }
+
     bool IsExtended() const;
 
     bool IsD3D8Compatible() const;
@@ -143,6 +148,7 @@ namespace dxvk {
     uint32_t                      m_deviceId;
     std::string                   m_deviceDesc;
     std::string                   m_deviceDriver;
+    D3D9ON12_ARGS                 m_9On12Args = { };
 
     std::vector<D3DDISPLAYMODEEX>            m_modes;
     D3D9Format                               m_modeCacheFormat;
