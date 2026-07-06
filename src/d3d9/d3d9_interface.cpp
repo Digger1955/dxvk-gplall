@@ -525,4 +525,33 @@ namespace dxvk {
     return D3D_OK;
   }
 
+  const D3D9ON12_ARGS* D3D9InterfaceEx::Find9On12Args(
+    const Rc<DxvkAdapter>& Adapter,
+    const D3D9ON12_ARGS*   pOverrides,
+          uint32_t         OverrideCount) {
+    const D3D9ON12_ARGS* arg = nullptr;
+
+#ifdef _WIN32
+    for (uint32_t i = 0u; i < OverrideCount; i++) {
+      if (pOverrides[i].pD3D12Device) {
+        const auto& vk11 = Adapter->devicePropertiesExt().vk11;
+
+        if (vk11.deviceLUIDValid) {
+          Com<ID3D12Device> device = nullptr;
+
+          if (SUCCEEDED(pOverrides[i].pD3D12Device->QueryInterface(__uuidof(ID3D12Device), reinterpret_cast<void**>(&device)))) {
+            LUID luid = device->GetAdapterLuid();
+
+            if (!std::memcmp(&luid, vk11.deviceLUID, sizeof(vk11.deviceLUID)))
+              arg = &pOverrides[i];
+          }
+        }
+      } else if (!arg) {
+        arg = &pOverrides[i];
+      }
+    }
+#endif
+
+    return arg;
+  }
 }
