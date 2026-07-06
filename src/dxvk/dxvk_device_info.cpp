@@ -485,6 +485,144 @@ namespace dxvk {
 
     if (!m_featuresSupported.extDepthClipEnable.depthClipEnable)
       m_featuresSupported.extExtendedDynamicState3.extendedDynamicState3DepthClipEnable = VK_FALSE;
+    
+
+    if (!enableCudaInterop) {
+        devExtensions.nvxBinaryImport.setMode(DxvkExtMode::Disabled);
+        devExtensions.nvxImageViewHandle.setMode(DxvkExtMode::Disabled);
+        enabledFeatures.vk12.bufferDeviceAddress = VK_FALSE;
+    }
+
+// Maintenance4 may cause performance problems on amdvlk in some cases
+if (m_deviceInfo.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
+ || m_deviceInfo.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+  enabledFeatures.vk13.maintenance4 = VK_FALSE;
+
+// Only enable non-default line rasterization features if at least wide lines
+// and rectangular lines are supported. This saves us several feature checks
+// in the actual code.
+if (!m_deviceFeatures.core.features.wideLines || !m_deviceFeatures.extLineRasterization.rectangularLines) {
+  enabledFeatures.core.features.wideLines = VK_FALSE;
+  enabledFeatures.extLineRasterization.rectangularLines = VK_FALSE;
+  enabledFeatures.extLineRasterization.smoothLines = VK_FALSE;
+}
+
+// Unless we're on an Nvidia driver where these extensions are known to be broken
+if (matchesDriver(VK_DRIVER_ID_NVIDIA_PROPRIETARY, Version(), Version(535, 0, 0))) {
+  enabledFeatures.khrPresentId.presentId = VK_FALSE;
+  enabledFeatures.khrPresentWait.presentWait = VK_FALSE;
+}
+
+if (vr != VK_SUCCESS && enableCudaInterop) {
+  // Enabling certain Vulkan extensions can cause device creation to fail on
+  // Nvidia drivers if a certain kernel module isn't loaded, but we cannot know
+  // that in advance since the extensions are reported as supported anyway.
+  Logger::err("DxvkAdapter: Failed to create device, retrying without CUDA interop extensions");
+
+  extensionsEnabled.disableExtension(devExtensions.nvxBinaryImport);
+  extensionsEnabled.disableExtension(devExtensions.nvxImageViewHandle);
+
+  enabledFeatures.vk12.bufferDeviceAddress = VK_FALSE;
+
+  extensionNameList = extensionsEnabled.toNameList();
+  info.enabledExtensionCount      = extensionNameList.count();
+  info.ppEnabledExtensionNames    = extensionNameList.names();
+
+  vr = m_vki->vkCreateDevice(m_handle, &info, nullptr, &device);
+}
+
+if (!m_deviceExtensions.supports(VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME))
+  m_deviceFeatures.amdShaderFragmentMask = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME))
+  m_deviceFeatures.extConservativeRasterization = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME))
+  m_deviceFeatures.extFullScreenExclusive = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+  m_deviceFeatures.extMemoryBudget = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME))
+  m_deviceFeatures.extSampleLocations = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME))
+  m_deviceFeatures.extShaderStencilExport = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))
+  m_deviceFeatures.extSwapchainColorSpace = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_HDR_METADATA_EXTENSION_NAME))
+  m_deviceFeatures.extHdrMetadata = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME))
+  m_deviceFeatures.extCalibratedTimestamps = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME))
+  m_deviceFeatures.khrExternalMemoryWin32 = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME))
+  m_deviceFeatures.khrExternalSemaphoreWin32 = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME))
+  m_deviceFeatures.extLoadStoreOpNone = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_NVX_BINARY_IMPORT_EXTENSION_NAME))
+  m_deviceFeatures.nvxBinaryImport = VK_FALSE;
+
+if (!m_deviceExtensions.supports(VK_NVX_IMAGE_VIEW_HANDLE_EXTENSION_NAME))
+  m_deviceFeatures.nvxImageViewHandle = VK_FALSE;
+
+if (!devExtensions.amdShaderFragmentMask)
+  enabledFeatures.amdShaderFragmentMask = VK_FALSE;
+
+if (!devExtensions.extConservativeRasterization)
+  enabledFeatures.extConservativeRasterization = VK_FALSE;
+
+if (!devExtensions.extFullScreenExclusive || !insExtensions.khrGetSurfaceCapabilities2)
+  enabledFeatures.extFullScreenExclusive = VK_FALSE;
+
+if (!devExtensions.extMemoryBudget)
+  enabledFeatures.extMemoryBudget = VK_FALSE;
+
+if (!devExtensions.extSampleLocations)
+  enabledFeatures.extSampleLocations = VK_FALSE;
+
+if (!devExtensions.extShaderStencilExport)
+  enabledFeatures.extShaderStencilExport = VK_FALSE;
+
+if (!devExtensions.extSwapchainColorSpace)
+  enabledFeatures.extSwapchainColorSpace = VK_FALSE;
+
+if (!devExtensions.extHdrMetadata)
+  enabledFeatures.extHdrMetadata = VK_FALSE;
+
+if (!devExtensions.extCalibratedTimestamps)
+  enabledFeatures.extCalibratedTimestamps = VK_FALSE;
+
+if (!devExtensions.khrExternalMemoryWin32)
+  enabledFeatures.khrExternalMemoryWin32 = VK_FALSE;
+
+if (!devExtensions.khrExternalSemaphoreWin32)
+  enabledFeatures.khrExternalSemaphoreWin32 = VK_FALSE;
+
+if (!devExtensions.extLoadStoreOpNone)
+  enabledFeatures.extLoadStoreOpNone = VK_FALSE;
+
+if (!devExtensions.khrSwapchainMutableFormat)
+  enabledFeatures.khrSwapchainMutableFormat = VK_FALSE;
+
+if (!devExtensions.nvLowLatency2 || devExtensions.nvLowLatency2.revision() < 2)
+  enabledFeatures.nvLowLatency2 = VK_FALSE;
+
+if (!devExtensions.nvxBinaryImport)
+  enabledFeatures.nvxBinaryImport = VK_FALSE;
+
+if (!devExtensions.nvxImageViewHandle)
+  enabledFeatures.nvxImageViewHandle = VK_FALSE;
+
+if (!devExtensions.khrWin32KeyedMutex)
+  enabledFeatures.khrWin32KeyedMutex = VK_FALSE;
   }
 
 
