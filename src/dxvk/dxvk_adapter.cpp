@@ -159,11 +159,6 @@ namespace dxvk {
 
     auto features = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(featureBlob.data());
 
-    // If we don't have pageable device memory support, at least use
-    // the legacy AMD extension to ensure we can oversubscribe VRAM
-    if (!m_deviceExtensions.supports(devExtensions.extPageableDeviceLocalMemory.name()))
-      devExtensions.amdMemoryOverallocationBehaviour.setMode(DxvkExtMode::Optional);
-
     // Get extension list and add extra extensions
     uint32_t extensionCount = 0u;
     m_capabilities.queryDeviceExtensions(&extensionCount, nullptr);
