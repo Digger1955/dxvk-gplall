@@ -1706,6 +1706,8 @@ namespace dxvk {
     if (m_state.renderTargets[RenderTargetIndex] == rt)
       return D3D_OK;
 
+      UpdateAlphaToCoverangeAndAlphaTest();
+
     // Do a strong flush if the first render target is changed.
     ConsiderFlush(RenderTargetIndex == 0
       ? GpuFlushType::ImplicitStrongHint
@@ -2377,7 +2379,7 @@ namespace dxvk {
               && m_state.renderStates[D3DRS_ZENABLE])) {
               // Whether we write the depth has been changed => check for hazards
               UpdateActiveHazardsDS(std::numeric_limits<uint32_t>::max());
-              }
+            }
 
             m_flags.set(D3D9DeviceFlag::DirtyDepthStencilState);
           }
@@ -6507,7 +6509,7 @@ namespace dxvk {
 
   inline void D3D9DeviceEx::UpdateActiveHazardsRT(uint32_t texMask) {
     uint32_t oldHazardMask             = m_textureSlotTracking.hazardRT;
-    uint32_t oldUnresolvableHazardMask = m_textureSlotTracking.hazardRT;
+    uint32_t oldUnresolvableHazardMask = m_textureSlotTracking.unresolvableHazardRT;
     m_textureSlotTracking.hazardRT             &= ~texMask;
     m_textureSlotTracking.unresolvableHazardRT &= ~texMask;
 
@@ -6532,18 +6534,22 @@ namespace dxvk {
         if (likely(rtSurf->GetMipLevel() != 0 || rtBase != texBase))
           continue;
 
+        const bool sampledInShader = !!(psMasks.samplerMask & (1 << samplerIdx));
+        const bool wasHazard = !!(oldHazardMask & (1 << samplerIdx));
+
         // If the shader doesn't actually use the texture, keep it marked as a hazard
         // to avoid spilling the render pass over and over again because of shader changes.
-        if (!((psMasks.samplerMask | oldHazardMask) & (1 << samplerIdx)))
+        if (unlikely(!sampledInShader && ((anyColorWrite && shaderWritesToRt) || !wasHazard)))
           continue;
 
         // We can resolve the hazard by unbinding the RT.
         m_textureSlotTracking.hazardRT |= 1 << samplerIdx;
 
         // Don't mark texture as an unresolvable hazard if the shader doesn't actually use it.
-        if (!(psMasks.samplerMask & (1 << samplerIdx)))
+        if (unlikely(!sampledInShader))
           continue;
 
+        // The hazard can be resolved by not binding it.
         if (likely(!anyColorWrite || !shaderWritesToRt))
           continue;
 
@@ -6582,17 +6588,24 @@ namespace dxvk {
       if (likely(dsBase != texBase))
         continue;
 
-      // If the shader doesn't actually use the texture, keep it marked as a hazard
-      // to avoid spilling the render pass over and over again because of shader changes.
-      if (!((psMasks.samplerMask | oldHazardMask) & (1 << samplerIdx)))
+      const bool sampledInShader = !!(psMasks.samplerMask & (1 << samplerIdx));
+      const bool wasHazard = !!(oldHazardMask & (1 << samplerIdx));
+
+      // Don't mark it as a hazard if the current shader doesn't actually sample it
+      // but we need to render to it.
+      // If the shader doesn't actually sample the texture, we don't render to it
+      // and it was a hazard before, keep it marked as a hazard to avoid spilling
+      // the render pass over and over again because of shader changes.
+      if (unlikely(!sampledInShader && (depthWrite || !wasHazard)))
         continue;
 
       m_textureSlotTracking.hazardDS |= 1 << samplerIdx;
 
       // Don't mark texture as an unresolvable hazard if the shader doesn't actually use it.
-      if (!(psMasks.samplerMask & (1 << samplerIdx)))
+      if (unlikely(!sampledInShader))
         continue;
 
+      // The hazard can be resolved by binding it as READONLY.
       if (unlikely(!depthWrite))
         continue;
 
@@ -7466,10 +7479,10 @@ namespace dxvk {
       key.setDepthCompare(cIsDepth, VK_COMPARE_OP_LESS_OR_EQUAL);
 
       if (cState.mipFilter) {
+        // Anisotropic filtering doesn't make any sense with only one mip
         uint32_t anisotropy = cState.maxAnisotropy;
 
-        // Anisotropic filtering doesn't make any sense with only one mip
-        if (cState.minFilter != D3DTEXF_ANISOTROPIC || !cIsMultiMip)
+        if (cState.minFilter != D3DTEXF_ANISOTROPIC)
           anisotropy = 0u;
 
         // Forcing anisotropic filtering doesn't make any sense with only one mip
