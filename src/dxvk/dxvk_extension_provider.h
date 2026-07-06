@@ -26,13 +26,13 @@ namespace dxvk {
      * \brief Extension provider name
      * \returns The extension provider's name
      */
-    virtual DxvkExtensionList getInstanceExtensions() = 0;
+    virtual std::string_view getName() = 0;
 
     /**
      * \brief Query instance extensions
      * \returns Instance extensions
      */
-    virtual DxvkNameSet getInstanceExtensions() = 0;
+    virtual DxvkExtensionList getInstanceExtensions() = 0;
 
     /**
      * \brief Query device extensions
