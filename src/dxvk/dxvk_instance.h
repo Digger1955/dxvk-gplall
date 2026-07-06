@@ -203,7 +203,7 @@ namespace dxvk {
     bool initVulkanLoader(
       const DxvkInstanceImportInfo& args);
 
-    bool initVulkanLoader(
+    bool initVulkanInstance(
       const DxvkInstanceImportInfo& args,
             DxvkInstanceFlags       flags);
 
