@@ -62,9 +62,7 @@ namespace dxvk::vk {
     return sym(nullptr, name);
   }
 
-  bool LibraryLoader::valid() const {
-    return m_getInstanceProcAddr != nullptr;
-  }
+
   
   
   InstanceLoader::InstanceLoader(const Rc<LibraryLoader>& library, bool owned, VkInstance instance)
@@ -108,5 +106,4 @@ namespace dxvk::vk {
     if (m_owned)
       this->vkDestroyDevice(m_device, nullptr);
   }
-  
 }

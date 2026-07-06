@@ -41,23 +41,12 @@ namespace dxvk {
     
     /**
      * \brief Tests an adapter
-     * 
-     * \param [in] properties Adapter properties
-     * \returns \c true if the test passes
-     */
-    bool testAdapter(
-      const VkPhysicalDeviceProperties& properties) const;
-      /**
-     * \brief Tests a created adapter
      *
-     * Applies UUID filtering after device is initialized.
-     *
-     * \param [in] deviceInfo Information about created device
-     * \returns \c true if the device passes the UUID filter
-     */
-    bool testCreatedAdapter(
-        const DxvkDeviceInfo& deviceInfo) const;
-    
+     * \param [in] adapter Adapter object
+     * \returns \c true if the device can be used
+    */
+    bool testAdapter(DxvkAdapter& adapter) const;
+
   private:
     
     DxvkDeviceFilterFlags m_flags;
