@@ -202,7 +202,6 @@ namespace dxvk {
     VkDeviceMemoryOverallocationCreateInfoAMD overallocInfo = { VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD };
     overallocInfo.overallocationBehavior = VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD;
 
-    // Create the requested queues
     uint32_t priorityCount = 0u;
 
     for (const auto& q : queues)
