@@ -192,8 +192,6 @@ namespace dxvk {
     // Query queue infos
     DxvkDeviceQueueMapping queueMapping = m_capabilities.getQueueMapping();
 
-    // Log feature support info an extension list
-    Logger::info(str::format("Device properties:"
     uint32_t queueCount = { };
     m_capabilities.queryDeviceQueues(&queueCount, nullptr);
 
