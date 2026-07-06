@@ -61,7 +61,6 @@ namespace dxvk {
       return D3D_OK;
     }
 
-    // Write 
     UINT count = 0;
     UINT maxCount = *pExtensionCount;
 
