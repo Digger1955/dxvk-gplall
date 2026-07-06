@@ -405,7 +405,7 @@ namespace dxvk {
     auto dxvkAdapter = adapter->GetDXVKAdapter();
 
     try {
-          auto dxvkDevice = dxvkAdapter->createDevice();
+      auto dxvkDevice = dxvkAdapter->createDevice();
 
       auto* device = new D3D9DeviceEx(
         this,
