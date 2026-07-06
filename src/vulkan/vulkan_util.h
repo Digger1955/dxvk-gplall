@@ -253,7 +253,6 @@ namespace dxvk::vk {
     return label;
   }
 
-}
 
   inline const void* scanChain(const void* pNext, VkStructureType sType) {
     auto chain = reinterpret_cast<const VkBaseInStructure*>(pNext);
@@ -294,6 +293,8 @@ namespace dxvk::vk {
       return std::strncmp(a.extensionName, b.extensionName, sizeof(a.extensionName)) < 0;
     }
   };
+
+}  
 
 inline bool operator == (
   const VkImageSubresourceRange& a,
