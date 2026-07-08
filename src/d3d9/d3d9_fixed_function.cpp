@@ -15,7 +15,6 @@ namespace dxvk {
   D3D9FixedFunctionOptions::D3D9FixedFunctionOptions(const D3D9Options* options) {
     invariantPosition = options->invariantPosition;
     forceSampleRateShading = options->forceSampleRateShading;
-    drefScaling = options->drefScaling;
   }
 
   uint32_t DoFixedFunctionFog(D3D9ShaderSpecConstantManager& spec, SpirvModule& spvModule, const D3D9FogContext& fogCtx) {
@@ -108,7 +107,7 @@ namespace dxvk {
 
       for (uint32_t i = 0; i < fogCaseLabels.size(); i++) {
         spvModule.opLabel(fogCaseLabels[i].labelId);
-        
+
         fogVariables[i].labelId = fogCaseLabels[i].labelId;
         fogVariables[i].varId   = [&] {
           auto mode = D3DFOGMODE(fogCaseLabels[i].literal);
@@ -149,7 +148,7 @@ namespace dxvk {
             }
           }
         }();
-        
+
         spvModule.opBranch(applyFogFactor);
       }
 
@@ -362,7 +361,7 @@ namespace dxvk {
     uint32_t rsBlock = spvModule.newVar(
       spvModule.defPointerType(rsStruct, spv::StorageClassPushConstant),
       spv::StorageClassPushConstant);
-    
+
     spvModule.setDebugName         (rsBlock, "render_state");
 
     spvModule.setDebugName         (rsStruct, "render_state_t");
@@ -600,7 +599,7 @@ namespace dxvk {
     NormalMatrix,
     InverseViewMatrix,
     ProjMatrix,
-      
+
     Texcoord0,
     Texcoord1,
     Texcoord2,
@@ -798,6 +797,7 @@ namespace dxvk {
     uint32_t              m_vec2Type        = 0u;
     uint32_t              m_mat3Type        = 0u;
     uint32_t              m_mat4Type        = 0u;
+    uint32_t              m_boolType        = 0u;
 
     uint32_t              m_entryPointId    = 0u;
 
@@ -842,6 +842,7 @@ namespace dxvk {
     m_vec2Type   = m_module.defVectorType(m_floatType, 2);
     m_mat3Type   = m_module.defMatrixType(m_vec3Type, 3);
     m_mat4Type   = m_module.defMatrixType(m_vec4Type, 4);
+    m_boolType   = m_module.defBoolType();
 
     m_entryPointId = m_module.allocateId();
 
@@ -977,7 +978,7 @@ namespace dxvk {
 
     const uint32_t wIndex = 3;
 
-    if (!m_vsKey.Data.Contents.HasPositionT) {
+    if (!m_vsKey.Data.Contents.VertexHasPositionT) {
       if (m_vsKey.Data.Contents.VertexBlendMode == D3D9FF_VertexBlendMode_Normal) {
         uint32_t blendWeightRemaining = m_module.constf32(1);
         uint32_t vtxSum               = 0;
@@ -1054,10 +1055,9 @@ namespace dxvk {
 
       // Some games rely no normals not being normal.
       if (m_vsKey.Data.Contents.NormalizeNormals) {
-        uint32_t bool_t = m_module.defBoolType();
-        uint32_t bool3_t = m_module.defVectorType(bool_t, 3);
+        uint32_t bool3_t = m_module.defVectorType(m_boolType, 3);
 
-        uint32_t isZeroNormal = m_module.opAll(bool_t, m_module.opFOrdEqual(bool3_t, normal, m_module.constvec3f32(0.0f, 0.0f, 0.0f)));
+        uint32_t isZeroNormal = m_module.opAll(m_boolType, m_module.opFOrdEqual(bool3_t, normal, m_module.constvec3f32(0.0f, 0.0f, 0.0f)));
 
         std::array<uint32_t, 3> members = { isZeroNormal, isZeroNormal, isZeroNormal };
         uint32_t isZeroNormal3 = m_module.opCompositeConstruct(bool3_t, members.size(), members.data());
@@ -1065,7 +1065,7 @@ namespace dxvk {
         normal = m_module.opNormalize(m_vec3Type, normal);
         normal = m_module.opSelect(m_vec3Type, isZeroNormal3, m_module.constvec3f32(0.0f, 0.0f, 0.0f), normal);
       }
-      
+
       gl_Position = emitVectorTimesMatrix(4, 4, vtx, m_vs.constants.proj);
     } else {
       gl_Position = m_module.opFMul(m_vec4Type, gl_Position, m_vs.constants.invExtent);
@@ -1076,10 +1076,8 @@ namespace dxvk {
       // gl_Position.w    = 1.0f / gl_Position.w
       // gl_Position.xyz *= gl_Position.w;
 
-      uint32_t bool_t  = m_module.defBoolType();
-
       uint32_t w   = m_module.opCompositeExtract (m_floatType, gl_Position, 1, &wIndex);      // w = gl_Position.w
-      uint32_t is0 = m_module.opFOrdEqual        (bool_t,      w, m_module.constf32(0));      // is0 = w == 0
+      uint32_t is0 = m_module.opFOrdEqual        (m_boolType,      w, m_module.constf32(0));      // is0 = w == 0
       uint32_t rhw = m_module.opFDiv             (m_floatType, m_module.constf32(1.0f), w);   // rhw = 1.0f / w
                rhw = m_module.opSelect           (m_floatType, is0, m_module.constf32(1.0), rhw); // rhw = w == 0 ? 1.0 : rhw
       gl_Position  = m_module.opVectorTimesScalar(m_vec4Type,  gl_Position, rhw);             // gl_Position.xyz *= rhw
@@ -1127,7 +1125,7 @@ namespace dxvk {
             transformed = m_module.opCompositeInsert(m_vec4Type, m_module.constf32(0), transformed, 1, &wIndex);
           }
 
-          if (applyTransform && !m_vsKey.Data.Contents.HasPositionT) {
+          if (applyTransform && !m_vsKey.Data.Contents.VertexHasPositionT) {
             /*This doesn't happen every time and I cannot figure out the difference between when it does and doesn't.
             Keep it disabled for now, it's more likely that games rely on the zero texcoord than the weird 1 here.
             if (texcoordCount <= 1) {
@@ -1208,7 +1206,7 @@ namespace dxvk {
         }
       }
 
-      if (applyTransform && !m_vsKey.Data.Contents.HasPositionT) {
+      if (applyTransform && !m_vsKey.Data.Contents.VertexHasPositionT) {
         transformed = m_module.opVectorTimesMatrix(m_vec4Type, transformed, m_vs.constants.texcoord[i]);
       }
 
@@ -1273,11 +1271,10 @@ namespace dxvk {
         uint32_t theta     = LoadLightItem(m_floatType, 11);
         uint32_t phi       = LoadLightItem(m_floatType, 12);
 
-        uint32_t bool_t  = m_module.defBoolType();
-        uint32_t bool3_t = m_module.defVectorType(bool_t, 3);
+        uint32_t bool3_t = m_module.defVectorType(m_boolType, 3);
 
-        uint32_t isSpot        = m_module.opIEqual(bool_t, type, m_module.constu32(D3DLIGHT_SPOT));
-        uint32_t isDirectional = m_module.opIEqual(bool_t, type, m_module.constu32(D3DLIGHT_DIRECTIONAL));
+        uint32_t isSpot        = m_module.opIEqual(m_boolType, type, m_module.constu32(D3DLIGHT_SPOT));
+        uint32_t isDirectional = m_module.opIEqual(m_boolType, type, m_module.constu32(D3DLIGHT_DIRECTIONAL));
 
         std::array<uint32_t, 3> members = { isDirectional, isDirectional, isDirectional };
 
@@ -1298,7 +1295,7 @@ namespace dxvk {
                  atten  = m_module.opFDiv  (m_floatType, m_module.constf32(1.0f), atten);
                  atten  = m_module.opNMin  (m_floatType, atten, m_module.constf32(std::numeric_limits<float>::max()));
 
-                 atten  = m_module.opSelect(m_floatType, m_module.opFOrdGreaterThan(bool_t, d, range), m_module.constf32(0.0f), atten);
+                 atten  = m_module.opSelect(m_floatType, m_module.opFOrdGreaterThan(m_boolType, d, range), m_module.constf32(0.0f), atten);
                  atten  = m_module.opSelect(m_floatType, isDirectional, m_module.constf32(1.0f), atten);
 
         // Spot Lighting
@@ -1308,8 +1305,8 @@ namespace dxvk {
                    spotAtten  = m_module.opFDiv(m_floatType, spotAtten, m_module.opFSub(m_floatType, theta, phi));
                    spotAtten  = m_module.opPow (m_floatType, spotAtten, falloff);
 
-          uint32_t insideThetaAndPhi = m_module.opFOrdLessThanEqual(bool_t, rho, theta);
-          uint32_t insidePhi         = m_module.opFOrdGreaterThan(bool_t, rho, phi);
+          uint32_t insideThetaAndPhi = m_module.opFOrdLessThanEqual(m_boolType, rho, theta);
+          uint32_t insidePhi         = m_module.opFOrdGreaterThan(m_boolType, rho, phi);
                    spotAtten  = m_module.opSelect(m_floatType, insidePhi,         spotAtten, m_module.constf32(0.0f));
                    spotAtten  = m_module.opSelect(m_floatType, insideThetaAndPhi, spotAtten, m_module.constf32(1.0f));
                    spotAtten  = m_module.opFClamp(m_floatType, spotAtten, m_module.constf32(0.0f), m_module.constf32(1.0f));
@@ -1336,8 +1333,8 @@ namespace dxvk {
 
         uint32_t midDot = m_module.opDot(m_floatType, normal, mid);
                  midDot = m_module.opFClamp(m_floatType, midDot, m_module.constf32(0.0f), m_module.constf32(1.0f));
-        uint32_t doSpec = m_module.opFOrdGreaterThan(bool_t, midDot, m_module.constf32(0.0f));
-                 doSpec = m_module.opLogicalAnd(bool_t, doSpec, m_module.opFOrdGreaterThan(bool_t, hitDot, m_module.constf32(0.0f)));
+        uint32_t doSpec = m_module.opFOrdGreaterThan(m_boolType, midDot, m_module.constf32(0.0f));
+                 doSpec = m_module.opLogicalAnd(m_boolType, doSpec, m_module.opFOrdGreaterThan(m_boolType, hitDot, m_module.constf32(0.0f)));
 
         uint32_t specularness = m_module.opPow(m_floatType, midDot, m_vs.constants.materialPower);
                  specularness = m_module.opFMul(m_floatType, specularness, atten);
@@ -1356,7 +1353,7 @@ namespace dxvk {
       uint32_t mat_ambient  = PickSource(m_vsKey.Data.Contents.AmbientSource,  m_vs.constants.materialAmbient);
       uint32_t mat_emissive = PickSource(m_vsKey.Data.Contents.EmissiveSource, m_vs.constants.materialEmissive);
       uint32_t mat_specular = PickSource(m_vsKey.Data.Contents.SpecularSource, m_vs.constants.materialSpecular);
-      
+
       std::array<uint32_t, 4> alphaSwizzle = {0, 1, 2, 7};
       uint32_t finalColor0 = m_module.opFFma(m_vec4Type, mat_ambient, m_vs.constants.globalAmbient, mat_emissive);
                finalColor0 = m_module.opFFma(m_vec4Type, mat_ambient, ambientValue, finalColor0);
@@ -1387,12 +1384,12 @@ namespace dxvk {
     fogCtx.RangeFog    = m_vsKey.Data.Contents.RangeFog;
     fogCtx.RenderState = m_rsBlock;
     fogCtx.vPos        = vtx;
-    fogCtx.HasFogInput = m_vsKey.Data.Contents.HasFog;
+    fogCtx.HasFogInput = m_vsKey.Data.Contents.VertexHasFog;
     fogCtx.vFog        = m_vs.in.FOG;
     fogCtx.oColor      = 0;
     fogCtx.IsFixedFunction = true;
-    fogCtx.IsPositionT = m_vsKey.Data.Contents.HasPositionT;
-    fogCtx.HasSpecular = m_vsKey.Data.Contents.HasColor1;
+    fogCtx.IsPositionT = m_vsKey.Data.Contents.VertexHasPositionT;
+    fogCtx.HasSpecular = m_vsKey.Data.Contents.VertexHasColor1;
     fogCtx.Specular    = m_vs.in.COLOR[1];
     fogCtx.SpecUBO     = m_specUbo;
     m_module.opStore(m_vs.out.FOG, DoFixedFunctionFog(m_spec, m_module, fogCtx));
@@ -1705,26 +1702,26 @@ namespace dxvk {
     for (uint32_t i = 0; i < caps::TextureStageCount; i++)
       m_vs.in.TEXCOORD[i] = declareIO(true, DxsoSemantic{ DxsoUsage::Texcoord, i });
 
-    if (m_vsKey.Data.Contents.HasColor0)
+    if (m_vsKey.Data.Contents.VertexHasColor0)
       m_vs.in.COLOR[0] = declareIO(true, DxsoSemantic{ DxsoUsage::Color, 0 });
     else {
       m_vs.in.COLOR[0] = m_module.constvec4f32(1.0f, 1.0f, 1.0f, 1.0f);
       m_isgn.elemCount++;
     }
 
-    if (m_vsKey.Data.Contents.HasColor1)
+    if (m_vsKey.Data.Contents.VertexHasColor1)
       m_vs.in.COLOR[1] = declareIO(true, DxsoSemantic{ DxsoUsage::Color, 1 });
     else {
       m_vs.in.COLOR[1] = m_module.constvec4f32(0.0f, 0.0f, 0.0f, 0.0f);
       m_isgn.elemCount++;
     }
 
-    if (m_vsKey.Data.Contents.HasFog)
+    if (m_vsKey.Data.Contents.VertexHasFog)
       m_vs.in.FOG = declareIO(true, DxsoSemantic{ DxsoUsage::Fog,   0 });
     else
       m_isgn.elemCount++;
 
-    if (m_vsKey.Data.Contents.HasPointSize)
+    if (m_vsKey.Data.Contents.VertexHasPointSize)
       m_vs.in.POINTSIZE = declareIO(true, DxsoSemantic{ DxsoUsage::PointSize, 0 });
     else
       m_isgn.elemCount++;
@@ -1855,10 +1852,16 @@ namespace dxvk {
             uint32_t reference = m_module.opCompositeExtract(m_floatType, texcoord, 1, &component);
 
             // [D3D8] Scale Dref to [0..(2^N - 1)] for D24S8 and D16 if Dref scaling is enabled
-            if (m_options.drefScaling) {
-              uint32_t maxDref = m_module.constf32(1.0f / (float(1 << m_options.drefScaling) - 1.0f));
-              reference        = m_module.opFMul(m_floatType, reference, maxDref);
-            }
+            uint32_t drefScaleShift = m_spec.get(m_module, m_specUbo, SpecDrefScaling);
+            uint32_t drefScale      = m_module.opShiftLeftLogical(m_uint32Type, m_module.constu32(1), drefScaleShift);
+            drefScale               = m_module.opConvertUtoF(m_floatType, drefScale);
+            drefScale               = m_module.opFSub(m_floatType, drefScale, m_module.constf32(1.0f));
+            drefScale               = m_module.opFDiv(m_floatType, m_module.constf32(1.0f), drefScale);
+            reference               = m_module.opSelect(m_floatType,
+              m_module.opINotEqual(m_boolType, drefScaleShift, m_module.constu32(0)),
+              m_module.opFMul(m_floatType, reference, drefScale),
+              reference
+            );
 
             texture = m_module.opImageSampleDrefImplicitLod(m_floatType, imageVarId, texcoord, reference, imageOperands);
             texture = ScalarReplicate(texture);
@@ -1878,7 +1881,7 @@ namespace dxvk {
             uint32_t lOffset = m_module.opAccessChain(m_module.defPointerType(m_floatType, spv::StorageClassUniform),
                                                      m_ps.sharedState, 1, &index);
                      lOffset = m_module.opLoad(m_floatType, lOffset);
-            
+
             uint32_t zIndex = 2;
             uint32_t scale = m_module.opCompositeExtract(m_floatType, texture, 1, &zIndex);
                      scale = m_module.opFMul(m_floatType, scale, lScale);
@@ -2368,20 +2371,20 @@ namespace dxvk {
     uint32_t worldPos = emitMatrixTimesVector(4, 4, m_vs.constants.inverseView, vtx);
 
     uint32_t clipPlaneCountId = m_module.constu32(caps::MaxClipPlanes);
-    
+
     uint32_t floatType = m_module.defFloatType(32);
     uint32_t vec4Type  = m_module.defVectorType(floatType, 4);
     uint32_t boolType  = m_module.defBoolType();
-    
+
     // Declare uniform buffer containing clip planes
     uint32_t clipPlaneArray  = m_module.defArrayTypeUnique(vec4Type, clipPlaneCountId);
     uint32_t clipPlaneStruct = m_module.defStructTypeUnique(1, &clipPlaneArray);
     uint32_t clipPlaneBlock  = m_module.newVar(
       m_module.defPointerType(clipPlaneStruct, spv::StorageClassUniform),
       spv::StorageClassUniform);
-    
+
     m_module.decorateArrayStride  (clipPlaneArray, 16);
-    
+
     m_module.setDebugName         (clipPlaneStruct, "clip_info_t");
     m_module.setDebugMemberName   (clipPlaneStruct, 0, "clip_planes");
     m_module.decorate             (clipPlaneStruct, spv::DecorationBlock);
