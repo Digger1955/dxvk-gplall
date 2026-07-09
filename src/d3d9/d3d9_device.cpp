@@ -513,11 +513,12 @@ namespace dxvk {
       m_autoDepthStencil = nullptr;
 
       // Unbind all buffers that were still bound to the backend to avoid leaks.
-      EmitCs([](DxvkContext* ctx) {
+      EmitCs([] (DxvkContext* ctx) {
         ctx->bindIndexBuffer(DxvkBufferSlice(), VK_INDEX_TYPE_UINT32);
-        for (uint32_t i = 0; i < caps::MaxStreams; i++) {
+
+        for (uint32_t i = 0; i < caps::MaxStreams; i++)
           ctx->bindVertexBuffer(i, DxvkBufferSlice(), 0);
-        }
+
       });
 
       // Tests show that regular D3D9 ends the scene in Reset
@@ -3157,8 +3158,8 @@ namespace dxvk {
 
     m_state.vertexBuffers[0].vertexBuffer = nullptr;
     m_state.vertexBuffers[0].offset       = 0;
+    m_state.vertexBuffers[0].length       = 0;
     m_state.vertexBuffers[0].stride       = 0;
-
     return D3D_OK;
   }
 
@@ -3227,10 +3228,10 @@ namespace dxvk {
 
     m_state.vertexBuffers[0].vertexBuffer = nullptr;
     m_state.vertexBuffers[0].offset       = 0;
+    m_state.vertexBuffers[0].length       = 0;
     m_state.vertexBuffers[0].stride       = 0;
 
     m_state.indices = nullptr;
-
     return D3D_OK;
   }
 
@@ -3680,56 +3681,52 @@ namespace dxvk {
 
     D3D9VertexBuffer* buffer = static_cast<D3D9VertexBuffer*>(pStreamData);
 
-    if (unlikely(ShouldRecord()))
+    if (unlikely(ShouldRecord())) {
       return m_recorder->SetStreamSource(
-        StreamNumber,
-        buffer,
-        OffsetInBytes,
-        Stride);
-
-    auto& vbo = m_state.vertexBuffers[StreamNumber];
-    bool needsUpdate = vbo.vertexBuffer != buffer;
-
-    if (needsUpdate) {
-      if (likely(vbo.vertexBuffer != nullptr)) {
-        D3D9CommonBuffer* oldBuffer = vbo.vertexBuffer->GetCommonBuffer();
-        oldBuffer->SetBound(StreamNumber, false);
-        if (oldBuffer->GetMapMode() == D3D9_COMMON_BUFFER_MAP_MODE_DIRECT) {
-          TrackBufferSequenceNumber(oldBuffer);
-        }
-      }
-      vbo.vertexBuffer = buffer;
+        StreamNumber, buffer, OffsetInBytes, Stride);
     }
 
-    const uint32_t bit = 1u << StreamNumber;
-    m_vbSlotTracking.bound &= ~bit;
-    m_vbSlotTracking.uploadPerDraw &= ~bit;
-    m_vbSlotTracking.needsUpload &= ~bit;
+    auto& vbo = m_state.vertexBuffers[StreamNumber];
 
-    if (buffer != nullptr) {
-      buffer->GetCommonBuffer()->SetBound(StreamNumber, true);
+    if (vbo.vertexBuffer != buffer) {
+      const uint32_t bit = 1u << StreamNumber;
+      m_vbSlotTracking.uploadPerDraw &= ~bit;
+      m_vbSlotTracking.needsUpload &= ~bit;
 
-      needsUpdate |= vbo.offset != OffsetInBytes
-                  || vbo.stride != Stride;
+      if (likely(buffer)) {
+        const D3D9CommonBuffer* commonBuffer = GetCommonBuffer(buffer);
+        m_vbSlotTracking.bound |= bit;
 
+        if (commonBuffer->DoPerDrawUpload() || CanOnlySWVP())
+          m_vbSlotTracking.uploadPerDraw |= bit;
+
+        if (commonBuffer->NeedsUpload())
+          m_vbSlotTracking.needsUpload |= bit;
+
+        vbo.vertexBuffer = buffer;
+        vbo.length = commonBuffer->Desc()->Size;
+        vbo.offset = OffsetInBytes;
+        vbo.stride = Stride;
+
+        BindVertexBuffer(StreamNumber, buffer,
+          vbo.offset, vbo.length, vbo.stride);
+      } else {
+        // D3D9 doesn't actually unbind any vertex buffer when passing null.
+        // Operation Flashpoint: Red River relies on this behavior.
+        m_vbSlotTracking.bound &= ~bit;
+
+        vbo.vertexBuffer = nullptr;
+        vbo.offset = 0u;
+        vbo.length = 0u;
+        vbo.stride = 0u;
+      }
+    } else if (likely(buffer && (vbo.offset != OffsetInBytes || vbo.stride != Stride))) {
       vbo.offset = OffsetInBytes;
       vbo.stride = Stride;
 
-      const D3D9CommonBuffer* commonBuffer = GetCommonBuffer(buffer);
-      m_vbSlotTracking.bound |= bit;
-      if (commonBuffer->DoPerDrawUpload() || CanOnlySWVP())
-        m_vbSlotTracking.uploadPerDraw |= bit;
-      if (commonBuffer->NeedsUpload()) {
-        m_vbSlotTracking.needsUpload |= bit;
-      }
-    } else {
-      // D3D9 doesn't actually unbind any vertex buffer when passing null.
-      // Operation Flashpoint: Red River relies on this behavior.
-      needsUpdate = false;
+      BindVertexBufferRange(StreamNumber,
+        vbo.offset, vbo.length, vbo.stride);
     }
-
-    if (needsUpdate)
-      BindVertexBuffer(StreamNumber, buffer, OffsetInBytes, Stride);
 
     return D3D_OK;
   }
@@ -7780,7 +7777,8 @@ namespace dxvk {
     if (unlikely(m_flags.test(D3D9DeviceFlag::DirtyVertexBuffers) && UploadVBOs)) {
       for (uint32_t i = 0; i < caps::MaxStreams; i++) {
         const D3D9VBO& vbo = m_state.vertexBuffers[i];
-        BindVertexBuffer(i, vbo.vertexBuffer.ptr(), vbo.offset, vbo.stride);
+        BindVertexBuffer(i, vbo.vertexBuffer.ptr(),
+          vbo.offset, vbo.length, vbo.stride);
       }
       m_flags.clr(D3D9DeviceFlag::DirtyVertexBuffers);
     }
@@ -7982,33 +7980,65 @@ namespace dxvk {
         UINT                              Slot,
         D3D9VertexBuffer*                 pBuffer,
         UINT                              Offset,
+        UINT                              Length,
         UINT                              Stride) {
+    if (likely(pBuffer)) {
+      Offset = std::min(Offset, Length);
+
+      EmitCs([
+        cSlotId       = Slot,
+        cBuffer       = pBuffer->GetCommonBuffer()->GetBuffer<D3D9_COMMON_BUFFER_TYPE_REAL>(),
+        cOffset       = Offset,
+        cLength       = Length - Offset,
+        cStride       = Stride
+      ] (DxvkContext* ctx) mutable {
+        DxvkBufferSlice slice(std::move(cBuffer), cOffset, cLength);
+        ctx->bindVertexBuffer(cSlotId, std::move(slice), cStride);
+      });
+    } else {
+      EmitCs([cSlotId = Slot] (DxvkContext* ctx) mutable {
+        ctx->bindVertexBuffer(cSlotId, DxvkBufferSlice(), 0);
+      });
+    }
+  }
+
+
+  void D3D9DeviceEx::BindVertexBufferRange(
+          UINT                              Slot,
+          UINT                              Offset,
+          UINT                              Length,
+          UINT                              Stride) {
+    // Fast path for when only the offset of an already bound
+    // buffer changes to avoid ref-counting overhead.
+    Offset = std::min(Offset, Length);
+
     EmitCs([
       cSlotId       = Slot,
-      cBufferSlice  = pBuffer != nullptr ?
-          pBuffer->GetCommonBuffer()->GetBufferSlice<D3D9_COMMON_BUFFER_TYPE_REAL>(Offset)
-        : DxvkBufferSlice(),
-      cStride       = pBuffer != nullptr ? Stride : 0
-    ] (DxvkContext* ctx) mutable {
-      ctx->bindVertexBuffer(cSlotId, std::move(cBufferSlice), cStride);
+      cOffset       = Offset,
+      cLength       = Length - Offset,
+      cStride       = Stride
+    ] (DxvkContext* ctx) {
+      ctx->bindVertexBufferRange(cSlotId, cOffset, cLength, cStride);
     });
   }
 
+
   void D3D9DeviceEx::BindIndices() {
-    D3D9CommonBuffer* buffer = GetCommonBuffer(m_state.indices);
+    if (likely(m_state.indices)) {
+      D3D9CommonBuffer* buffer = m_state.indices->GetCommonBuffer();
+      VkIndexType indexType = DecodeIndexType(buffer->Desc()->Format);
 
-    D3D9Format format = buffer != nullptr
-                      ? buffer->Desc()->Format
-                      : D3D9Format::INDEX32;
-
-    const VkIndexType indexType = DecodeIndexType(format);
-
-    EmitCs([
-      cBufferSlice = buffer != nullptr ? buffer->GetBufferSlice<D3D9_COMMON_BUFFER_TYPE_REAL>() : DxvkBufferSlice(),
-      cIndexType   = indexType
-    ](DxvkContext* ctx) mutable {
-      ctx->bindIndexBuffer(std::move(cBufferSlice), cIndexType);
-    });
+      EmitCs([
+        cBufferSlice = buffer->GetBufferSlice<D3D9_COMMON_BUFFER_TYPE_REAL>(),
+        cIndexType   = indexType
+      ](DxvkContext* ctx) mutable {
+        ctx->bindIndexBuffer(std::move(cBufferSlice), cIndexType);
+      });
+    } else {
+      EmitCs([] (DxvkContext* ctx) {
+        ctx->bindIndexBuffer(DxvkBufferSlice(), VK_INDEX_TYPE_UINT32);
+      });
+    }
   }
 
 
