@@ -54,7 +54,7 @@ namespace dxvk {
   class D3D9FormatHelper;
   class D3D9UserDefinedAnnotation;
 
-  enum class D3D9DeviceFlag : uint32_t {
+  enum class D3D9DeviceDirtyFlag : uint32_t {
     Framebuffer,
     ClipPlanes,
     DepthStencilState,
