@@ -184,7 +184,7 @@ namespace dxvk {
     m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
     m_dirty.set(D3D9DeviceDirtyFlag::FFViewport);
     m_dirty.set(D3D9DeviceDirtyFlag::FFPixelData);
-    m_flags.set(D3D9DeviceFlag::DirtyProgVertexShader);
+    m_dirty.set(D3D9DeviceDirtyFlag::ProgVertexShader);
     m_dirty.set(D3D9DeviceDirtyFlag::SharedPixelShaderData);
     m_dirty.set(D3D9DeviceDirtyFlag::DepthBounds);
     m_dirty.set(D3D9DeviceDirtyFlag::PointScale);
@@ -3555,7 +3555,7 @@ namespace dxvk {
     m_state.vertexShader = shader;
 
     if (shader != nullptr) {
-      m_flags.clr(D3D9DeviceFlag::DirtyProgVertexShader);
+      m_dirty.clr(D3D9DeviceDirtyFlag::ProgVertexShader);
       m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
 
       BindShader<DxsoProgramTypes::VertexShader>(GetCommonShader(shader));
@@ -5871,7 +5871,7 @@ namespace dxvk {
         ](DxvkContext* ctx) mutable {
           ctx->bindVertexBuffer(cStream, std::move(cBufferSlice), cStride);
         });
-        m_flags.set(D3D9DeviceFlag::DirtyVertexBuffers);
+        m_dirty.set(D3D9DeviceDirtyFlag::VertexBuffers);
       }
 
       // Change the draw call parameters to reflect the changed vertex buffers
@@ -5887,7 +5887,7 @@ namespace dxvk {
         EmitCs([](DxvkContext* ctx) {
           ctx->bindIndexBuffer(DxvkBufferSlice(), VK_INDEX_TYPE_UINT32);
         });
-        m_flags.set(D3D9DeviceFlag::DirtyIndexBuffer);
+        m_dirty.set(D3D9DeviceDirtyFlag::IndexBuffer);
       } else {
         auto* ibo = GetCommonBuffer(m_state.indices);
         uint32_t indexStride = ibo->Desc()->Format == D3D9Format::INDEX16 ? 2 : 4;
@@ -5904,7 +5904,7 @@ namespace dxvk {
         ](DxvkContext* ctx) mutable {
           ctx->bindIndexBuffer(std::move(cBufferSlice), cIndexType);
         });
-        m_flags.set(D3D9DeviceFlag::DirtyIndexBuffer);
+        m_dirty.set(D3D9DeviceDirtyFlag::IndexBuffer);
       }
 
       // Change the draw call parameters to reflect the changed index buffer
@@ -6222,7 +6222,7 @@ namespace dxvk {
 
 
   void D3D9DeviceEx::UpdateClipPlanes() {
-    m_flags.clr(D3D9DeviceFlag::DirtyClipPlanes);
+    m_dirty.clr(D3D9DeviceDirtyFlag::ClipPlanes);
 
     auto mapPtr = m_vsClipPlanes.AllocSlice();
     auto dst = reinterpret_cast<D3D9ClipPlane*>(mapPtr);
@@ -6850,7 +6850,7 @@ namespace dxvk {
 
     uint32_t mode = scaleBit | spriteBit;
 
-    if (rs[D3DRS_POINTSCALEENABLE] && m_flags.test(D3D9DeviceFlag::DirtyPointScale)) {
+    if (rs[D3DRS_POINTSCALEENABLE] && m_dirty.test(D3D9DeviceDirtyFlag::PointScale)) {
       m_dirty.clr(D3D9DeviceDirtyFlag::PointScale);
 
       UpdatePushConstant<D3D9RenderStateItem::PointScaleA>();
@@ -6871,24 +6871,24 @@ namespace dxvk {
     bool vertexFog  = rs[D3DRS_FOGVERTEXMODE] != D3DFOG_NONE && fogEnabled && !pixelFog;
 
     auto UpdateFogConstants = [&](D3DFOGMODE FogMode) {
-      if (m_flags.test(D3D9DeviceFlag::DirtyFogColor)) {
+      if (m_dirty.test(D3D9DeviceDirtyFlag::FogColor)) {
         m_dirty.clr(D3D9DeviceDirtyFlag::FogColor);
         UpdatePushConstant<D3D9RenderStateItem::FogColor>();
       }
 
       if (FogMode == D3DFOG_LINEAR) {
-        if (m_flags.test(D3D9DeviceFlag::DirtyFogScale)) {
+        if (m_dirty.test(D3D9DeviceDirtyFlag::FogScale)) {
           m_dirty.clr(D3D9DeviceDirtyFlag::FogScale);
           UpdatePushConstant<D3D9RenderStateItem::FogScale>();
         }
 
-        if (m_flags.test(D3D9DeviceFlag::DirtyFogEnd)) {
+        if (m_dirty.test(D3D9DeviceDirtyFlag::FogEnd)) {
           m_dirty.clr(D3D9DeviceDirtyFlag::FogEnd);
           UpdatePushConstant<D3D9RenderStateItem::FogEnd>();
         }
       }
       else if (FogMode == D3DFOG_EXP || FogMode == D3DFOG_EXP2) {
-        if (m_flags.test(D3D9DeviceFlag::DirtyFogDensity)) {
+        if (m_dirty.test(D3D9DeviceDirtyFlag::FogDensity)) {
           m_dirty.clr(D3D9DeviceDirtyFlag::FogDensity);
           UpdatePushConstant<D3D9RenderStateItem::FogDensity>();
         }
@@ -6900,7 +6900,7 @@ namespace dxvk {
 
       UpdateFogConstants(mode);
 
-      if (m_flags.test(D3D9DeviceFlag::DirtyFogState)) {
+      if (m_dirty.test(D3D9DeviceDirtyFlag::FogState)) {
         m_dirty.clr(D3D9DeviceDirtyFlag::FogState);
 
         UpdateFogModeSpec(true, mode, D3DFOG_NONE);
@@ -6911,7 +6911,7 @@ namespace dxvk {
 
       UpdateFogConstants(mode);
 
-      if (m_flags.test(D3D9DeviceFlag::DirtyFogState)) {
+      if (m_dirty.test(D3D9DeviceDirtyFlag::FogState)) {
         m_dirty.clr(D3D9DeviceDirtyFlag::FogState);
 
         UpdateFogModeSpec(true, D3DFOG_NONE, mode);
@@ -6921,7 +6921,7 @@ namespace dxvk {
       if (fogEnabled)
         UpdateFogConstants(D3DFOG_NONE);
 
-      if (m_flags.test(D3D9DeviceFlag::DirtyFogState)) {
+      if (m_dirty.test(D3D9DeviceDirtyFlag::FogState)) {
         m_dirty.clr(D3D9DeviceDirtyFlag::FogState);
 
         UpdateFogModeSpec(fogEnabled, D3DFOG_NONE, D3DFOG_NONE);
@@ -7677,7 +7677,7 @@ namespace dxvk {
     UpdatePointMode(PrimitiveType == D3DPT_POINTLIST);
 
     if (likely(UseProgrammableVS())) {
-      if (unlikely(m_flags.test(D3D9DeviceFlag::DirtyProgVertexShader))) {
+      if (unlikely(m_dirty.test(D3D9DeviceDirtyFlag::ProgVertexShader))) {
         m_dirty.set(D3D9DeviceDirtyFlag::InputLayout);
 
         BindShader<DxsoProgramType::VertexShader>(
@@ -8202,10 +8202,10 @@ namespace dxvk {
         vertexBlendMode = D3D9FF_VertexBlendMode_Disabled;
     }
 
-    if (unlikely(hasPositionT && m_state.vertexShader != nullptr && !m_flags.test(D3D9DeviceFlag::DirtyProgVertexShader))) {
+    if (unlikely(hasPositionT && m_state.vertexShader != nullptr && !m_dirty.test(D3D9DeviceDirtyFlag::ProgVertexShader))) {
       m_dirty.set(D3D9DeviceDirtyFlag::InputLayout);
       m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
-      m_flags.set(D3D9DeviceFlag::DirtyProgVertexShader);
+      m_dirty.set(D3D9DeviceDirtyFlag::ProgVertexShader);
     }
 
     if (m_dirty.test(D3D9DeviceDirtyFlag::FFVertexShader)) {

@@ -80,6 +80,7 @@ namespace dxvk {
     FFPixelShader,
     FFViewport,
     FFPixelData,
+    ProgVertexShader,
     SharedPixelShaderData,
     DepthBounds,
     PointScale,
