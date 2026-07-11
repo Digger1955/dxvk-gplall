@@ -660,7 +660,7 @@ namespace dxvk {
   Rc<DxvkImageView> D3D9CommonTexture::CreateView(
           UINT                   Layer,
           UINT                   Lod,
-          VkImageUsageFlagBits   UsageFlags,
+          VkImageUsageFlags      UsageFlags,
           VkImageLayout          Layout,
           bool                   Srgb) {
     DxvkImageViewKey viewInfo;
@@ -678,16 +678,16 @@ namespace dxvk {
     viewInfo.packedSwizzle = DxvkImageViewKey::packSwizzle(m_mapping.Swizzle);
 
     // Remove the stencil aspect if we are trying to create a regular image
-    // view of a depth stencil format 
-    if (UsageFlags != VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    // view of a depth stencil format
+    if (!(UsageFlags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
       viewInfo.aspects &= ~VK_IMAGE_ASPECT_STENCIL_BIT;
 
-    if (UsageFlags == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT ||
-        UsageFlags == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    if (UsageFlags & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
       viewInfo.mipCount = 1;
 
     // Remove swizzle on depth views.
-    if (UsageFlags == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    if (UsageFlags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
       viewInfo.packedSwizzle = 0u;
 
     // Create the underlying image view object
@@ -730,12 +730,20 @@ namespace dxvk {
     // that have GENERAL (or FEEDBACK_LOOP) as their layout.
     // This will always be the case for images that can be sampled.
     // So just pick UNDEFINED here.
+
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    // We default to DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL for DS images that can be sampled.
+    // The backend defaults to DS_READ_ONLY, so we need to set the layout explicitly.
+    if (IsDepthStencil())
+      layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+
     m_sampleView.Color = CreateView(AllLayers, Lod,
-      VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_UNDEFINED, false);
+      VK_IMAGE_USAGE_SAMPLED_BIT, layout, false);
 
     if (IsSrgbCompatible()) {
       m_sampleView.Srgb = CreateView(AllLayers, Lod,
-        VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
+        VK_IMAGE_USAGE_SAMPLED_BIT, layout, true);
     }
   }
 

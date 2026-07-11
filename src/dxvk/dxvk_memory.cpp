@@ -96,14 +96,16 @@ namespace dxvk {
   DxvkResourceImageViewMap::DxvkResourceImageViewMap(
           DxvkMemoryAllocator*        allocator,
           VkImage                     image)
-  : m_vkd(allocator->device()->vkd()), m_image(image) {
+   : m_device(allocator->device()), m_image(image) {
 
   }
 
 
   DxvkResourceImageViewMap::~DxvkResourceImageViewMap() {
+    auto vk = m_device->vkd();
+
     for (const auto& view : m_views)
-      m_vkd->vkDestroyImageView(m_vkd->device(), view.second.legacy.image.imageView, nullptr);
+      vk->vkDestroyImageView(vk->device(), view.second.legacy.image.imageView, nullptr);
   }
 
 
@@ -115,6 +117,11 @@ namespace dxvk {
 
     if (entry != m_views.end())
       return &entry->second;
+
+    auto vk = m_device->vkd();
+
+    auto& descriptor = m_views.emplace(std::piecewise_construct,
+      std::tuple(key), std::tuple()).first->second;
 
     VkImageViewUsageCreateInfo usage = { VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO };
     usage.usage = key.usage;
@@ -130,17 +137,15 @@ namespace dxvk {
     info.subresourceRange.baseArrayLayer = key.layerIndex;
     info.subresourceRange.layerCount = key.layerCount;
 
-    DxvkDescriptor descriptor = { };
     descriptor.legacy.image.imageLayout = key.layout;
 
-    VkResult vr = m_vkd->vkCreateImageView(
-      m_vkd->device(), &info, nullptr, &descriptor.legacy.image.imageView);
+    VkResult vr = vk->vkCreateImageView(
+      vk->device(), &info, nullptr, &descriptor.legacy.image.imageView);
 
     if (vr != VK_SUCCESS)
       throw DxvkError(str::format("Failed to create Vulkan image view: ", vr));
 
-    entry = m_views.insert({ key, descriptor }).first;
-    return &entry->second;
+    return &descriptor;
   }
 
 
@@ -1160,15 +1165,15 @@ namespace dxvk {
     VkMemoryPriorityAllocateInfoEXT priorityInfo = { VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT };
 
     if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-      if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        // BAR allocation. Give this a low priority since these are typically useful
-        // when when placed in system memory.
-        priorityInfo.priority = 0.0f;
-      } else if (next) {
+      if (next) {
         // Dedicated allocation, may or may not be a shared resource. Assign this the
         // highest priority since this is expected to be a high-bandwidth resource,
-        // such as a render target.
+        // such as a render target or a descriptor heap. The latter may be host-visible.
         priorityInfo.priority = 1.0f;
+      } else if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        // Regular HVV allocation. Give this a low priority since these are typically
+        // useful when when placed in system memory.
+        priorityInfo.priority = 0.0f;
       } else {
         // Standard priority for resource allocations
         priorityInfo.priority = 0.5f;
