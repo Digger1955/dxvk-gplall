@@ -24,10 +24,10 @@ layout(constant_id = 1) const uint c_dst_samples = 1;
 layout(constant_id = 2) const uint c_resolve_mode = FILTER_LINEAR;
 
 void main() {
-
   vec2 coord = vec2(p_src_coord0_x, p_src_coord0_y) + 
                vec2(p_src_coord1_x - p_src_coord0_x, p_src_coord1_y - p_src_coord0_y) * i_pos;
-  ivec2 i_coord = ivec2(floor(coord));
+               
+  ivec2 base_coord = ivec2(floor(coord));
 
   if (c_resolve_mode == RESOLVE_AVERAGE) {
     uint sample_count = max(1u, c_src_samples / c_dst_samples);
@@ -36,10 +36,27 @@ void main() {
     [[unroll]]
     for (uint i = 0u; i < sample_count; i++) {
       uint sample_index = (gl_SampleID * c_src_samples) / c_dst_samples + i;
-      o_color += texelFetch(s_image_ms, ivec3(i_coord, gl_Layer), int(sample_index));
+      o_color += texelFetch(s_image_ms, ivec3(base_coord, gl_Layer), int(sample_index));
     }
     o_color /= float(sample_count);
     return;
+  }
+
+  ivec2 coord_00 = base_coord;
+  ivec2 coord_10 = base_coord + ivec2(1, 0);
+  ivec2 coord_01 = base_coord + ivec2(0, 1);
+  ivec2 coord_11 = base_coord + ivec2(1, 1);
+
+  vec2 f = fract(coord);
+  vec4 spatial_weights = vec4(
+    (1.0f - f.x) * (1.0f - f.y), // Weight for Top-Left (00)
+    f.x * (1.0f - f.y),          // Weight for Top-Right (10)
+    (1.0f - f.x) * f.y,          // Weight for Bottom-Left (01)
+    f.x * f.y                    // Weight for Bottom-Right (11)
+  );
+
+  if (c_resolve_mode == FILTER_NEAREST) {
+    spatial_weights = vec4(1.0f, 0.0f, 0.0f, 0.0f);
   }
 
   vec4 accumulated_color = vec4(0.0f);
@@ -47,28 +64,32 @@ void main() {
 
   [[unroll]]
   for (uint s = 0u; s < c_src_samples; s++) {
-    if (i_coord.x < 0 || i_coord.y < 0) {
-      continue; 
-    }
+    int sample_idx = int(s);
 
-    vec4 sample_color = texelFetch(s_image_ms, ivec3(i_coord, gl_Layer), int(s));
+    vec4 c00 = texelFetch(s_image_ms, ivec3(coord_00, gl_Layer), sample_idx);
+    vec4 c10 = texelFetch(s_image_ms, ivec3(coord_10, gl_Layer), sample_idx);
+    vec4 c01 = texelFetch(s_image_ms, ivec3(coord_01, gl_Layer), sample_idx);
+    vec4 c11 = texelFetch(s_image_ms, ivec3(coord_11, gl_Layer), sample_idx);
 
-    if (sample_color.a <= 0.0001f) {
+    vec4 gathered_alphas = vec4(c00.a, c10.a, c01.a, c11.a);
+
+    if (dot(gathered_alphas, gathered_alphas) <= 0.0001f) {
       continue;
     }
 
-    float weight = 1.0f;
-    if (c_resolve_mode == FILTER_LINEAR) {
-      weight = sample_color.a; 
-    }
+    vec4 final_weights = spatial_weights * gathered_alphas;
 
-    accumulated_color += sample_color * weight;
-    total_weight += weight;
+    accumulated_color += c00 * final_weights.x;
+    accumulated_color += c10 * final_weights.y;
+    accumulated_color += c01 * final_weights.z;
+    accumulated_color += c11 * final_weights.w;
+
+    total_weight += dot(final_weights, vec4(1.0f));
   }
 
   if (total_weight > 0.0f) {
     o_color = accumulated_color / total_weight;
   } else {
-    o_color = texelFetch(s_image_ms, ivec3(i_coord, gl_Layer), 0);
+    o_color = texelFetch(s_image_ms, ivec3(base_coord, gl_Layer), 0);
   }
 }
