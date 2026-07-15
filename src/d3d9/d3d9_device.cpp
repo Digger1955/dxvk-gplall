@@ -180,7 +180,6 @@ namespace dxvk {
 
     m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
     m_dirty.set(D3D9DeviceDirtyFlag::FFVertexBlend);
-    m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
     m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
     m_dirty.set(D3D9DeviceDirtyFlag::FFViewport);
     m_dirty.set(D3D9DeviceDirtyFlag::FFPixelData);
@@ -2185,9 +2184,11 @@ namespace dxvk {
     if (Index >= m_state.lights.size())
       m_state.lights.resize(Index + 1);
 
-    m_state.lights[Index] = *pLight;
+    auto& light = m_state.lights[Index];
+    light.isValid = true;
+    light.light = *pLight;
 
-    if (m_state.IsLightEnabled(Index))
+    if (light.isEnabled)
       m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
     return D3D_OK;
@@ -2200,10 +2201,15 @@ namespace dxvk {
     if (unlikely(pLight == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(Index >= m_state.lights.size() || !m_state.lights[Index]))
+    if (unlikely(Index >= m_state.lights.size()))
       return D3DERR_INVALIDCALL;
 
-    *pLight = m_state.lights[Index].value();
+    auto& light = m_state.lights[Index];
+
+    if (unlikely(!light.isValid))
+      return D3DERR_INVALIDCALL;
+
+    *pLight = m_state.lights[Index].light;
 
     return D3D_OK;
   }
@@ -2220,27 +2226,15 @@ namespace dxvk {
     if (unlikely(Index >= m_state.lights.size()))
       m_state.lights.resize(Index + 1);
 
-    if (unlikely(!m_state.lights[Index]))
-      m_state.lights[Index] = DefaultLight;
+    auto& light = m_state.lights[Index];
 
-    if (m_state.IsLightEnabled(Index) == !!Enable)
+    if (light.isEnabled == bool(Enable))
       return D3D_OK;
 
-    uint32_t searchIndex = std::numeric_limits<uint32_t>::max();
-    uint32_t setIndex    = Index;
+    light.isValid = true;
+    light.isEnabled = bool(Enable);
 
-    if (!Enable)
-      std::swap(searchIndex, setIndex);
-
-    for (auto& idx : m_state.enabledLightIndices) {
-      if (idx == searchIndex) {
-        idx = setIndex;
-        m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
-        m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
-        break;
-      }
-    }
-
+    m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
     return D3D_OK;
   }
 
@@ -2251,11 +2245,15 @@ namespace dxvk {
     if (unlikely(pEnable == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(Index >= m_state.lights.size() || !m_state.lights[Index]))
+    if (unlikely(Index >= m_state.lights.size()))
       return D3DERR_INVALIDCALL;
 
-    *pEnable = m_state.IsLightEnabled(Index) ? 128 : 0; // Weird quirk but OK.
+    auto& light = m_state.lights[Index];
 
+    if (unlikely(!light.isValid))
+      return D3DERR_INVALIDCALL;
+
+    *pEnable = light.isEnabled ? 128 : 0; // Weird quirk but OK.
     return D3D_OK;
   }
 
@@ -2446,7 +2444,7 @@ namespace dxvk {
 
         case D3DRS_CLIPPLANEENABLE:
           if (!Value != !oldValue)
-            m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+            m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
           m_dirty.set(D3D9DeviceDirtyFlag::ClipPlanes);
           break;
@@ -2467,7 +2465,7 @@ namespace dxvk {
         case D3DRS_LIGHTING:
         case D3DRS_NORMALIZENORMALS:
         case D3DRS_LOCALVIEWER:
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           break;
 
         case D3DRS_AMBIENT:
@@ -2485,7 +2483,7 @@ namespace dxvk {
           break;
 
         case D3DRS_RANGEFOGENABLE:
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           break;
 
         case D3DRS_FOGCOLOR:
@@ -2583,14 +2581,14 @@ namespace dxvk {
           break;
 
         case D3DRS_VERTEXBLEND:
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           break;
 
         case D3DRS_INDEXEDVERTEXBLENDENABLE:
           if (CanSWVP() && Value)
             m_dirty.set(D3D9DeviceDirtyFlag::FFVertexBlend);
 
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           break;
 
         case D3DRS_ADAPTIVETESS_Y: {
@@ -3431,7 +3429,7 @@ namespace dxvk {
                     || decl->GetTexcoordMask() != m_state.vertexDecl->GetTexcoordMask();
 
     if (dirtyFFShader)
-      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
     m_state.vertexDecl = decl;
 
@@ -3556,7 +3554,7 @@ namespace dxvk {
 
     if (shader != nullptr) {
       m_dirty.clr(D3D9DeviceDirtyFlag::ProgVertexShader);
-      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
       BindShader<DxsoProgramTypes::VertexShader>(GetCommonShader(shader));
       UpdateTextureTypeMismatchesForShader(newShader, VSShaderMasks().samplerMask, FirstVSSamplerSlot);
@@ -4676,7 +4674,7 @@ namespace dxvk {
           break;
 
         case DXVK_TSS_TEXCOORDINDEX:
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           break;
 
         case DXVK_TSS_TEXTURETRANSFORMFLAGS:
@@ -4684,7 +4682,7 @@ namespace dxvk {
           if (Value & D3DTTFF_PROJECTED)
             m_textureSlotTracking.projected |= 1 << Stage;
 
-          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+          m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
           m_dirty.set(D3D9DeviceDirtyFlag::FFPixelShader);
           break;
 
@@ -8222,12 +8220,12 @@ namespace dxvk {
 
     if (unlikely(hasPositionT && m_state.vertexShader != nullptr && !m_dirty.test(D3D9DeviceDirtyFlag::ProgVertexShader))) {
       m_dirty.set(D3D9DeviceDirtyFlag::InputLayout);
-      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+      m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
       m_dirty.set(D3D9DeviceDirtyFlag::ProgVertexShader);
     }
 
-    if (m_dirty.test(D3D9DeviceDirtyFlag::FFVertexShader)) {
-      m_dirty.clr(D3D9DeviceDirtyFlag::FFVertexShader);
+    if (m_dirty.test(D3D9DeviceDirtyFlag::FFVertexData)) {
+      m_dirty.clr(D3D9DeviceDirtyFlag::FFVertexData);
 
       D3D9FFShaderKeyVS key;
       key.Data.Contents.VertexHasPositionT = hasPositionT;
@@ -8257,8 +8255,8 @@ namespace dxvk {
       uint32_t lightCount = 0;
 
       if (key.Data.Contents.UseLighting) {
-        for (uint32_t i = 0; i < caps::MaxEnabledLights; i++) {
-          if (m_state.enabledLightIndices[i] != std::numeric_limits<uint32_t>::max())
+        for (auto& light : m_state.lights) {
+          if (light.isEnabled)
             lightCount++;
         }
       }
@@ -8353,12 +8351,15 @@ namespace dxvk {
       DecodeD3DCOLOR(m_state.renderStates[D3DRS_AMBIENT], data->GlobalAmbient.data);
 
       uint32_t lightIdx = 0;
-      for (uint32_t i = 0; i < caps::MaxEnabledLights; i++) {
-        auto idx = m_state.enabledLightIndices[i];
-        if (idx == std::numeric_limits<uint32_t>::max())
+
+      for (auto& light : m_state.lights) {
+        if (!light.isEnabled)
           continue;
 
-        data->Lights[lightIdx++] = D3D9Light(m_state.lights[idx].value(), m_state.transforms[GetTransformIndex(D3DTS_VIEW)]);
+        data->Lights[lightIdx++] = D3D9Light(light.light, m_state.transforms[GetTransformIndex(D3DTS_VIEW)]);
+
+        if (lightIdx == caps::MaxEnabledLights)
+          break;
       }
 
       data->Material = m_state.material;
@@ -8714,7 +8715,7 @@ namespace dxvk {
     rs[D3DRS_LOCALVIEWER]            = TRUE;
     rs[D3DRS_RANGEFOGENABLE]         = FALSE;
     rs[D3DRS_NORMALIZENORMALS]       = FALSE;
-    m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
+    m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
     // PS
     rs[D3DRS_SPECULARENABLE] = FALSE;

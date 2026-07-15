@@ -76,7 +76,6 @@ namespace dxvk {
 
     FFVertexData,
     FFVertexBlend,
-    FFVertexShader,
     FFPixelShader,
     FFViewport,
     FFPixelData,
