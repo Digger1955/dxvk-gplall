@@ -563,7 +563,7 @@ namespace dxvk {
       rsInfo.rasterizerDiscardEnable = VK_TRUE;
     }
 
-    if (shaders.gs && !shaders.gs->info().flags.test(DxvkShaderFlag::ExportsPosition))
+    if (shaders.gs && !shaders.gs->flags().test(DxvkShaderFlag::ExportsPosition))
       rsInfo.rasterizerDiscardEnable = VK_TRUE;
 
     // Nothing more to do if rasterizer discard is enabled.
@@ -1039,8 +1039,8 @@ namespace dxvk {
                          |  VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT;
       }
 
-      if (m_shaders.gs->info().xfbrasterizedStream < 0
-       || !m_shaders.gs->info().flags.test(DxvkShaderFlag::ExportsPosition))
+      if (m_shaders.gs->info().xfbRasterizedStream < 0
+       || !m_shaders.gs->flags().test(DxvkShaderFlag::ExportsPosition))
         m_flags.set(DxvkGraphicsPipelineFlag::HasRasterizerDiscard);
     }
 
