@@ -4776,13 +4776,22 @@ namespace dxvk {
     // Enable depth bounds test if we support it.
     enabled.core.features.depthBounds = supported.core.features.depthBounds;
 
+    // VK_EXT_border_color_swizzle - enable its features, if respective feature is supported
+    enabled.extBorderColorSwizzle.borderColorSwizzle             = supported.extBorderColorSwizzle.borderColorSwizzle;
+    enabled.extBorderColorSwizzle.borderColorSwizzleFromImage    = supported.extBorderColorSwizzle.borderColorSwizzleFromImage;
+
+    // VK_EXT_custom_border_color - enable its features unconditionally, if customBorderColorWithoutFormat feature is supported
     if (supported.extCustomBorderColor.customBorderColorWithoutFormat) {
       enabled.extCustomBorderColor.customBorderColors             = VK_TRUE;
       enabled.extCustomBorderColor.customBorderColorWithoutFormat = VK_TRUE;
     }
 
+    // VK_EXT_attachment_feedback_loop_layout - enable its feature unconditionally, if attachmentFeedbackLoopLayout feature is supported
     if (supported.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
       enabled.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout = VK_TRUE;
+
+    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
+    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
 
     enabled.extNonSeamlessCubeMap.nonSeamlessCubeMap = supported.extNonSeamlessCubeMap.nonSeamlessCubeMap;
 
