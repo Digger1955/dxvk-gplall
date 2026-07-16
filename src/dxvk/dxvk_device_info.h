@@ -49,6 +49,7 @@ namespace dxvk {
     VkPhysicalDeviceVulkan13Features                          vk13;
     VkBool32                                                  amdShaderFragmentMask;
     VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT   extAttachmentFeedbackLoopLayout;
+    VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT   extDynamicRenderingUnusedAttachments;
     VkPhysicalDeviceBorderColorSwizzleFeaturesEXT             extBorderColorSwizzle;
     VkBool32                                                  extConservativeRasterization;
     VkPhysicalDeviceCustomBorderColorFeaturesEXT              extCustomBorderColor;
