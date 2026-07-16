@@ -55,6 +55,7 @@ namespace dxvk {
     GpDynamicRasterizerState,   ///< Cull mode and front face are dynamic
     GpDynamicSampleLocations,   ///< Sample locations are dynamic
     GpDynamicVertexStrides,     ///< Vertex buffer strides are dynamic
+    GpDynamicViewport,          ///< Viewport state is dynamic. Disabled for rasterizer discard.
     GpHasPushConstants,         ///< Graphics pipeline uses push constants
     GpIndependentSets,          ///< Graphics pipeline layout was created with independent sets
 
