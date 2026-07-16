@@ -7625,7 +7625,7 @@ namespace dxvk {
       // need to rebind the pipeline, we need to end transform feedback and
       // potentially issue a barrier. Dirtying xfb buffers will do that.
       if (m_flags.any(DxvkContextFlag::GpDirtyPipelineState,
-                      DxvkContextFlag::GpDirtySpecConstants {
+                      DxvkContextFlag::GpDirtySpecConstants)) {
         m_flags.set(DxvkContextFlag::GpDirtyXfbBuffers);
         this->pauseTransformFeedback();
       }
