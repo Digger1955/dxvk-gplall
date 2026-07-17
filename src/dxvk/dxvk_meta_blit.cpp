@@ -63,48 +63,69 @@ namespace dxvk {
   }
 
 
-  DxvkMetaBlitPipeline DxvkMetaBlitObjects::createPipeline(
-    const DxvkMetaBlitPipelineKey&    key) const {
-    util::DxvkBuiltInGraphicsState state = { };
+// Helper utility to convert Vulkan sample flags to pure loop scalar counts
+static uint32_t getSampleCountInteger(VkSampleCountFlagBits flags) {
+  if (flags & VK_SAMPLE_COUNT_16_BIT) return 16u;
+  if (flags & VK_SAMPLE_COUNT_8_BIT)  return 8u;
+  if (flags & VK_SAMPLE_COUNT_4_BIT)  return 4u;
+  if (flags & VK_SAMPLE_COUNT_2_BIT)  return 2u;
+  return 1u;
+}
 
-    std::array<VkSpecializationMapEntry, 3u> specMap = {{
-      { 0u, offsetof(DxvkMetaBlitPipelineKey, srcSamples),  sizeof(VkSampleCountFlagBits) },
-      { 1u, offsetof(DxvkMetaBlitPipelineKey, dstSamples),  sizeof(VkSampleCountFlagBits) },
-      { 2u, offsetof(DxvkMetaBlitPipelineKey, resolveMode), sizeof(DxvkMetaBlitResolveMode) },
-    }};
 
-    VkSpecializationInfo specInfo = { };
-    specInfo.mapEntryCount = specMap.size();
-    specInfo.pMapEntries = specMap.data();
-    specInfo.dataSize = sizeof(key);
-    specInfo.pData = &key;
+DxvkMetaBlitPipeline DxvkMetaBlitObjects::createPipeline(
+  const DxvkMetaBlitPipelineKey&    key) const {
+  util::DxvkBuiltInGraphicsState state = { };
 
-    if (m_device->features().vk12.shaderOutputLayer) {
-      state.vs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_layer_vert, nullptr);
-    } else {
-      state.vs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_vert, nullptr);
-      state.gs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_geom, nullptr);
-    }
+  // Explicitly pack pure scalar counts for the unrolled GLSL shader loops
+  struct ShaderSpecData {
+    uint32_t srcSamples;  // Will be exactly 1, 2, 4, 8, or 16
+    uint32_t dstSamples;  // Will be exactly 1, 2, 4, 8, or 16
+    uint32_t resolveMode;
+  } specData;
 
-    if (key.srcSamples != VK_SAMPLE_COUNT_1_BIT) {
-      if (key.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
-        state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_2d_ms, &specInfo);
-      } else {
-        throw DxvkError("DxvkMetaBlitObjects: Invalid view type for multisampled image");
-      }
-    } else {
-      switch (key.viewType) {
-        case VK_IMAGE_VIEW_TYPE_1D_ARRAY: state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_1d, nullptr); break;
-        case VK_IMAGE_VIEW_TYPE_2D_ARRAY: state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_2d, nullptr); break;
-        case VK_IMAGE_VIEW_TYPE_3D:       state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_3d, nullptr); break;
-        default: throw DxvkError("DxvkMetaBlitObjects: Invalid view type");
-      }
-    }
+  specData.srcSamples  = getSampleCountInteger(key.srcSamples);  
+  specData.dstSamples  = getSampleCountInteger(key.dstSamples);  
+  specData.resolveMode = static_cast<uint32_t>(key.resolveMode); 
 
-    state.colorFormat = key.viewFormat;
-    state.sampleCount = key.dstSamples;
+  std::array<VkSpecializationMapEntry, 3u> specMap = {{
+    { 0u, offsetof(ShaderSpecData, srcSamples),  sizeof(uint32_t) },
+    { 1u, offsetof(ShaderSpecData, dstSamples),  sizeof(uint32_t) },
+    { 2u, offsetof(ShaderSpecData, resolveMode), sizeof(uint32_t) },
+  }};
 
-    return { m_layout, m_device->createBuiltInGraphicsPipeline(m_layout, state) };
+  VkSpecializationInfo specInfo = { };
+  specInfo.mapEntryCount = specMap.size();
+  specInfo.pMapEntries   = specMap.data();
+  specInfo.dataSize      = sizeof(ShaderSpecData);
+  specInfo.pData         = &specData;
+
+  if (m_device->features().vk12.shaderOutputLayer) {
+    state.vs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_layer_vert, nullptr);
+  } else {
+    state.vs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_vert, nullptr);
+    state.gs = util::DxvkBuiltInShaderStage(dxvk_fullscreen_geom, nullptr);
   }
+
+  if (key.srcSamples != VK_SAMPLE_COUNT_1_BIT) {
+    if (key.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
+      state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_2d_ms, &specInfo);
+    } else {
+      throw DxvkError("DxvkMetaBlitObjects: Invalid view type for multisampled image");
+    }
+  } else {
+    switch (key.viewType) {
+      case VK_IMAGE_VIEW_TYPE_1D_ARRAY: state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_1d, nullptr); break;
+      case VK_IMAGE_VIEW_TYPE_2D_ARRAY: state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_2d, nullptr); break;
+      case VK_IMAGE_VIEW_TYPE_3D:       state.fs = util::DxvkBuiltInShaderStage(dxvk_blit_frag_3d, nullptr); break;
+      default: throw DxvkError("DxvkMetaBlitObjects: Invalid view type");
+    }
+  }
+
+  state.colorFormat = key.viewFormat;
+  state.sampleCount = key.dstSamples;
+
+  return { m_layout, m_device->createBuiltInGraphicsPipeline(m_layout, state) };
+}
 
 }

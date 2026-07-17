@@ -11,8 +11,9 @@ layout(location = 0) out vec4 o_color;
 layout(push_constant)
 uniform push_block {
   float p_src_coord0_x, p_src_coord0_y, p_src_coord0_z;
+  uint  p_pad1;
   float p_src_coord1_x, p_src_coord1_y, p_src_coord1_z;
-  uint p_layer_count;
+  uint  p_layer_count;
 };
 
 #define FILTER_NEAREST  (0u)

@@ -240,6 +240,7 @@ namespace dxvk {
         && CHECK_FEATURE_NEED(vk13.dynamicRendering)
         && CHECK_FEATURE_NEED(vk13.maintenance4)
         && CHECK_FEATURE_NEED(extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
+        && CHECK_FEATURE_NEED(extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments)
         && CHECK_FEATURE_NEED(extBorderColorSwizzle.borderColorSwizzle)
         && CHECK_FEATURE_NEED(extBorderColorSwizzle.borderColorSwizzleFromImage)
         && CHECK_FEATURE_NEED(extConservativeRasterization)
@@ -599,6 +600,10 @@ namespace dxvk {
           enabledFeatures.extAttachmentFeedbackLoopLayout = *reinterpret_cast<const VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT*>(f);
           break;
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT:
+          enabledFeatures.extDynamicRenderingUnusedAttachments = *reinterpret_cast<const VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT*>(f);
+          break;
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT:
           enabledFeatures.extBorderColorSwizzle = *reinterpret_cast<const VkPhysicalDeviceBorderColorSwizzleFeaturesEXT*>(f);
           break;
@@ -908,6 +913,11 @@ namespace dxvk {
       m_deviceFeatures.extAttachmentFeedbackLoopLayout.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.extAttachmentFeedbackLoopLayout);
     }
 
+    if (m_deviceExtensions.supports(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME)) {
+      m_deviceFeatures.extDynamicRenderingUnusedAttachments.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT;
+      m_deviceFeatures.extDynamicRenderingUnusedAttachments.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.extDynamicRenderingUnusedAttachments);
+    }
+
     if (m_deviceExtensions.supports(VK_EXT_BORDER_COLOR_SWIZZLE_EXTENSION_NAME)) {
       m_deviceFeatures.extBorderColorSwizzle.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT;
       m_deviceFeatures.extBorderColorSwizzle.pNext = std::exchange(m_deviceFeatures.core.pNext, &m_deviceFeatures.extBorderColorSwizzle);
@@ -1105,6 +1115,7 @@ namespace dxvk {
       &devExtensions.amdMemoryOverallocationBehaviour,
       &devExtensions.amdShaderFragmentMask,
       &devExtensions.extAttachmentFeedbackLoopLayout,
+      &devExtensions.extDynamicRenderingUnusedAttachments,
       &devExtensions.extBorderColorSwizzle,
       &devExtensions.extConservativeRasterization,
       &devExtensions.extCustomBorderColor,
@@ -1174,6 +1185,11 @@ namespace dxvk {
     if (devExtensions.extAttachmentFeedbackLoopLayout) {
       enabledFeatures.extAttachmentFeedbackLoopLayout.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT;
       enabledFeatures.extAttachmentFeedbackLoopLayout.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.extAttachmentFeedbackLoopLayout);
+    }
+
+    if (devExtensions.extDynamicRenderingUnusedAttachments) {
+      enabledFeatures.extDynamicRenderingUnusedAttachments.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT;
+      enabledFeatures.extDynamicRenderingUnusedAttachments.pNext = std::exchange(enabledFeatures.core.pNext, &enabledFeatures.extDynamicRenderingUnusedAttachments);
     }
 
     if (devExtensions.extBorderColorSwizzle) {
@@ -1423,6 +1439,8 @@ namespace dxvk {
       "\n  extension supported                    : " << (features.amdShaderFragmentMask ? "1" : "0") <<
       "\n" << VK_EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME <<
       "\n  attachmentFeedbackLoopLayout           : " << (features.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout ? "1" : "0") <<
+      "\n" << VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME <<
+      "\n  dynamicRenderingUnusedAttachments           : " << (features.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments ? "1" : "0") <<
       "\n" << VK_EXT_BORDER_COLOR_SWIZZLE_EXTENSION_NAME <<
       "\n  borderColorSwizzle                     : " << (features.extBorderColorSwizzle.borderColorSwizzle ? "1" : "0") <<
       "\n  borderColorSwizzleFromImage            : " << (features.extBorderColorSwizzle.borderColorSwizzleFromImage ? "1" : "0") <<

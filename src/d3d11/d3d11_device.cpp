@@ -1911,8 +1911,12 @@ namespace dxvk {
 
     enabled.vk13.shaderDemoteToHelperInvocation                   = VK_TRUE;
 
+    // VK_EXT_custom_border_color - enable its features, if respective feature is supported
     enabled.extCustomBorderColor.customBorderColors               = supported.extCustomBorderColor.customBorderColorWithoutFormat;
     enabled.extCustomBorderColor.customBorderColorWithoutFormat   = supported.extCustomBorderColor.customBorderColorWithoutFormat;
+
+    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
+    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
 
     enabled.extTransformFeedback.transformFeedback                = VK_TRUE;
     enabled.extTransformFeedback.geometryStreams                  = VK_TRUE;

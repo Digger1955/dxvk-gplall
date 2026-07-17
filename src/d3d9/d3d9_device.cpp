@@ -2185,9 +2185,11 @@ namespace dxvk {
     if (Index >= m_state.lights.size())
       m_state.lights.resize(Index + 1);
 
-    m_state.lights[Index] = *pLight;
+    auto& light = m_state.lights[Index];
+    light.isValid = true;
+    light.light = *pLight;
 
-    if (m_state.IsLightEnabled(Index))
+    if (light.isEnabled)
       m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
     return D3D_OK;
@@ -2200,10 +2202,15 @@ namespace dxvk {
     if (unlikely(pLight == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(Index >= m_state.lights.size() || !m_state.lights[Index]))
+    if (unlikely(Index >= m_state.lights.size()))
       return D3DERR_INVALIDCALL;
 
-    *pLight = m_state.lights[Index].value();
+    auto& light = m_state.lights[Index];
+
+    if (unlikely(!light.isValid))
+      return D3DERR_INVALIDCALL;
+
+    *pLight = m_state.lights[Index].light;
 
     return D3D_OK;
   }
@@ -2220,27 +2227,16 @@ namespace dxvk {
     if (unlikely(Index >= m_state.lights.size()))
       m_state.lights.resize(Index + 1);
 
-    if (unlikely(!m_state.lights[Index]))
-      m_state.lights[Index] = DefaultLight;
+    auto& light = m_state.lights[Index];
 
-    if (m_state.IsLightEnabled(Index) == !!Enable)
+    if (light.isEnabled == bool(Enable))
       return D3D_OK;
 
-    uint32_t searchIndex = std::numeric_limits<uint32_t>::max();
-    uint32_t setIndex    = Index;
+    light.isValid = true;
+    light.isEnabled = bool(Enable);
 
-    if (!Enable)
-      std::swap(searchIndex, setIndex);
-
-    for (auto& idx : m_state.enabledLightIndices) {
-      if (idx == searchIndex) {
-        idx = setIndex;
-        m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
-        m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
-        break;
-      }
-    }
-
+    m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData,
+                D3D9DeviceDirtyFlag::FFVertexShader);
     return D3D_OK;
   }
 
@@ -2251,11 +2247,15 @@ namespace dxvk {
     if (unlikely(pEnable == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(Index >= m_state.lights.size() || !m_state.lights[Index]))
+    if (unlikely(Index >= m_state.lights.size()))
       return D3DERR_INVALIDCALL;
 
-    *pEnable = m_state.IsLightEnabled(Index) ? 128 : 0; // Weird quirk but OK.
+    auto& light = m_state.lights[Index];
 
+    if (unlikely(!light.isValid))
+      return D3DERR_INVALIDCALL;
+
+    *pEnable = light.isEnabled ? 128 : 0; // Weird quirk but OK.
     return D3D_OK;
   }
 
@@ -4555,18 +4555,9 @@ namespace dxvk {
 
     const uint32_t samplerBit = 1u << StateSampler;
 
-    if (Type == D3DSAMP_ADDRESSU
-     || Type == D3DSAMP_ADDRESSV
-     || Type == D3DSAMP_ADDRESSW
-     || Type == D3DSAMP_MAGFILTER
-     || Type == D3DSAMP_MINFILTER
-     || Type == D3DSAMP_MIPFILTER
-     || Type == D3DSAMP_MAXANISOTROPY
-     || Type == D3DSAMP_MIPMAPLODBIAS
-     || Type == D3DSAMP_MAXMIPLEVEL
-     || Type == D3DSAMP_BORDERCOLOR)
-      m_textureSlotTracking.samplerStateDirty |= samplerBit;
-    else if (Type == D3DSAMP_SRGBTEXTURE && (m_textureSlotTracking.bound & samplerBit))
+    m_textureSlotTracking.samplerStateDirty |= samplerBit;
+
+    if (Type == D3DSAMP_SRGBTEXTURE && (m_textureSlotTracking.bound & samplerBit))
       m_textureSlotTracking.textureDirty |= samplerBit;
 
     constexpr DWORD Fetch4Enabled  = MAKEFOURCC('G', 'E', 'T', '4');
@@ -4624,6 +4615,13 @@ namespace dxvk {
     TextureChangePrivate(m_state.textures[StateSampler], pTexture);
     m_textureSlotTracking.textureDirty |= 1u << StateSampler;
     UpdateTextureBitmasks(StateSampler, combinedUsage);
+
+    // If the texture format changes and the corresponding sampler uses
+    // border colors, we may need to update the border color swizzle
+    if (!oldTexture || !newTexture || oldTexture->Desc()->Format != newTexture->Desc()->Format) {
+      if (SamplerUsesBorderColor(StateSampler))
+        m_textureSlotTracking.samplerStateDirty |= 1u << StateSampler;
+    }
 
     return D3D_OK;
   }
@@ -4778,13 +4776,22 @@ namespace dxvk {
     // Enable depth bounds test if we support it.
     enabled.core.features.depthBounds = supported.core.features.depthBounds;
 
+    // VK_EXT_border_color_swizzle - enable its features, if respective feature is supported
+    enabled.extBorderColorSwizzle.borderColorSwizzle             = supported.extBorderColorSwizzle.borderColorSwizzle;
+    enabled.extBorderColorSwizzle.borderColorSwizzleFromImage    = supported.extBorderColorSwizzle.borderColorSwizzleFromImage;
+
+    // VK_EXT_custom_border_color - enable its features unconditionally, if customBorderColorWithoutFormat feature is supported
     if (supported.extCustomBorderColor.customBorderColorWithoutFormat) {
       enabled.extCustomBorderColor.customBorderColors             = VK_TRUE;
       enabled.extCustomBorderColor.customBorderColorWithoutFormat = VK_TRUE;
     }
 
+    // VK_EXT_attachment_feedback_loop_layout - enable its feature unconditionally, if attachmentFeedbackLoopLayout feature is supported
     if (supported.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
       enabled.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout = VK_TRUE;
+
+    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
+    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
 
     enabled.extNonSeamlessCubeMap.nonSeamlessCubeMap = supported.extNonSeamlessCubeMap.nonSeamlessCubeMap;
 
@@ -7449,12 +7456,20 @@ namespace dxvk {
 
     const D3D9CommonTexture* tex = GetCommonTexture(m_state.textures[Sampler]);
 
+    const bool srgb = m_state.samplerStates[Sampler][D3DSAMP_SRGBTEXTURE] & 0x1;
+
+    Rc<DxvkImageView> imageView;
+
+    if (tex && SamplerUsesBorderColor(Sampler))
+      imageView = tex->GetSampleView(srgb);
+
     EmitCs([this,
       cSlot       = slot,
       cState      = D3D9SamplerInfo(m_state.samplerStates[Sampler]),
       cIsCube     = tex && tex->IsCube(),
       cIsMultiMip = tex && (tex->Desc()->MipLevels > 1u),
       cIsDepth    = bool(m_textureSlotTracking.depth & (1u << Sampler)),
+      cView       = std::move(imageView),
       cBindId     = m_samplerBindCount
     ] (DxvkContext* ctx) {
       DxvkSamplerKey key = { };
@@ -7502,8 +7517,12 @@ namespace dxvk {
         key.setLodRange(float(cState.maxMipLevel), 16.0f, lodBias);
       }
 
-      if (key.u.p.hasBorder)
+      if (key.u.p.hasBorder) {
         DecodeD3DCOLOR(cState.borderColor, key.borderColor.float32);
+
+        if (cView)
+          key.setViewProperties(cView->info().unpackSwizzle(), cView->info().format);
+      }
 
       VkShaderStageFlags stage = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
       ctx->bindResourceSampler(stage, cSlot, m_dxvkDevice->createSampler(key));
@@ -7586,6 +7605,14 @@ namespace dxvk {
       if (m_state.textures[i] == texture)
         m_textureSlotTracking.textureDirty |= 1u << i;
     }
+  }
+
+  bool D3D9DeviceEx::SamplerUsesBorderColor(DWORD Sampler) const {
+    const auto& sampler = m_state.samplerStates[Sampler];
+
+    return sampler[D3DSAMP_ADDRESSU] == D3DTADDRESS_BORDER
+        || sampler[D3DSAMP_ADDRESSV] == D3DTADDRESS_BORDER
+        || sampler[D3DSAMP_ADDRESSW] == D3DTADDRESS_BORDER;
   }
 
 
@@ -8239,8 +8266,8 @@ namespace dxvk {
       uint32_t lightCount = 0;
 
       if (key.Data.Contents.UseLighting) {
-        for (uint32_t i = 0; i < caps::MaxEnabledLights; i++) {
-          if (m_state.enabledLightIndices[i] != std::numeric_limits<uint32_t>::max())
+        for (auto& light : m_state.lights) {
+          if (light.isEnabled)
             lightCount++;
         }
       }
@@ -8335,12 +8362,15 @@ namespace dxvk {
       DecodeD3DCOLOR(m_state.renderStates[D3DRS_AMBIENT], data->GlobalAmbient.data);
 
       uint32_t lightIdx = 0;
-      for (uint32_t i = 0; i < caps::MaxEnabledLights; i++) {
-        auto idx = m_state.enabledLightIndices[i];
-        if (idx == std::numeric_limits<uint32_t>::max())
+
+      for (auto& light : m_state.lights) {
+        if (!light.isEnabled)
           continue;
 
-        data->Lights[lightIdx++] = D3D9Light(m_state.lights[idx].value(), m_state.transforms[GetTransformIndex(D3DTS_VIEW)]);
+        data->Lights[lightIdx++] = D3D9Light(light.light, m_state.transforms[GetTransformIndex(D3DTS_VIEW)]);
+
+        if (lightIdx == caps::MaxEnabledLights)
+          break;
       }
 
       data->Material = m_state.material;
