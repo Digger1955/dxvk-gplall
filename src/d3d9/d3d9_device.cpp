@@ -5556,8 +5556,7 @@ namespace dxvk {
     // (TODO: Apparently this is meant to happen for DYNAMIC too but I am not sure
     //  how that works given it is meant to be a DIRECT access..?)
     const bool respectUserBounds = !(Flags & D3DLOCK_DISCARD) &&
-                                    SizeToLock != 0 &&
-                                    (desc.Pool == D3DPOOL_MANAGED || (desc.Usage & D3DUSAGE_DYNAMIC));
+                                    SizeToLock != 0;
 
     // If we don't respect the bounds, encompass it all in our tests/checks
     // These values may be out of range and don't get clamped.
@@ -8346,7 +8345,7 @@ namespace dxvk {
       auto mapPtr = m_vsFixedFunction.AllocSlice();
 
       auto WorldView    = m_state.transforms[GetTransformIndex(D3DTS_VIEW)] * m_state.transforms[GetTransformIndex(D3DTS_WORLD)];
-      auto NormalMatrix = inverse(WorldView);
+      auto NormalMatrix = tryInverse(WorldView).value_or(Matrix4(1.0f));
 
       D3D9FixedFunctionVS* data = reinterpret_cast<D3D9FixedFunctionVS*>(mapPtr);
       data->WorldView    = WorldView;
