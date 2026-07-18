@@ -612,6 +612,10 @@ namespace dxvk {
      * spec-constantly chose the sampler type     *
      * automagically.                             */
       { "d3d9.forceSamplerTypeSpecConstants", "True" },
+    /* The game passes incorrect values when      *
+     * locking a vertex buffer causing it to      *
+     * render "behind" the initial loading screen */
+      { "d3d9.ignoreDefaultBufferLockRange", "True" },
     }} },
     /* Counter Strike: Global Offensive
        Needs NVAPI to avoid a forced AO + Smoke
@@ -1188,6 +1192,11 @@ namespace dxvk {
      * in order to start up properly              */
     { R"(\\SCSDestinations\.exe$)", {{
       { "d3d9.supportCubeDepthFormats",     "True" },
+    }} },
+    /* Splinter Cell: Chaos Theory                *
+     * Passes incorrect values when locking a vertex buffer  */
+    { R"(\\splintercell3\.exe$)", {{
+      { "d3d9.ignoreDefaultBufferLockRange", "True" },
     }} },
 
     /**********************************************/

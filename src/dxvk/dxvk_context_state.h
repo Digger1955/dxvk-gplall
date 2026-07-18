@@ -85,6 +85,7 @@ namespace dxvk {
     IndexBufferRobustness,
     DebugUtils,
     DirectMultiDraw,
+    DescriptorTemplates,
     FeatureCount
   };
 
