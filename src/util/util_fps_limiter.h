@@ -43,6 +43,14 @@ namespace dxvk {
     void delay(const Rc<DxvkLatencyTracker>& tracker);
 
     /**
+     * \brief Checks whether the frame rate limiter is enabled
+     * \returns \c true if the target frame rate is non-zero.
+     */
+    bool isEnabled() const {
+      return m_targetInterval != TimerDuration::zero();
+    }
+
+    /**
      * \brief Queries environment override
      * \returns Frame rate given by environment override
      */
@@ -60,16 +68,15 @@ namespace dxvk {
     dxvk::mutex     m_mutex;
 
     TimerDuration   m_targetInterval  = TimerDuration::zero();
-    TimePoint       m_nextFrame       = TimePoint();
+    TimerDuration   m_deviation       = TimerDuration::zero();
+    TimePoint       m_lastFrame;
+
+    bool            m_initialized     = false;
     uint32_t        m_maxLatency      = 0;
 
     bool            m_envOverride     = false;
 
-    uint32_t        m_heuristicFrameCount = 0;
-    TimePoint       m_heuristicFrameTime  = TimePoint();
-    bool            m_heuristicEnable     = false;
-
-    bool testRefreshHeuristic(TimerDuration interval, TimePoint now, uint32_t maxLatency);
+    void initialize();
 
   };
 

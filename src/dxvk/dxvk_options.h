@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../util/config/config.h"
+#include "../util/util_env.h"
 #include "dxvk_include.h"
 
 #include "../vulkan/vulkan_loader.h"
@@ -85,6 +86,9 @@ namespace dxvk {
     /// Determines whether a frame is allowed to begin before finishing processing
     /// the cpu-part of the previous one, when low-latency frame pacing is used.
     bool lowLatencyAllowCpuFramesOverlap;
+
+    /// Enable descriptor update templates
+    bool enableDescriptorUpdateTemplates = true;
 
     // Device name
     std::string deviceFilter;

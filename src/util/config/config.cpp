@@ -612,6 +612,10 @@ namespace dxvk {
      * spec-constantly chose the sampler type     *
      * automagically.                             */
       { "d3d9.forceSamplerTypeSpecConstants", "True" },
+    /* The game passes incorrect values when      *
+     * locking a vertex buffer causing it to      *
+     * render "behind" the initial loading screen */
+      { "d3d9.ignoreDefaultBufferLockRange", "True" },
     }} },
     /* Counter Strike: Global Offensive
        Needs NVAPI to avoid a forced AO + Smoke
@@ -1189,6 +1193,11 @@ namespace dxvk {
     { R"(\\SCSDestinations\.exe$)", {{
       { "d3d9.supportCubeDepthFormats",     "True" },
     }} },
+    /* Splinter Cell: Chaos Theory                *
+     * Passes incorrect values when locking a vertex buffer  */
+    { R"(\\splintercell3\.exe$)", {{
+      { "d3d9.ignoreDefaultBufferLockRange", "True" },
+    }} },
 
     /**********************************************/
     /* D3D8 GAMES                                 */
@@ -1407,6 +1416,11 @@ namespace dxvk {
     /* Mafia - Improves poor texture filtering    */
     { R"(\\Mafia\\Game\.exe$)", {{
       { "d3d9.samplerAnisotropy",             "16" },
+    }} },
+    /* Manhunt                                    *
+     * Broken AI behavior above 60 FPS (game bug) */
+    { R"(\\manhunt\.exe$)", {{
+      { "d3d9.maxFrameRate",                 "-60" },
     }} },
   };
 

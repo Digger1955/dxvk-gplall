@@ -19,6 +19,10 @@ namespace dxvk {
     m_execBarriers(DxvkCmdBuffer::ExecBuffer),
     m_queryManager(m_common->queryPool()),
     m_implicitResolves(device) {
+
+      if (m_device->config().enableDescriptorUpdateTemplates)
+        m_features.set(DxvkContextFeature::DescriptorTemplates);
+
     // Init framebuffer info with default render pass in case
     // the app does not explicitly bind any render targets
     m_state.om.framebufferInfo = makeFramebufferInfo(m_state.om.renderTargets);
@@ -6589,11 +6593,6 @@ namespace dxvk {
     if (unlikely(layout->getDescriptorCount() > m_descriptorInfos.size()))
       this->resizeDescriptorArrays(layout->getDescriptorCount());
 
-    // On 32-bit wine, vkUpdateDescriptorSets has significant overhead due
-    // to struct conversion, so we should use descriptor update templates.
-    // For 64-bit applications, using templates is slower on some drivers.
-    constexpr bool useDescriptorTemplates = env::is32BitHostPlatform();
-
     bool independentSets = BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
                         && m_flags.test(DxvkContextFlag::GpIndependentSets);
 
@@ -6613,7 +6612,7 @@ namespace dxvk {
       for (uint32_t j = 0; j < range.bindingCount; j++) {
         const auto& binding = range.bindings[j];
 
-        if (!useDescriptorTemplates) {
+        if (!m_features.test(DxvkContextFeature::DescriptorTemplates)) {
           auto& descriptorWrite = m_descriptorWrites[descriptorCount];
           descriptorWrite.dstSet = sets[setIndex];
           descriptorWrite.dstBinding = binding.getBinding();
@@ -6834,7 +6833,7 @@ namespace dxvk {
         }
       }
 
-      if (useDescriptorTemplates) {
+      if (m_features.test(DxvkContextFeature::DescriptorTemplates)) {
         m_cmd->updateDescriptorSetWithTemplate(sets[setIndex],
           pipelineLayout->getDescriptorSetLayout(setIndex)->getSetUpdateTemplate(),
           &m_descriptorInfos[0]);
@@ -6844,7 +6843,7 @@ namespace dxvk {
       // If the next set is not dirty, update and bind all previously
       // updated sets in one go in order to reduce api call overhead.
       if (!(((dirtySetMask >> 1) >> setIndex) & 1u)) {
-        if (!useDescriptorTemplates) {
+        if (!m_features.test(DxvkContextFeature::DescriptorTemplates)) {
           m_cmd->updateDescriptorSets(descriptorCount,
             m_descriptorWrites.data());
           descriptorCount = 0;

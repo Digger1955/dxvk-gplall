@@ -252,7 +252,7 @@ namespace dxvk {
     // Deliberately pick a very high number of descriptor sets so that
     // we will typically end up using all available pool memory before
     // the descriptor set limit becomes the limiting factor.
-    m_maxSets = env::is32BitHostPlatform() ? 24576u : 49152u;
+    m_maxSets = env::is32BitHostPlatform() ? 20480u : 40960u;
   }
 
 
@@ -301,9 +301,9 @@ namespace dxvk {
       { VK_DESCRIPTOR_TYPE_SAMPLER,                m_maxSets * 1  },
       { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, m_maxSets / 4  },
       { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          m_maxSets / 2  },
-      { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          m_maxSets / 64 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          m_maxSets / 4  },
       { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   m_maxSets / 2  },
-      { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   m_maxSets / 64 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   m_maxSets / 4  },
       { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         m_maxSets * 2  },
       { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         m_maxSets / 2  },
     }};

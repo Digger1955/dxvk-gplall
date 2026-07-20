@@ -57,7 +57,7 @@ namespace dxvk {
    * to be updated.
    */
   class DxvkDescriptorPool : public RcObject {
-    constexpr static uint32_t MaxDesiredPoolCount = 2;
+    constexpr static uint32_t MaxDesiredPoolCount = 4;
   public:
 
     DxvkDescriptorPool(
