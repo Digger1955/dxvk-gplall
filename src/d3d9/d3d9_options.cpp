@@ -43,7 +43,7 @@ namespace dxvk {
     this->hideIntelGpu                  = config.getOption<Tristate>    ("d3d9.hideIntelGpu",                  Tristate::True) == Tristate::True;
     this->maxFrameLatency               = config.getOption<int32_t>     ("d3d9.maxFrameLatency",               0);
     this->maxFrameRate                  = config.getOption<int32_t>     ("dxvk.maxFrameRate",
-                                          config.getOption<int32_t>     ("d3d9.maxFrameRate",                  0));
+                                          config.getOption<int32_t>     ("d3d9.maxFrameRate",                  -1));
     this->presentInterval               = config.getOption<int32_t>     ("d3d9.presentInterval",               -1);
     this->shaderModel                   = config.getOption<int32_t>     ("d3d9.shaderModel",                   3u);
     this->dpiAware                      = config.getOption<bool>        ("d3d9.dpiAware",                      true);

@@ -172,7 +172,7 @@ namespace dxvk {
     this->maxSharedMemory = VkDeviceSize(config.getOption<int32_t>("dxgi.maxSharedMemory", 0)) << 20;
 
     this->maxFrameRate     = config.getOption<int32_t>("dxvk.maxFrameRate",
-                             config.getOption<int32_t>("dxgi.maxFrameRate", 0));
+                             config.getOption<int32_t>("dxgi.maxFrameRate", -1));
     this->syncInterval     = config.getOption<int32_t>("dxgi.syncInterval", -1);
     this->forceRefreshRate = config.getOption<int32_t>("dxgi.forceRefreshRate", 0u);
 
