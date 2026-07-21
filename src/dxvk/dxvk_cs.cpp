@@ -63,35 +63,44 @@ namespace dxvk {
   
   
   DxvkCsChunkPool::~DxvkCsChunkPool() {
-    for (DxvkCsChunk* chunk : m_chunks)
-      delete chunk;
+    DxvkCsChunk* chunk = m_stackTop.load();
+
+    while (chunk != nullptr) {
+      DxvkCsChunk* temp = chunk;
+      chunk = chunk->m_nextCached;
+      delete temp;
+    }
   }
   
   
   DxvkCsChunk* DxvkCsChunkPool::allocChunk(DxvkCsChunkFlags flags) {
-    DxvkCsChunk* chunk = nullptr;
+    DxvkCsChunk* stackTop = m_stackTop.load( std::memory_order_acquire );
 
-    { std::lock_guard<dxvk::mutex> lock(m_mutex);
-      
-      if (m_chunks.size() != 0) {
-        chunk = m_chunks.back();
-        m_chunks.pop_back();
+    do {
+      if (unlikely(stackTop == nullptr)) {
+        DxvkCsChunk* chunk = new DxvkCsChunk();
+        chunk->init(flags);
+        return chunk;
       }
-    }
-    
-    if (!chunk)
-      chunk = new DxvkCsChunk();
-    
-    chunk->init(flags);
-    return chunk;
+    } while (!m_stackTop.compare_exchange_weak( stackTop, stackTop->m_nextCached,
+        std::memory_order_release,
+        std::memory_order_acquire));
+
+    stackTop->m_nextCached = nullptr;
+    stackTop->init(flags);
+    return stackTop;
   }
   
   
   void DxvkCsChunkPool::freeChunk(DxvkCsChunk* chunk) {
     chunk->reset();
-    
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    m_chunks.push_back(chunk);
+    DxvkCsChunk* stackTop = m_stackTop.load( std::memory_order_acquire );
+
+    do {
+      chunk->m_nextCached = stackTop;
+    } while (!m_stackTop.compare_exchange_weak( stackTop, chunk,
+        std::memory_order_release,
+        std::memory_order_acquire));
   }
   
   
@@ -149,7 +158,7 @@ namespace dxvk {
       if (queue == DxvkCsQueue::HighPriority) {
         // Worker will check this flag after executing any
         // chunk without causing additional lock contention
-        m_hasHighPrio.store(true, std::memory_order_release);
+        m_hasHighPrio.store(true);
       }
     }
 
@@ -157,7 +166,7 @@ namespace dxvk {
       std::unique_lock<dxvk::mutex> lock(m_counterMutex);
 
       m_condOnSync.wait(lock, [this, queue, timeline] {
-        return getCounter(queue).load(std::memory_order_acquire) >= timeline;
+        return getCounter(queue).load() >= timeline;
       });
     }
   }
@@ -166,7 +175,7 @@ namespace dxvk {
   void DxvkCsThread::synchronize(uint64_t seq) {
     // Avoid locking if we know the sync is a no-op, may
     // reduce overhead if this is being called frequently
-    if (seq > m_seqOrdered.load(std::memory_order_acquire)) {
+    if (seq > m_seqOrdered.load()) {
       // We don't need to lock the queue here, if synchronization
       // happens while another thread is submitting then there is
       // an inherent race anyway
@@ -177,7 +186,7 @@ namespace dxvk {
 
       { std::unique_lock<dxvk::mutex> lock(m_counterMutex);
         m_condOnSync.wait(lock, [this, seq] {
-          return m_seqOrdered.load(std::memory_order_acquire) >= seq;
+          return m_seqOrdered.load() >= seq;
         });
       }
 
@@ -222,7 +231,7 @@ namespace dxvk {
           std::swap(ordered, m_queueOrdered.queue);
           std::swap(highPrio, m_queueHighPrio.queue);
 
-          m_hasHighPrio.store(false, std::memory_order_release);
+          m_hasHighPrio.store(false);
         }
 
         size_t orderedIndex = 0u;
@@ -231,14 +240,14 @@ namespace dxvk {
         while (highPrioIndex < highPrio.size() || orderedIndex < ordered.size()) {
           // Re-fill local high-priority queue if the app has queued anything up
           // in the meantime, we want to reduce possible synchronization delays.
-          if (highPrioIndex >= highPrio.size() && m_hasHighPrio.load(std::memory_order_acquire)) {
+          if (highPrioIndex >= highPrio.size() && m_hasHighPrio.load()) {
             highPrio.clear();
             highPrioIndex = 0u;
 
             std::unique_lock<dxvk::mutex> lock(m_mutex);
             std::swap(highPrio, m_queueHighPrio.queue);
 
-            m_hasHighPrio.store(false, std::memory_order_release);
+            m_hasHighPrio.store(false);
           }
 
           // Drain high-priority queue first
@@ -255,7 +264,7 @@ namespace dxvk {
             std::lock_guard lock(m_counterMutex);
 
             auto& counter = isHighPrio ? m_seqHighPrio : m_seqOrdered;
-            counter.store(entry.seq, std::memory_order_release);
+            counter.store(entry.seq);
 
             m_condOnSync.notify_one();
           }

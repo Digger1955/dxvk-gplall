@@ -1,4 +1,4 @@
-project('dxvk', ['c', 'cpp'], version : '2.7.1', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
+project('dxvk', ['c', 'cpp'], version : '3.0.2', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
 
 pkg = import('pkgconfig')
 cpu_family = target_machine.cpu_family()
@@ -68,6 +68,7 @@ if platform == 'windows'
       '-static',
       '-static-libgcc',
       '-static-libstdc++',
+      '-lsynchronization',
       # We need to set the section alignment for debug symbols to
       # work properly as well as avoiding a memcpy from the Wine loader.
       '-Wl,--file-alignment=4096',
@@ -99,13 +100,16 @@ if platform == 'windows'
     ]
     link_args += [
       '/FILEALIGN:4096',
-      '/DEBUG:FULL'
+      '/DEBUG:FULL',
+      '-lsynchronization'
     ]
   endif
 
   lib_d3d9    = cpp.find_library('d3d9')
   lib_d3d11   = cpp.find_library('d3d11')
   lib_dxgi    = cpp.find_library('dxgi')
+  lib_gdi32   = cpp.find_library('gdi32')
+  lib_version = cpp.find_library('version')
 
   if dxvk_is_msvc
     res_ext = '.res'
@@ -149,7 +153,7 @@ else
 
   lib_sdl3 = dependency('sdl3', required: get_option('native_sdl3'))
   lib_sdl2 = dependency('sdl2', required: get_option('native_sdl2'))
-  lib_glfw = dependency('glfw', required: get_option('native_glfw'))
+  lib_glfw = dependency('glfw3', required: get_option('native_glfw'))
   if lib_sdl3.found()
     compiler_args += ['-DDXVK_WSI_SDL3']
   endif
@@ -172,6 +176,9 @@ else
   ]
 endif
 
+dxbc_spirv = subproject('dxbc-spirv')
+dxbc_spirv_dep = dxbc_spirv.get_variable('dxbc_spv_dep')
+
 dxvk_include_path = include_directories(dxvk_include_dirs)
 
 add_project_arguments(cpp.get_supported_arguments(compiler_args), language: 'cpp')
@@ -191,6 +198,9 @@ glsl_args = [
   '@INPUT@',
   '-o', '@OUTPUT@',
 ]
+if get_option('debug')
+  glsl_args += ['-gVS']
+endif
 glsl_generator = generator(
   glsl_compiler,
   output    : [ '@BASENAME@.h' ],

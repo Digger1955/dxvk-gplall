@@ -2,8 +2,6 @@
 
 #include <mutex>
 
-#include "../util/sync/sync_list.h"
-
 #include "dxvk_bind_mask.h"
 #include "dxvk_constant_state.h"
 #include "dxvk_graphics_state.h"
@@ -244,11 +242,11 @@ namespace dxvk {
       const DxvkGraphicsPipelineShaders&    shaders,
       const DxvkGraphicsPipelineStateInfo&  state);
 
-    DxvkShaderModuleCreateInfo vsInfo;
-    DxvkShaderModuleCreateInfo tcsInfo;
-    DxvkShaderModuleCreateInfo tesInfo;
-    DxvkShaderModuleCreateInfo gsInfo;
-    DxvkShaderModuleCreateInfo fsInfo;
+    DxvkShaderLinkage vsInfo;
+    DxvkShaderLinkage tcsInfo;
+    DxvkShaderLinkage tesInfo;
+    DxvkShaderLinkage gsInfo;
+    DxvkShaderLinkage fsInfo;
 
     bool eq(const DxvkGraphicsPipelineShaderState& other) const;
 
@@ -256,7 +254,7 @@ namespace dxvk {
 
   private:
 
-    DxvkShaderModuleCreateInfo getCreateInfo(
+    DxvkShaderLinkage getLinkage(
       const DxvkGraphicsPipelineShaders&    shaders,
       const Rc<DxvkShader>&                 shader,
       const DxvkGraphicsPipelineStateInfo&  state);
@@ -313,11 +311,11 @@ namespace dxvk {
 
     size_t hash() const {
       DxvkHashState state;
-      state.add(DxvkShader::getHash(vs));
-      state.add(DxvkShader::getHash(tcs));
-      state.add(DxvkShader::getHash(tes));
-      state.add(DxvkShader::getHash(gs));
-      state.add(DxvkShader::getHash(fs));
+      state.add(DxvkShader::getCookie(vs));
+      state.add(DxvkShader::getCookie(tcs));
+      state.add(DxvkShader::getCookie(tes));
+      state.add(DxvkShader::getCookie(gs));
+      state.add(DxvkShader::getCookie(fs));
       return state;
     }
 
@@ -330,7 +328,7 @@ namespace dxvk {
     }
 
     static bool validateShaderType(const Rc<DxvkShader>& shader, VkShaderStageFlagBits stage) {
-      return shader == nullptr || shader->info().stage == stage;
+      return shader == nullptr || shader->metadata().stage == stage;
     }
   };
 
@@ -363,17 +361,14 @@ namespace dxvk {
   struct DxvkGraphicsPipelineInstance {
     DxvkGraphicsPipelineInstance() { }
     DxvkGraphicsPipelineInstance(
-      const DxvkGraphicsPipelineStateInfo&  state_,
             VkPipeline                      baseHandle_,
             VkPipeline                      fastHandle_,
             DxvkAttachmentMask              attachments_)
-    : state       (state_),
-      baseHandle  (baseHandle_),
+    : baseHandle  (baseHandle_),
       fastHandle  (fastHandle_),
       isCompiling (fastHandle_ != VK_NULL_HANDLE),
       attachments (attachments_) { }
 
-    DxvkGraphicsPipelineStateInfo state;
     std::atomic<VkPipeline>       baseHandle  = { VK_NULL_HANDLE };
     std::atomic<VkPipeline>       fastHandle  = { VK_NULL_HANDLE };
     std::atomic<VkBool32>         isCompiling = { VK_FALSE };
@@ -383,14 +378,14 @@ namespace dxvk {
       // Find a pipeline handle to use. If no optimized pipeline has
       // been compiled yet, use the slower base pipeline instead.
       DxvkGraphicsPipelineHandle result;
-      result.handle = fastHandle.load(std::memory_order_acquire);
+      result.handle = fastHandle.load();
       result.type = DxvkGraphicsPipelineType::FastPipeline;
       result.attachments = attachments;
 
       if (likely(fastHandle))
         return result;
 
-      result.handle = baseHandle.load(std::memory_order_acquire);
+      result.handle = baseHandle.load();
       result.type = DxvkGraphicsPipelineType::BasePipeline;
       return result;
     }
@@ -473,6 +468,24 @@ namespace dxvk {
       hash.add(scState.hash());
       return hash;
     }
+  };
+
+
+  /**
+   * \brief Fast instance object
+   *
+   * Stores the pipeline handle, as well as the compile status. Can
+   * be accessed from multiple threads concurrently. A status of
+   * VK_NOT_READY indicates that pipeline compilation is still in
+   * progress on another thread.
+   */
+  struct DxvkGraphicsPipelineFastInstanceObject {
+    DxvkGraphicsPipelineFastInstanceObject() = default;
+    DxvkGraphicsPipelineFastInstanceObject(VkResult s, VkPipeline p)
+    : pipeline(p), status(s) { }
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    std::atomic<VkResult> status = { VK_NOT_READY };
   };
 
 
@@ -617,7 +630,9 @@ namespace dxvk {
 
     alignas(CACHE_LINE_SIZE)
     dxvk::mutex                                   m_mutex;
-    sync::List<DxvkGraphicsPipelineInstance>      m_pipelines;
+    DxvkPipelineVariantTable<
+      DxvkGraphicsPipelineStateInfo,
+      DxvkGraphicsPipelineInstance>               m_pipelines;
     uint32_t                                      m_useCount = 0;
 
     std::unordered_map<
@@ -628,7 +643,8 @@ namespace dxvk {
     dxvk::mutex                                   m_fastMutex;
     std::unordered_map<
       DxvkGraphicsPipelineFastInstanceKey,
-      VkPipeline, DxvkHash, DxvkEq>               m_fastPipelines;
+      DxvkGraphicsPipelineFastInstanceObject,
+      DxvkHash, DxvkEq> m_fastPipelines;
 
     DxvkGraphicsPipelineInstance* createInstance(
       const DxvkGraphicsPipelineStateInfo& state,
@@ -649,7 +665,7 @@ namespace dxvk {
     VkPipeline getOptimizedPipeline(
       const DxvkGraphicsPipelineStateInfo& state);
 
-    VkPipeline createOptimizedPipeline(
+    std::pair<VkResult, VkPipeline> createOptimizedPipeline(
       const DxvkGraphicsPipelineFastInstanceKey& key) const;
 
     void destroyBasePipelines();
@@ -657,12 +673,12 @@ namespace dxvk {
     void destroyOptimizedPipelines();
 
     void destroyVulkanPipeline(
-            VkPipeline                     pipeline) const;
-    
+            VkPipeline                    pipeline) const;
+
     SpirvCodeBuffer getShaderCode(
-      const Rc<DxvkShader>&                shader,
-      const DxvkShaderModuleCreateInfo&    info) const;
-    
+            DxvkShader&                   shader,
+      const DxvkShaderLinkage&            linkage) const;
+
     uint32_t computeSpecConstantMask() const;
 
     DxvkAttachmentMask computeAttachmentMask(

@@ -87,7 +87,7 @@ namespace dxvk {
   };
 
   /// Number of formats defined in lookup table  
-  constexpr size_t DxvkFormatCount = 155;
+  constexpr size_t DxvkFormatCount = 157;
 
   /// Format lookup table
   extern const std::array<DxvkFormatInfo, DxvkFormatCount> g_formatInfos;
@@ -132,5 +132,13 @@ namespace dxvk {
   inline VkResolveModeFlagBits getDefaultResolveMode(VkFormat format) {
     return getDefaultResolveMode(lookupFormatInfo(format));
   }
+
+  /**
+   * \brief Queries non-sRGB format for a given format
+   *
+   * \param [in] format Format
+   * \returns Linear format that corresponds to \c format.
+   */
+  VkFormat getLinearFormat(VkFormat format);
 
 }

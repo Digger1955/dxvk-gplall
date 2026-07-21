@@ -48,6 +48,24 @@ namespace dxvk {
       bufferUsage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
     m_allocationCache = m_device->createAllocationCache(bufferUsage, memoryFlags);
+
+    // Determine maximum tess factor based on device options
+    if (!IsDeferred) {
+      int32_t maxTessFactor = int32_t(std::min(m_device->properties().core.properties.limits.maxTessellationGenerationLevel, 64u));
+
+      if (m_parent->GetOptions()->maxTessFactor > 0)
+        maxTessFactor = std::min(maxTessFactor, m_parent->GetOptions()->maxTessFactor);
+
+      EmitCs([
+        cMaxTessFactor = maxTessFactor
+      ] (DxvkContext* ctx) {
+        D3D11HsPushData pushData = {};
+        pushData.maxTessFactor = float(cMaxTessFactor);
+
+        ctx->pushData(VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+          0, sizeof(pushData), &pushData);
+      });
+    }
   }
 
 
@@ -395,6 +413,8 @@ namespace dxvk {
     if (counterView == nullptr)
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     EmitCs([
       cDstSlice = buf->GetBufferSlice(DstAlignedByteOffset),
       cSrcSlice = DxvkBufferSlice(counterView)
@@ -423,6 +443,8 @@ namespace dxvk {
     if (!rtv)
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     auto view  = rtv->GetImageView();
     auto color = ConvertColorValue(ColorRGBA, view->formatInfo());
 
@@ -450,6 +472,8 @@ namespace dxvk {
 
     if (FAILED(pUnorderedAccessView->QueryInterface(IID_PPV_ARGS(&qiUav))))
       return;
+
+    AddCost(GpuCostEstimate::Transfer);
 
     auto uav = static_cast<D3D11UnorderedAccessView*>(qiUav.ptr());
 
@@ -598,6 +622,8 @@ namespace dxvk {
     if (!info || info->flags.any(DxvkFormatFlag::SampledSInt, DxvkFormatFlag::SampledUInt))
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     VkClearValue clearValue;
     clearValue.color.float32[0] = Values[0];
     clearValue.color.float32[1] = Values[1];
@@ -657,6 +683,8 @@ namespace dxvk {
     if (!aspectMask)
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     VkClearValue clearValue;
     clearValue.depthStencil.depth   = Depth;
     clearValue.depthStencil.stencil = Stencil;
@@ -682,6 +710,8 @@ namespace dxvk {
 
     if (NumRects && !pRect)
       return;
+
+    AddCost(GpuCostEstimate::Transfer);
 
     // ID3D11View has no methods to query the exact type of
     // the view, so we'll have to check each possible class
@@ -768,6 +798,8 @@ namespace dxvk {
     if (!(resourceDesc.MiscFlags & D3D11_RESOURCE_MISC_GENERATE_MIPS))
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     EmitCs([cDstImageView = view->GetImageView()]
     (DxvkContext* ctx) {
       ctx->generateMipmaps(cDstImageView, VK_FILTER_LINEAR);
@@ -825,6 +857,8 @@ namespace dxvk {
      || SrcSubresource >= srcTextureInfo->CountSubresources())
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     const VkImageSubresource dstSubresource =
       dstTextureInfo->GetSubresourceFromIndex(
         dstVulkanFormatInfo->aspectMask, DstSubresource);
@@ -879,6 +913,9 @@ namespace dxvk {
           getDefaultResolveMode(format), VK_RESOLVE_MODE_NONE);
       });
     }
+
+    if constexpr (!IsDeferred)
+      GetTypedContext()->NotifyResolve();
 
     if (dstTextureInfo->HasSequenceNumber())
       GetTypedContext()->TrackTextureSequenceNumber(dstTextureInfo, DstSubresource);
@@ -1069,9 +1106,6 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
     SetDrawBuffers(pBufferForArgs, nullptr);
 
-    if (!ValidateDrawBufferSize(pBufferForArgs, AlignedByteOffsetForArgs, sizeof(VkDrawIndexedIndirectCommand)))
-      return;
-
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
 
@@ -1106,9 +1140,6 @@ namespace dxvk {
           UINT            AlignedByteOffsetForArgs) {
     D3D10DeviceLock lock = LockContext();
     SetDrawBuffers(pBufferForArgs, nullptr);
-
-    if (!ValidateDrawBufferSize(pBufferForArgs, AlignedByteOffsetForArgs, sizeof(VkDrawIndirectCommand)))
-      return;
 
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
@@ -1148,6 +1179,8 @@ namespace dxvk {
     if (unlikely(!ThreadGroupCountX || !ThreadGroupCountY || !ThreadGroupCountZ))
       return;
 
+    AddCost(GpuCostEstimate::Dispatch);
+
     if (unlikely(HasDirtyComputeBindings()))
       ApplyDirtyComputeBindings();
 
@@ -1167,8 +1200,7 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
     SetDrawBuffers(pBufferForArgs, nullptr);
 
-    if (!ValidateDrawBufferSize(pBufferForArgs, AlignedByteOffsetForArgs, sizeof(VkDispatchIndirectCommand)))
-      return;
+    AddCost(GpuCostEstimate::DispatchIndirect);
 
     if (unlikely(HasDirtyComputeBindings()))
       ApplyDirtyComputeBindings();
@@ -1346,14 +1378,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11VertexShader*>(pVertexShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::eVertex>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.vs != shader) {
       m_state.vs = shader;
 
-      BindShader<DxbcProgramType::VertexShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::eVertex>(GetCommonShader(shader));
     }
   }
 
@@ -1365,7 +1396,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::VertexShader>(
+    SetConstantBuffers<D3D11ShaderType::eVertex>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -1379,7 +1410,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::VertexShader>(
+    SetConstantBuffers1<D3D11ShaderType::eVertex>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1392,7 +1423,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::VertexShader>(
+    SetShaderResources<D3D11ShaderType::eVertex>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1404,7 +1435,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::VertexShader>(
+    SetSamplers<D3D11ShaderType::eVertex>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1419,8 +1450,7 @@ namespace dxvk {
     if (ppVertexShader)
       *ppVertexShader = m_state.vs.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::eVertex>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -1431,7 +1461,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::VertexShader>(
+    GetConstantBuffers<D3D11ShaderType::eVertex>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -1446,7 +1476,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::VertexShader>(
+    GetConstantBuffers<D3D11ShaderType::eVertex>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1459,7 +1489,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::VertexShader>(
+    GetShaderResources<D3D11ShaderType::eVertex>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1471,7 +1501,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::VertexShader>(
+    GetSamplers<D3D11ShaderType::eVertex>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1484,14 +1514,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11HullShader*>(pHullShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::eHull>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.hs != shader) {
       m_state.hs = shader;
 
-      BindShader<DxbcProgramType::HullShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::eHull>(GetCommonShader(shader));
     }
   }
 
@@ -1503,7 +1532,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::HullShader>(
+    SetConstantBuffers<D3D11ShaderType::eHull>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -1517,7 +1546,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::HullShader>(
+    SetConstantBuffers1<D3D11ShaderType::eHull>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1530,7 +1559,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::HullShader>(
+    SetShaderResources<D3D11ShaderType::eHull>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1542,7 +1571,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::HullShader>(
+    SetSamplers<D3D11ShaderType::eHull>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1557,8 +1586,7 @@ namespace dxvk {
     if (ppHullShader)
       *ppHullShader = m_state.hs.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::eHull>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -1569,7 +1597,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::HullShader>(
+    GetConstantBuffers<D3D11ShaderType::eHull>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -1584,7 +1612,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::HullShader>(
+    GetConstantBuffers<D3D11ShaderType::eHull>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1597,7 +1625,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::HullShader>(
+    GetShaderResources<D3D11ShaderType::eHull>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1609,7 +1637,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::HullShader>(
+    GetSamplers<D3D11ShaderType::eHull>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1622,14 +1650,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11DomainShader*>(pDomainShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::eDomain>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.ds != shader) {
       m_state.ds = shader;
 
-      BindShader<DxbcProgramType::DomainShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::eDomain>(GetCommonShader(shader));
     }
   }
 
@@ -1641,7 +1668,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::DomainShader>(
+    SetConstantBuffers<D3D11ShaderType::eDomain>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -1655,7 +1682,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::DomainShader>(
+    SetConstantBuffers1<D3D11ShaderType::eDomain>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1668,7 +1695,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::DomainShader>(
+    SetShaderResources<D3D11ShaderType::eDomain>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1680,7 +1707,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::DomainShader>(
+    SetSamplers<D3D11ShaderType::eDomain>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1695,8 +1722,7 @@ namespace dxvk {
     if (ppDomainShader)
       *ppDomainShader = m_state.ds.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::eDomain>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -1707,7 +1733,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::DomainShader>(
+    GetConstantBuffers<D3D11ShaderType::eDomain>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -1722,7 +1748,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::DomainShader>(
+    GetConstantBuffers<D3D11ShaderType::eDomain>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1735,7 +1761,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::DomainShader>(
+    GetShaderResources<D3D11ShaderType::eDomain>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1747,7 +1773,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::DomainShader>(
+    GetSamplers<D3D11ShaderType::eDomain>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1760,14 +1786,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11GeometryShader*>(pShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::eGeometry>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.gs != shader) {
       m_state.gs = shader;
 
-      BindShader<DxbcProgramType::GeometryShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::eGeometry>(GetCommonShader(shader));
     }
   }
 
@@ -1779,7 +1804,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::GeometryShader>(
+    SetConstantBuffers<D3D11ShaderType::eGeometry>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -1793,7 +1818,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {  
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::GeometryShader>(
+    SetConstantBuffers1<D3D11ShaderType::eGeometry>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1806,7 +1831,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::GeometryShader>(
+    SetShaderResources<D3D11ShaderType::eGeometry>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1818,7 +1843,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::GeometryShader>(
+    SetSamplers<D3D11ShaderType::eGeometry>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1833,8 +1858,7 @@ namespace dxvk {
     if (ppGeometryShader)
       *ppGeometryShader = m_state.gs.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::eGeometry>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -1845,7 +1869,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::GeometryShader>(
+    GetConstantBuffers<D3D11ShaderType::eGeometry>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -1860,7 +1884,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::GeometryShader>(
+    GetConstantBuffers<D3D11ShaderType::eGeometry>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1873,7 +1897,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::GeometryShader>(
+    GetShaderResources<D3D11ShaderType::eGeometry>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1885,7 +1909,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::GeometryShader>(
+    GetSamplers<D3D11ShaderType::eGeometry>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1898,14 +1922,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11PixelShader*>(pPixelShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::ePixel>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.ps != shader) {
       m_state.ps = shader;
 
-      BindShader<DxbcProgramType::PixelShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::ePixel>(GetCommonShader(shader));
     }
   }
 
@@ -1917,7 +1940,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::PixelShader>(
+    SetConstantBuffers<D3D11ShaderType::ePixel>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -1931,7 +1954,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::PixelShader>(
+    SetConstantBuffers1<D3D11ShaderType::ePixel>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -1944,7 +1967,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::PixelShader>(
+    SetShaderResources<D3D11ShaderType::ePixel>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -1956,7 +1979,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::PixelShader>(
+    SetSamplers<D3D11ShaderType::ePixel>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -1971,8 +1994,7 @@ namespace dxvk {
     if (ppPixelShader)
       *ppPixelShader = m_state.ps.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::ePixel>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -1983,7 +2005,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::PixelShader>(
+    GetConstantBuffers<D3D11ShaderType::ePixel>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -1998,7 +2020,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::PixelShader>(
+    GetConstantBuffers<D3D11ShaderType::ePixel>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -2011,7 +2033,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::PixelShader>(
+    GetShaderResources<D3D11ShaderType::ePixel>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -2023,7 +2045,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::PixelShader>(
+    GetSamplers<D3D11ShaderType::ePixel>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -2036,14 +2058,13 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto shader = static_cast<D3D11ComputeShader*>(pComputeShader);
-
-    if (NumClassInstances)
-      Logger::err("D3D11: Class instances not supported");
+    SetClassInstances<D3D11ShaderType::eCompute>(
+      shader ? shader->GetCommonShader() : nullptr, ppClassInstances, NumClassInstances);
 
     if (m_state.cs != shader) {
       m_state.cs = shader;
 
-      BindShader<DxbcProgramType::ComputeShader>(GetCommonShader(shader));
+      BindShader<D3D11ShaderType::eCompute>(GetCommonShader(shader));
     }
   }
 
@@ -2055,7 +2076,7 @@ namespace dxvk {
           ID3D11Buffer* const*              ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers<DxbcProgramType::ComputeShader>(
+    SetConstantBuffers<D3D11ShaderType::eCompute>(
       StartSlot, NumBuffers, ppConstantBuffers);
   }
 
@@ -2069,7 +2090,7 @@ namespace dxvk {
     const UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    SetConstantBuffers1<DxbcProgramType::ComputeShader>(
+    SetConstantBuffers1<D3D11ShaderType::eCompute>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -2082,7 +2103,7 @@ namespace dxvk {
           ID3D11ShaderResourceView* const*  ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    SetShaderResources<DxbcProgramType::ComputeShader>(
+    SetShaderResources<D3D11ShaderType::eCompute>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -2094,7 +2115,7 @@ namespace dxvk {
           ID3D11SamplerState* const*        ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    SetSamplers<DxbcProgramType::ComputeShader>(
+    SetSamplers<D3D11ShaderType::eCompute>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -2123,7 +2144,7 @@ namespace dxvk {
             m_state.uav.mask.clr(uavId);
 
             if (!DirtyComputeUnorderedAccessView(uavId, true))
-              BindUnorderedAccessView(DxbcProgramType::ComputeShader, uavId, nullptr);
+              BindUnorderedAccessView(D3D11ShaderType::eCompute, uavId, nullptr);
           }
         }
 
@@ -2146,7 +2167,7 @@ namespace dxvk {
         m_state.uav.mask.set(StartSlot + i, uav != nullptr);
 
         if (!DirtyComputeUnorderedAccessView(StartSlot + i, !uav))
-          BindUnorderedAccessView(DxbcProgramType::ComputeShader, StartSlot + i, uav);
+          BindUnorderedAccessView(D3D11ShaderType::eCompute, StartSlot + i, uav);
 
         ResolveCsSrvHazards(uav);
       }
@@ -2167,8 +2188,7 @@ namespace dxvk {
     if (ppComputeShader)
       *ppComputeShader = m_state.cs.ref();
 
-    if (pNumClassInstances)
-      *pNumClassInstances = 0;
+    GetClassInstances<D3D11ShaderType::eCompute>(ppClassInstances, pNumClassInstances);
   }
 
 
@@ -2179,7 +2199,7 @@ namespace dxvk {
           ID3D11Buffer**                    ppConstantBuffers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::ComputeShader>(
+    GetConstantBuffers<D3D11ShaderType::eCompute>(
       StartSlot, NumBuffers, ppConstantBuffers,
       nullptr, nullptr);
   }
@@ -2194,7 +2214,7 @@ namespace dxvk {
           UINT*                             pNumConstants) {
     D3D10DeviceLock lock = LockContext();
 
-    GetConstantBuffers<DxbcProgramType::ComputeShader>(
+    GetConstantBuffers<D3D11ShaderType::eCompute>(
       StartSlot, NumBuffers, ppConstantBuffers,
       pFirstConstant, pNumConstants);
   }
@@ -2207,7 +2227,7 @@ namespace dxvk {
           ID3D11ShaderResourceView**        ppShaderResourceViews) {
     D3D10DeviceLock lock = LockContext();
 
-    GetShaderResources<DxbcProgramType::ComputeShader>(
+    GetShaderResources<D3D11ShaderType::eCompute>(
       StartSlot, NumViews, ppShaderResourceViews);
   }
 
@@ -2219,7 +2239,7 @@ namespace dxvk {
           ID3D11SamplerState**              ppSamplers) {
     D3D10DeviceLock lock = LockContext();
 
-    GetSamplers<DxbcProgramType::ComputeShader>(
+    GetSamplers<D3D11ShaderType::eCompute>(
       StartSlot, NumSamplers, ppSamplers);
   }
 
@@ -2369,7 +2389,7 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     if (ppBlendState)
-      *ppBlendState = ref(m_state.om.cbState);
+      *ppBlendState = m_state.om.cbState.ref();
 
     if (BlendFactor)
       std::memcpy(BlendFactor, m_state.om.blendFactor, sizeof(FLOAT) * 4);
@@ -2386,7 +2406,7 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     if (ppDepthStencilState)
-      *ppDepthStencilState = ref(m_state.om.dsState);
+      *ppDepthStencilState = m_state.om.dsState.ref();
 
     if (pStencilRef)
       *pStencilRef = m_state.om.stencilRef;
@@ -2397,26 +2417,28 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11CommonContext<ContextType>::RSSetState(ID3D11RasterizerState* pRasterizerState) {
     D3D10DeviceLock lock = LockContext();
 
-    auto currRasterizerState = m_state.rs.state;
-    auto nextRasterizerState = static_cast<D3D11RasterizerState*>(pRasterizerState);
+    auto newRasterizerState = static_cast<D3D11RasterizerState*>(pRasterizerState);
 
-    if (m_state.rs.state != nextRasterizerState) {
-      m_state.rs.state = nextRasterizerState;
+    if (m_state.rs.state != newRasterizerState) {
+      // Need to keep the previous rasterizer state object alive for the time being
+      auto oldRasterizerState = std::move(m_state.rs.state);
+
+      m_state.rs.state = newRasterizerState;
       ApplyRasterizerState();
 
       // If necessary, update the rasterizer sample count push constant
-      uint32_t currSampleCount = currRasterizerState != nullptr ? currRasterizerState->Desc()->ForcedSampleCount : 0;
-      uint32_t nextSampleCount = nextRasterizerState != nullptr ? nextRasterizerState->Desc()->ForcedSampleCount : 0;
+      uint32_t oldSampleCount = oldRasterizerState ? oldRasterizerState->Desc().ForcedSampleCount : 0;
+      uint32_t newSampleCount = newRasterizerState ? newRasterizerState->Desc().ForcedSampleCount : 0;
 
-      if (currSampleCount != nextSampleCount)
+      if (oldSampleCount != newSampleCount)
         ApplyRasterizerSampleCount();
 
       // In D3D11, the rasterizer state defines whether the scissor test is
       // enabled, so if that changes, we need to update scissor rects as well.
-      bool currScissorEnable = currRasterizerState && currRasterizerState->Desc()->ScissorEnable;
-      bool nextScissorEnable = nextRasterizerState && nextRasterizerState->Desc()->ScissorEnable;
+      bool oldScissorEnable = oldRasterizerState && oldRasterizerState->Desc().ScissorEnable;
+      bool newScissorEnable = newRasterizerState && newRasterizerState->Desc().ScissorEnable;
 
-      if (currScissorEnable != nextScissorEnable)
+      if (oldScissorEnable != newScissorEnable)
         ApplyViewportState();
     }
   }
@@ -2489,7 +2511,7 @@ namespace dxvk {
       }
     }
 
-    if (dirty && m_state.rs.state && m_state.rs.state->Desc()->ScissorEnable)
+    if (dirty && m_state.rs.state && m_state.rs.state->Desc().ScissorEnable)
       ApplyViewportState();
   }
 
@@ -2499,7 +2521,7 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     if (ppRasterizerState)
-      *ppRasterizerState = ref(m_state.rs.state);
+      *ppRasterizerState = m_state.rs.state.ref();
   }
 
 
@@ -3132,9 +3154,9 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtyConstantBuffers(
-          DxbcProgramType                   Stage,
-    const DxbcBindingMask&                  BoundMask,
-          DxbcBindingMask&                  DirtyMask) {
+          D3D11ShaderType                   Stage,
+    const D3D11BindingMask&                 BoundMask,
+          D3D11BindingMask&                 DirtyMask) {
     uint32_t bindMask = BoundMask.cbvMask & DirtyMask.cbvMask;
 
     if (!bindMask)
@@ -3155,9 +3177,9 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtySamplers(
-          DxbcProgramType                   Stage,
-    const DxbcBindingMask&                  BoundMask,
-          DxbcBindingMask&                  DirtyMask) {
+          D3D11ShaderType                   Stage,
+    const D3D11BindingMask&                 BoundMask,
+          D3D11BindingMask&                 DirtyMask) {
     uint32_t bindMask = BoundMask.samplerMask & DirtyMask.samplerMask;
 
     if (!bindMask)
@@ -3168,15 +3190,15 @@ namespace dxvk {
     DirtyMask.samplerMask -= bindMask;
 
     for (uint32_t slot : bit::BitMask(bindMask))
-      BindSampler(Stage, slot, state.samplers[slot]);
+      BindSampler(Stage, slot, state.samplers[slot].ptr());
   }
 
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtyShaderResources(
-          DxbcProgramType                   Stage,
-    const DxbcBindingMask&                  BoundMask,
-          DxbcBindingMask&                  DirtyMask) {
+          D3D11ShaderType                   Stage,
+    const D3D11BindingMask&                 BoundMask,
+          D3D11BindingMask&                 DirtyMask) {
     const auto& state = m_state.srv[Stage];
 
     for (uint32_t i = 0; i < state.maxCount; i += 64u) {
@@ -3197,15 +3219,15 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtyUnorderedAccessViews(
-          DxbcProgramType                   Stage,
-    const DxbcBindingMask&                  BoundMask,
-          DxbcBindingMask&                  DirtyMask) {
+          D3D11ShaderType                   Stage,
+    const D3D11BindingMask&                 BoundMask,
+          D3D11BindingMask&                 DirtyMask) {
     uint64_t bindMask = BoundMask.uavMask & DirtyMask.uavMask;
 
     if (!bindMask)
       return;
 
-    const auto& views = Stage == DxbcProgramType::ComputeShader
+    const auto& views = Stage == D3D11ShaderType::eCompute
       ? m_state.uav.views
       : m_state.om.uavs;
 
@@ -3220,10 +3242,10 @@ namespace dxvk {
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtyGraphicsBindings() {
     auto dirtyMask = m_state.lazy.shadersDirty & m_state.lazy.shadersUsed;
-    dirtyMask.clr(DxbcProgramType::ComputeShader);
+    dirtyMask.clr(D3D11ShaderType::eCompute);
 
     if (unlikely(!(dirtyMask & m_state.lazy.graphicsUavShaders).isClear())) {
-      DxbcProgramType stage = DxbcProgramType::PixelShader;
+      D3D11ShaderType stage = D3D11ShaderType::ePixel;
 
       auto& boundMask = m_state.lazy.bindingsUsed[stage];
       auto& dirtyMask = m_state.lazy.bindingsDirty[stage];
@@ -3232,7 +3254,7 @@ namespace dxvk {
     }
 
     for (uint32_t stageIndex : bit::BitMask(uint32_t(dirtyMask.raw()))) {
-      DxbcProgramType stage = DxbcProgramType(stageIndex);
+      D3D11ShaderType stage = D3D11ShaderType(stageIndex);
 
       auto& boundMask = m_state.lazy.bindingsUsed[stage];
       auto& dirtyMask = m_state.lazy.bindingsDirty[stage];
@@ -3248,7 +3270,7 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyDirtyComputeBindings() {
-    DxbcProgramType stage = DxbcProgramType::ComputeShader;
+    D3D11ShaderType stage = D3D11ShaderType::eCompute;
 
     auto& boundMask = m_state.lazy.bindingsUsed[stage];
     auto& dirtyMask = m_state.lazy.bindingsDirty[stage];
@@ -3415,23 +3437,23 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ApplyRasterizerSampleCount() {
-    DxbcPushConstants pc;
-    pc.rasterizerSampleCount = m_state.om.sampleCount;
+    D3D11SpecData specData = {};
+    specData.sampleCount = m_state.om.sampleCount;
 
-    if (unlikely(!m_state.om.sampleCount)) {
-      pc.rasterizerSampleCount = m_state.rs.state
-        ? m_state.rs.state->Desc()->ForcedSampleCount
-        : 0;
+    if (unlikely(!specData.sampleCount)) {
+      specData.sampleCount = m_state.rs.state
+        ? m_state.rs.state->Desc().ForcedSampleCount
+        : 0u;
 
-      if (!pc.rasterizerSampleCount)
-        pc.rasterizerSampleCount = 1;
+      if (!specData.sampleCount)
+        specData.sampleCount = 1u;
     }
 
     EmitCs([
-      cPushConstants = pc
+      cSpecData = specData
     ] (DxvkContext* ctx) {
-      ctx->pushData(VK_SHADER_STAGE_ALL_GRAPHICS,
-        0, sizeof(cPushConstants), &cPushConstants);
+      ctx->setSpecConstants(VK_PIPELINE_BIND_POINT_GRAPHICS,
+        0u, sizeof(cSpecData), &cSpecData);
     });
   }
 
@@ -3448,7 +3470,7 @@ namespace dxvk {
 
       // Vulkan does not provide an easy way to disable the scissor test,
       // Set scissor rects that are at least as large as the framebuffer.
-      bool enableScissorTest = m_state.rs.state && m_state.rs.state->Desc()->ScissorEnable;
+      bool enableScissorTest = m_state.rs.state && m_state.rs.state->Desc().ScissorEnable;
 
       // D3D11's coordinate system has its origin in the bottom left,
       // but the viewport coordinates are aligned to the top-left
@@ -3540,7 +3562,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::BindShader(
     const D3D11CommonShader*    pShaderModule) {
     uint64_t oldUavMask = m_state.lazy.bindingsUsed[ShaderStage].uavMask;
@@ -3549,7 +3571,7 @@ namespace dxvk {
       auto buffer = pShaderModule->GetIcb();
       auto shader = pShaderModule->GetShader();
 
-      if (unlikely(shader->needsLibraryCompile()))
+      if (unlikely(shader->needsCompile()))
         m_device->requestCompileShader(shader);
 
       // If this shader activates any bindings that have not yet been applied,
@@ -3569,7 +3591,7 @@ namespace dxvk {
       ] (DxvkContext* ctx) mutable {
         constexpr VkShaderStageFlagBits stage = GetShaderStage(ShaderStage);
 
-        uint32_t slotId = computeConstantBufferBinding(ShaderStage,
+        uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage,
           D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT);
 
         ctx->bindShader<stage>(
@@ -3590,7 +3612,7 @@ namespace dxvk {
       EmitCs([] (DxvkContext* ctx) {
         constexpr VkShaderStageFlagBits stage = GetShaderStage(ShaderStage);
 
-        uint32_t slotId = computeConstantBufferBinding(ShaderStage,
+        uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage,
           D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT);
 
         ctx->bindShader<stage>(nullptr);
@@ -3604,8 +3626,8 @@ namespace dxvk {
     // code will mark all other stages that access UAVs as dirty, too.
     uint64_t newUavMask = m_state.lazy.bindingsUsed[ShaderStage].uavMask;
 
-    if (ShaderStage != DxbcProgramType::ComputeShader && oldUavMask != newUavMask) {
-      constexpr DxbcProgramType ps = DxbcProgramType::PixelShader;
+    if (ShaderStage != D3D11ShaderType::eCompute && oldUavMask != newUavMask) {
+      constexpr D3D11ShaderType ps = D3D11ShaderType::ePixel;
 
       // Since dirty UAVs are only tracked on the PS mask, we need to mark the
       // stage as dirty if any of the used UAVs overlap with the dirty PS mask.
@@ -3616,7 +3638,7 @@ namespace dxvk {
       m_state.lazy.graphicsUavShaders.clr(ShaderStage);
 
       for (uint32_t stageIndex : bit::BitMask(uint32_t(m_state.lazy.graphicsUavShaders.raw())))
-        newUavMask |= m_state.lazy.bindingsUsed[DxbcProgramType(stageIndex)].uavMask;
+        newUavMask |= m_state.lazy.bindingsUsed[D3D11ShaderType(stageIndex)].uavMask;
 
       m_state.lazy.bindingsUsed[ps].uavMask = newUavMask;
 
@@ -3839,12 +3861,12 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BindConstantBuffer(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           UINT                              Slot,
           D3D11Buffer*                      pBuffer,
           UINT                              Offset,
           UINT                              Length) {
-    uint32_t slotId = computeConstantBufferBinding(ShaderStage, Slot);
+    uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage, Slot);
 
     if (pBuffer) {
       EmitCs([
@@ -3868,11 +3890,11 @@ namespace dxvk {
   
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BindConstantBufferRange(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           UINT                              Slot,
           UINT                              Offset,
           UINT                              Length) {
-    uint32_t slotId = computeConstantBufferBinding(ShaderStage, Slot);
+    uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage, Slot);
 
     EmitCs([
       cSlotId = slotId,
@@ -3887,10 +3909,10 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BindSampler(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           UINT                              Slot,
           D3D11SamplerState*                pSampler) {
-    uint32_t slotId = computeSamplerBinding(ShaderStage, Slot);
+    uint32_t slotId = D3D11ShaderResourceMapping::computeSamplerBinding(ShaderStage, Slot);
 
     if (pSampler) {
       EmitCs([
@@ -3914,10 +3936,10 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BindShaderResource(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           UINT                              Slot,
           D3D11ShaderResourceView*          pResource) {
-    uint32_t slotId = computeSrvBinding(ShaderStage, Slot);
+    uint32_t slotId = D3D11ShaderResourceMapping::computeSrvBinding(ShaderStage, Slot);
 
     if (pResource) {
       if (pResource->GetViewInfo().Dimension != D3D11_RESOURCE_DIMENSION_BUFFER) {
@@ -3952,13 +3974,13 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BindUnorderedAccessView(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           UINT                              Slot,
           D3D11UnorderedAccessView*         pUav) {
-    uint32_t uavSlotId = computeUavBinding(ShaderStage, Slot);
-    uint32_t ctrSlotId = computeUavCounterBinding(ShaderStage, Slot);
+    uint32_t uavSlotId = D3D11ShaderResourceMapping::computeUavBinding(ShaderStage, Slot);
+    uint32_t ctrSlotId = D3D11ShaderResourceMapping::computeUavCounterBinding(ShaderStage, Slot);
 
-    VkShaderStageFlags stages = ShaderStage == DxbcProgramType::ComputeShader
+    VkShaderStageFlags stages = ShaderStage == D3D11ShaderType::eCompute
       ? VK_SHADER_STAGE_COMPUTE_BIT
       : VK_SHADER_STAGE_ALL_GRAPHICS;
 
@@ -4164,6 +4186,8 @@ namespace dxvk {
     if (SrcOffset >= srcLength || DstOffset >= dstLength || !ByteCount)
       return;
 
+    AddCost(GpuCostEstimate::Transfer);
+
     ByteCount = std::min(dstLength - DstOffset, ByteCount);
     ByteCount = std::min(srcLength - SrcOffset, ByteCount);
 
@@ -4246,6 +4270,8 @@ namespace dxvk {
 
     if (!SrcExtent.width || !SrcExtent.height || !SrcExtent.depth)
       return;
+
+    AddCost(GpuCostEstimate::Transfer);
 
     // While copying between 2D and 3D images is allowed in CopySubresourceRegion,
     // copying more than one slice at a time is not suppoted. Layer counts are 1.
@@ -4474,6 +4500,8 @@ namespace dxvk {
       tiles[i] = tile;
     }
 
+    AddCost(GpuCostEstimate::Transfer);
+
     // If D3D12 is anything to go by, not passing this flag will trigger
     // the other code path, regardless of whether TO_LINEAR_BUFFER is set.
     if (Flags & D3D11_TILE_COPY_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE) {
@@ -4509,7 +4537,7 @@ namespace dxvk {
   template<typename ContextType>
   template<typename T>
   bool D3D11CommonContext<ContextType>::DirtyBindingGeneric(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           T                                 BoundMask,
           T&                                DirtyMask,
           T                                 DirtyBit,
@@ -4542,7 +4570,7 @@ namespace dxvk {
 
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::DirtyConstantBuffer(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           uint32_t                          Slot,
           bool                              IsNull) {
     return DirtyBindingGeneric(ShaderStage,
@@ -4554,7 +4582,7 @@ namespace dxvk {
 
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::DirtySampler(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           uint32_t                          Slot,
           bool                              IsNull) {
     return DirtyBindingGeneric(ShaderStage,
@@ -4566,7 +4594,7 @@ namespace dxvk {
 
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::DirtyShaderResource(
-          DxbcProgramType                   ShaderStage,
+          D3D11ShaderType                   ShaderStage,
           uint32_t                          Slot,
           bool                              IsNull) {
     uint32_t idx = Slot / 64u;
@@ -4582,7 +4610,7 @@ namespace dxvk {
   bool D3D11CommonContext<ContextType>::DirtyComputeUnorderedAccessView(
           uint32_t                          Slot,
           bool                              IsNull) {
-    constexpr DxbcProgramType ShaderStage = DxbcProgramType::ComputeShader;
+    constexpr D3D11ShaderType ShaderStage = D3D11ShaderType::eCompute;
 
     return DirtyBindingGeneric(ShaderStage,
       m_state.lazy.bindingsUsed[ShaderStage].uavMask,
@@ -4594,7 +4622,7 @@ namespace dxvk {
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::DirtyGraphicsUnorderedAccessView(
           uint32_t                          Slot) {
-    constexpr DxbcProgramType ShaderStage = DxbcProgramType::PixelShader;
+    constexpr D3D11ShaderType ShaderStage = D3D11ShaderType::ePixel;
 
     if (DebugLazyBinding == Tristate::False)
       return false;
@@ -4647,7 +4675,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::GetConstantBuffers(
           UINT                              StartSlot,
           UINT                              NumBuffers,
@@ -4681,7 +4709,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::GetShaderResources(
           UINT                              StartSlot,
           UINT                              NumViews,
@@ -4697,7 +4725,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::GetSamplers(
           UINT                              StartSlot,
           UINT                              NumSamplers,
@@ -4706,7 +4734,7 @@ namespace dxvk {
 
     for (uint32_t i = 0; i < NumSamplers; i++) {
       ppSamplers[i] = StartSlot + i < bindings.samplers.size()
-        ? ref(bindings.samplers[StartSlot + i])
+        ? bindings.samplers[StartSlot + i].ref()
         : nullptr;
     }
   }
@@ -4761,7 +4789,7 @@ namespace dxvk {
     D3D11MaxUsedBindings result;
 
     for (uint32_t i = 0; i < result.stages.size(); i++) {
-      auto stage = DxbcProgramType(i);
+      auto stage = D3D11ShaderType(i);
 
       result.stages[i].cbvCount = m_state.cbv[stage].maxCount;
       result.stages[i].srvCount = m_state.srv[stage].maxCount;
@@ -4770,8 +4798,8 @@ namespace dxvk {
       result.stages[i].reserved = 0;
     }
 
-    result.stages[uint32_t(DxbcProgramType::PixelShader)].uavCount = m_state.om.maxUav;
-    result.stages[uint32_t(DxbcProgramType::ComputeShader)].uavCount = m_state.uav.maxCount;
+    result.stages[uint32_t(D3D11ShaderType::ePixel)].uavCount = m_state.om.maxUav;
+    result.stages[uint32_t(D3D11ShaderType::eCompute)].uavCount = m_state.uav.maxCount;
 
     result.vbCount = m_state.ia.maxVbCount;
     result.soCount = D3D11_SO_BUFFER_SLOT_COUNT;
@@ -4781,23 +4809,23 @@ namespace dxvk {
 
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::HasDirtyComputeBindings() {
-    return m_state.lazy.shadersDirty.test(DxbcProgramType::ComputeShader);
+    return m_state.lazy.shadersDirty.test(D3D11ShaderType::eCompute);
   }
 
 
   template<typename ContextType>
   bool D3D11CommonContext<ContextType>::HasDirtyGraphicsBindings() {
     return (m_state.lazy.shadersDirty & m_state.lazy.shadersUsed).any(
-      DxbcProgramType::VertexShader, DxbcProgramType::GeometryShader,
-      DxbcProgramType::HullShader,   DxbcProgramType::DomainShader,
-      DxbcProgramType::PixelShader);
+      D3D11ShaderType::eVertex, D3D11ShaderType::eGeometry,
+      D3D11ShaderType::eHull,   D3D11ShaderType::eDomain,
+      D3D11ShaderType::ePixel);
   }
 
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ResetCommandListState() {
     EmitCs([
-      cUsedBindings = GetMaxUsedBindings()
+      cUsedBindings  = GetMaxUsedBindings()
     ] (DxvkContext* ctx) {
       // Reset render targets
       ctx->bindRenderTargets(DxvkRenderTargets(), 0u);
@@ -4849,37 +4877,38 @@ namespace dxvk {
 
       // Unbind per-shader stage resources
       for (uint32_t i = 0; i < 6; i++) {
-        auto programType = DxbcProgramType(i);
+        auto programType = D3D11ShaderType(i);
         auto stage = GetShaderStage(programType);
 
-        // Unbind constant buffers, including the shader's ICB
-        auto cbSlotId = computeConstantBufferBinding(programType, 0);
-        ctx->bindUniformBuffer(stage, cbSlotId + D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, DxvkBufferSlice());
+        // Unbind constant buffers, including the shader's ICB and instance data buffer
+        auto cbSlotId = D3D11ShaderResourceMapping::computeCbvBinding(programType, 0);
+        ctx->bindUniformBuffer(stage, cbSlotId + D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT + 0u, DxvkBufferSlice());
+        ctx->bindUniformBuffer(stage, cbSlotId + D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT + 1u, DxvkBufferSlice());
 
         for (uint32_t j = 0; j < cUsedBindings.stages[i].cbvCount; j++)
           ctx->bindUniformBuffer(stage, cbSlotId + j, DxvkBufferSlice());
 
         // Unbind shader resource views
-        auto srvSlotId = computeSrvBinding(programType, 0);
+        auto srvSlotId = D3D11ShaderResourceMapping::computeSrvBinding(programType, 0);
 
         for (uint32_t j = 0; j < cUsedBindings.stages[i].srvCount; j++)
           ctx->bindResourceImageView(stage, srvSlotId + j, nullptr);
 
         // Unbind texture samplers
-        auto samplerSlotId = computeSamplerBinding(programType, 0);
+        auto samplerSlotId = D3D11ShaderResourceMapping::computeSamplerBinding(programType, 0);
 
         for (uint32_t j = 0; j < cUsedBindings.stages[i].samplerCount; j++)
           ctx->bindResourceSampler(stage, samplerSlotId + j, nullptr);
 
         // Unbind UAVs for supported stages
-        if (programType == DxbcProgramType::PixelShader
-         || programType == DxbcProgramType::ComputeShader) {
-          VkShaderStageFlags stages = programType == DxbcProgramType::PixelShader
+        if (programType == D3D11ShaderType::ePixel
+         || programType == D3D11ShaderType::eCompute) {
+          VkShaderStageFlags stages = programType == D3D11ShaderType::ePixel
             ? VK_SHADER_STAGE_ALL_GRAPHICS
             : VK_SHADER_STAGE_COMPUTE_BIT;
 
-          auto uavSlotId = computeUavBinding(programType, 0);
-          auto ctrSlotId = computeUavCounterBinding(programType, 0);
+          auto uavSlotId = D3D11ShaderResourceMapping::computeUavBinding(programType, 0);
+          auto ctrSlotId = D3D11ShaderResourceMapping::computeUavCounterBinding(programType, 0);
 
           for (uint32_t j = 0; j < cUsedBindings.stages[i].uavCount; j++) {
             ctx->bindResourceImageView(stages, uavSlotId, nullptr);
@@ -4887,11 +4916,6 @@ namespace dxvk {
           }
         }
       }
-
-      // Initialize push constants
-      DxbcPushConstants pc;
-      pc.rasterizerSampleCount = 1;
-      ctx->pushData(VK_SHADER_STAGE_ALL_GRAPHICS, 0, sizeof(pc), &pc);
     });
   }
 
@@ -4922,6 +4946,9 @@ namespace dxvk {
 
     // Reset dirty tracking
     m_state.lazy.reset();
+
+    // Reset class instances
+    m_state.instances.reset();
   }
 
 
@@ -4941,7 +4968,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage, typename T>
+  template<D3D11ShaderType ShaderStage, typename T>
   void D3D11CommonContext<ContextType>::ResolveSrvHazards(
           T*                                pView) {
     auto& bindings = m_state.srv[ShaderStage];
@@ -4975,7 +5002,7 @@ namespace dxvk {
   void D3D11CommonContext<ContextType>::ResolveCsSrvHazards(
           T*                                pView) {
     if (!pView) return;
-    ResolveSrvHazards<DxbcProgramType::ComputeShader>(pView);
+    ResolveSrvHazards<D3D11ShaderType::eCompute>(pView);
   }
 
 
@@ -4984,11 +5011,11 @@ namespace dxvk {
   void D3D11CommonContext<ContextType>::ResolveOmSrvHazards(
           T*                                pView) {
     if (!pView) return;
-    ResolveSrvHazards<DxbcProgramType::VertexShader>(pView);
-    ResolveSrvHazards<DxbcProgramType::HullShader>(pView);
-    ResolveSrvHazards<DxbcProgramType::DomainShader>(pView);
-    ResolveSrvHazards<DxbcProgramType::GeometryShader>(pView);
-    ResolveSrvHazards<DxbcProgramType::PixelShader>(pView);
+    ResolveSrvHazards<D3D11ShaderType::eVertex>(pView);
+    ResolveSrvHazards<D3D11ShaderType::eHull>(pView);
+    ResolveSrvHazards<D3D11ShaderType::eDomain>(pView);
+    ResolveSrvHazards<D3D11ShaderType::eGeometry>(pView);
+    ResolveSrvHazards<D3D11ShaderType::ePixel>(pView);
   }
 
 
@@ -5027,7 +5054,7 @@ namespace dxvk {
         m_state.om.uavs[i] = nullptr;
 
         if (!DirtyGraphicsUnorderedAccessView(i))
-          BindUnorderedAccessView(DxbcProgramType::PixelShader, i, nullptr);
+          BindUnorderedAccessView(D3D11ShaderType::ePixel, i, nullptr);
       }
     }
   }
@@ -5037,12 +5064,12 @@ namespace dxvk {
   void D3D11CommonContext<ContextType>::RestoreCommandListState() {
     BindFramebuffer();
 
-    BindShader<DxbcProgramType::VertexShader>(GetCommonShader(m_state.vs.ptr()));
-    BindShader<DxbcProgramType::HullShader>(GetCommonShader(m_state.hs.ptr()));
-    BindShader<DxbcProgramType::DomainShader>(GetCommonShader(m_state.ds.ptr()));
-    BindShader<DxbcProgramType::GeometryShader>(GetCommonShader(m_state.gs.ptr()));
-    BindShader<DxbcProgramType::PixelShader>(GetCommonShader(m_state.ps.ptr()));
-    BindShader<DxbcProgramType::ComputeShader>(GetCommonShader(m_state.cs.ptr()));
+    BindShader<D3D11ShaderType::eVertex>(GetCommonShader(m_state.vs.ptr()));
+    BindShader<D3D11ShaderType::eHull>(GetCommonShader(m_state.hs.ptr()));
+    BindShader<D3D11ShaderType::eDomain>(GetCommonShader(m_state.ds.ptr()));
+    BindShader<D3D11ShaderType::eGeometry>(GetCommonShader(m_state.gs.ptr()));
+    BindShader<D3D11ShaderType::ePixel>(GetCommonShader(m_state.ps.ptr()));
+    BindShader<D3D11ShaderType::eCompute>(GetCommonShader(m_state.cs.ptr()));
 
     ApplyInputLayout();
     ApplyPrimitiveTopology();
@@ -5073,16 +5100,16 @@ namespace dxvk {
     // bindings to avoid implicit null binding overrids.
     ResetDirtyTracking();
 
-    for (uint32_t i = 0; i < uint32_t(DxbcProgramType::Count); i++) {
-      auto stage = DxbcProgramType(i);
+    for (uint32_t i = 0; i < D3D11ShaderTypeCount; i++) {
+      auto stage = D3D11ShaderType(i);
 
       RestoreConstantBuffers(stage);
       RestoreShaderResources(stage);
       RestoreSamplers(stage);
     }
 
-    RestoreUnorderedAccessViews(DxbcProgramType::PixelShader);
-    RestoreUnorderedAccessViews(DxbcProgramType::ComputeShader);
+    RestoreUnorderedAccessViews(D3D11ShaderType::ePixel);
+    RestoreUnorderedAccessViews(D3D11ShaderType::eCompute);
 
     // Draw buffer bindings aren't persistent at the API level, and
     // we can't meaningfully track them. Just reset this state here
@@ -5093,7 +5120,7 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::RestoreConstantBuffers(
-          DxbcProgramType                   Stage) {
+          D3D11ShaderType                   Stage) {
     const auto& bindings = m_state.cbv[Stage];
 
     for (uint32_t i = 0; i < bindings.maxCount; i++) {
@@ -5105,17 +5132,17 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::RestoreSamplers(
-          DxbcProgramType                   Stage) {
+          D3D11ShaderType                   Stage) {
     const auto& bindings = m_state.samplers[Stage];
 
     for (uint32_t i = 0; i < bindings.maxCount; i++)
-      BindSampler(Stage, i, bindings.samplers[i]);
+      BindSampler(Stage, i, bindings.samplers[i].ptr());
   }
 
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::RestoreShaderResources(
-          DxbcProgramType                   Stage) {
+          D3D11ShaderType                   Stage) {
     const auto& bindings = m_state.srv[Stage];
 
     for (uint32_t i = 0; i < bindings.maxCount; i++)
@@ -5125,12 +5152,12 @@ namespace dxvk {
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::RestoreUnorderedAccessViews(
-          DxbcProgramType                   Stage) {
-    const auto& views = Stage == DxbcProgramType::ComputeShader
+          D3D11ShaderType                   Stage) {
+    const auto& views = Stage == D3D11ShaderType::eCompute
       ? m_state.uav.views
       : m_state.om.uavs;
 
-    uint32_t maxCount = Stage == DxbcProgramType::ComputeShader
+    uint32_t maxCount = Stage == D3D11ShaderType::eCompute
       ? m_state.uav.maxCount
       : m_state.om.maxUav;
 
@@ -5140,7 +5167,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::SetConstantBuffers(
           UINT                              StartSlot,
           UINT                              NumBuffers,
@@ -5173,7 +5200,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::SetConstantBuffers1(
           UINT                              StartSlot,
           UINT                              NumBuffers,
@@ -5239,7 +5266,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::SetShaderResources(
           UINT                              StartSlot,
           UINT                              NumResources,
@@ -5275,7 +5302,7 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   void D3D11CommonContext<ContextType>::SetSamplers(
           UINT                              StartSlot,
           UINT                              NumSamplers,
@@ -5311,6 +5338,7 @@ namespace dxvk {
       return;
 
     bool needsUpdate = false;
+    bool isMultisampled = false;
 
     if (likely(NumRTVs != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL)) {
       // Native D3D11 does not change the render targets if
@@ -5331,6 +5359,8 @@ namespace dxvk {
           if (NumUAVs == D3D11_KEEP_UNORDERED_ACCESS_VIEWS)
             ResolveOmUavHazards(rtv);
         }
+
+        isMultisampled = isMultisampled || (rtv && rtv->GetSampleCount() > 1u);
       }
 
       auto dsv = static_cast<D3D11DepthStencilView*>(pDepthStencilView);
@@ -5369,7 +5399,7 @@ namespace dxvk {
             m_state.om.uavs[i] = uav;
 
             if (!DirtyGraphicsUnorderedAccessView(i))
-              BindUnorderedAccessView(DxbcProgramType::PixelShader, i, uav);
+              BindUnorderedAccessView(D3D11ShaderType::ePixel, i, uav);
 
             ResolveOmSrvHazards(uav);
 
@@ -5381,10 +5411,11 @@ namespace dxvk {
     }
 
     if (needsUpdate) {
+      AddCost(GpuCostEstimate::RenderPass);
       BindFramebuffer();
 
       if constexpr (!IsDeferred)
-        GetTypedContext()->NotifyRenderPassBoundary();
+        GetTypedContext()->NotifyRenderPassBoundary(isMultisampled);
     }
   }
 
@@ -5474,12 +5505,12 @@ namespace dxvk {
 
 
   template<typename ContextType>
-  template<DxbcProgramType ShaderStage>
+  template<D3D11ShaderType ShaderStage>
   bool D3D11CommonContext<ContextType>::TestSrvHazards(
           D3D11ShaderResourceView*          pView) {
     bool hazard = false;
 
-    if (ShaderStage == DxbcProgramType::ComputeShader) {
+    if (ShaderStage == D3D11ShaderType::eCompute) {
       int32_t uav = m_state.uav.mask.findNext(0);
 
       while (uav >= 0 && !hazard) {
@@ -5858,6 +5889,105 @@ namespace dxvk {
     }
 
     return true;
+  }
+
+
+  template<typename ContextType>
+  template<D3D11ShaderType ShaderStage>
+  void D3D11CommonContext<ContextType>::SetClassInstances(
+    const D3D11CommonShader*                pShader,
+          ID3D11ClassInstance* const*       ppClassInstances,
+          UINT                              NumClassInstances) {
+    auto& state = m_state.instances[ShaderStage];
+
+    if (likely(!NumClassInstances) && likely(!state.instanceCount))
+      return;
+
+    // Not sure if this is the right thing to do, but if we don't
+    // have a shader we also don't really have anything to bind
+    if (!pShader)
+      NumClassInstances = 0u;
+
+    // Assign class instances for state tracking and populate
+    // constant buffer containing class instance data */
+    for (uint32_t i = 0u; i < NumClassInstances && i < D3D11ClassInstanceState::MaxInstances; i++)
+      state.instances[i] = static_cast<D3D11ClassInstance*>(ppClassInstances[i]);
+
+    // Unset previously bound class instances, if any
+    for (uint32_t i = NumClassInstances; i < state.instanceCount; i++)
+      state.instances[i] = nullptr;
+
+    uint32_t slotId = D3D11ShaderResourceMapping::computeCbvBinding(ShaderStage,
+      D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT + 1u);
+
+    if (NumClassInstances) {
+      auto buffer = AllocInstanceDataBuffer(ShaderStage);
+      auto slice = buffer->allocateStorage();
+
+      auto data = reinterpret_cast<D3D11InstanceData*>(slice->mapPtr());
+
+      for (uint32_t i = 0u; i < D3D11ClassInstanceState::MaxInstances; i++)
+        data[i] = pShader->GetClassInstanceData(i, state.instances[i].ptr());
+
+      EmitCs([
+        cSlotId = slotId,
+        cStage  = GetShaderStage(ShaderStage),
+        cBuffer = std::move(buffer),
+        cSlice  = std::move(slice)
+      ] (DxvkContext* ctx) mutable {
+        ctx->invalidateBuffer(cBuffer, Forwarder::move(cSlice));
+        ctx->bindUniformBuffer(cStage, cSlotId, DxvkBufferSlice(Forwarder::move(cBuffer)));
+      });
+    } else {
+      EmitCs([
+        cSlotId = slotId,
+        cStage  = GetShaderStage(ShaderStage)
+      ] (DxvkContext* ctx) mutable {
+        ctx->bindUniformBuffer(cStage, cSlotId, DxvkBufferSlice());
+      });
+    }
+  }
+
+
+  template<typename ContextType>
+  template<D3D11ShaderType ShaderStage>
+  void D3D11CommonContext<ContextType>::GetClassInstances(
+          ID3D11ClassInstance**             ppClassInstances,
+          UINT*                             pNumClassInstances) {
+    if (unlikely(pNumClassInstances)) {
+      const auto& state = m_state.instances[ShaderStage];
+
+      if (ppClassInstances) {
+        for (uint32_t i = 0u; i < *pNumClassInstances; i++) {
+          ppClassInstances[i] = i < state.instanceCount
+            ? state.instances[i].ref()
+            : nullptr;
+        }
+      }
+
+      *pNumClassInstances = state.instanceCount;
+    }
+  }
+
+
+  template<typename ContextType>
+  Rc<DxvkBuffer> D3D11CommonContext<ContextType>::AllocInstanceDataBuffer(
+          D3D11ShaderType                   ShaderStage) {
+    if (!m_instanceData[ShaderStage]) {
+      DxvkBufferCreateInfo bufferInfo = { };
+      bufferInfo.size = sizeof(D3D11InstanceData) * D3D11ClassInstanceState::MaxInstances;
+      bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+      bufferInfo.stages = GetShaderStage(ShaderStage);
+      bufferInfo.access = VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+      bufferInfo.debugName = "Instance data";
+
+      m_instanceData[ShaderStage] = m_device->createBuffer(bufferInfo,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    }
+
+    return m_instanceData[ShaderStage];
   }
 
 

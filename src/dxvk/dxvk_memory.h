@@ -334,13 +334,16 @@ namespace dxvk {
     /// View type
     VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
     /// View usage flags
-    VkImageUsageFlagBits usage = VkImageUsageFlagBits(0u);
+    VkImageUsageFlags usage = VkImageUsageFlags(0u);
     /// View format
     VkFormat format = VK_FORMAT_UNDEFINED;
     /// Image layout that the view will be used as
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     /// Aspect flags to include in this view
     VkImageAspectFlags aspects = 0u;
+    /// If true, allow reinterpreting the view type, otherwise
+    /// bind a null descriptor if the type does not match.
+    VkBool32 allowTypeMismatch = VK_TRUE;
     /// First mip
     uint8_t mipIndex = 0u;
     /// Number of mips
@@ -359,6 +362,7 @@ namespace dxvk {
       hash.add(uint32_t(format));
       hash.add(uint32_t(layout));
       hash.add(uint32_t(aspects));
+      hash.add(uint32_t(allowTypeMismatch));
       hash.add(uint32_t(mipIndex) | (uint32_t(mipCount) << 16));
       hash.add(uint32_t(layerIndex) | (uint32_t(layerCount) << 16));
       hash.add(uint32_t(packedSwizzle));
@@ -371,6 +375,7 @@ namespace dxvk {
           && format == other.format
           && layout == other.layout
           && aspects == other.aspects
+          && allowTypeMismatch == other.allowTypeMismatch
           && mipIndex == other.mipIndex
           && mipCount == other.mipCount
           && layerIndex == other.layerIndex
@@ -522,7 +527,7 @@ namespace dxvk {
      * \brief Increments reference count
      */
     force_inline void incRef() {
-      m_useCount.fetch_add(1u, std::memory_order_acquire);
+      m_useCount.fetch_add(1u);
     }
 
     /**
@@ -530,7 +535,7 @@ namespace dxvk {
      * Frees allocation if necessary
      */
     force_inline void decRef() {
-      if (unlikely(m_useCount.fetch_sub(1u, std::memory_order_acquire) == 1u))
+      if (unlikely(m_useCount.fetch_sub(1u) == 1u))
         free();
     }
 
@@ -548,6 +553,24 @@ namespace dxvk {
      */
     void* mapPtr() const {
       return m_mapPtr;
+    }
+
+    /**
+     * \brief D3DKMT resource local handle
+     * \returns The resource D3DKMT local handle
+     * \returns \c 0 if resource is not shared
+     */
+    D3DKMT_HANDLE kmtLocal() const {
+      return m_kmtLocal;
+    }
+
+    /**
+     * \brief D3DKMT resource global handle
+     * \returns The resource D3DKMT global handle
+     * \returns \c 0 if resource is not shared or shared with NT handle
+     */
+    D3DKMT_HANDLE kmtGlobal() const {
+      return m_kmtGlobal;
     }
 
     /**
@@ -644,6 +667,8 @@ namespace dxvk {
 
     VkImage                     m_image = VK_NULL_HANDLE;
     DxvkResourceImageViewMap*   m_imageViews = nullptr;
+    D3DKMT_HANDLE               m_kmtLocal = 0;
+    D3DKMT_HANDLE               m_kmtGlobal = 0;
 
     DxvkSparsePageTable*        m_sparsePageTable = nullptr;
 
@@ -654,6 +679,8 @@ namespace dxvk {
 
     DxvkResourceAllocation*     m_prevInChunk = nullptr;
     DxvkResourceAllocation*     m_nextInChunk = nullptr;
+
+    void initKmtHandles(VkExternalMemoryHandleTypeFlagBits handleType);
 
     void destroyBufferViews();
 
@@ -906,10 +933,14 @@ namespace dxvk {
   private:
 
     struct FreeList {
-      uint16_t size = 0u;
+      DxvkResourceAllocation* push( DxvkResourceAllocation* allocation );
+
+      alignas(CACHE_LINE_SIZE)
+      std::atomic<uint16_t> size = { 0u };
       uint16_t capacity = 0u;
 
-      DxvkResourceAllocation* head = nullptr;
+      alignas(CACHE_LINE_SIZE)
+      std::atomic<DxvkResourceAllocation*> head = { nullptr };
     };
 
     struct List {
@@ -923,10 +954,7 @@ namespace dxvk {
       high_resolution_clock::time_point drainTime = { };
     };
 
-    alignas(CACHE_LINE_SIZE)
     DxvkMemoryAllocator*        m_allocator = nullptr;
-
-    dxvk::mutex                 m_freeMutex;
     std::array<FreeList, PoolCount> m_freeLists = { };
 
     alignas(CACHE_LINE_SIZE)
@@ -991,6 +1019,8 @@ namespace dxvk {
     VkMemoryPropertyFlags properties = 0u;
     /// Allocation mode flags
     DxvkAllocationModes mode = 0u;
+    /// Shared handle type
+    VkExternalMemoryHandleTypeFlagBits handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_FLAG_BITS_MAX_ENUM;
   };
 
 
@@ -1116,6 +1146,10 @@ namespace dxvk {
     constexpr static VkBufferUsageFlags DescriptorBufferUsage =
       VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
       VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    // Buffer usage flag for descriptor heaps
+    constexpr static VkBufferUsageFlags DescriptorHeapUsage =
+      VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT;
   public:
     
     DxvkMemoryAllocator(DxvkDevice* device);

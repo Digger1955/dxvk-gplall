@@ -5,10 +5,10 @@
 
 namespace dxvk {
 
-  enum class D3D9FloatEmulation {
-    Disabled,
-    Enabled,
-    Strict
+  enum class D3D9FloatEmulation : uint8_t {
+    Disabled = 0,
+    Enabled  = 1,
+    Strict   = 2
   };
 
   struct D3D9Options {
@@ -52,14 +52,6 @@ namespace dxvk {
     /// Whether or not to set the process as DPI aware in Windows when the API interface is created.
     bool dpiAware;
 
-    /// True:  Copy our constant set into UBO if we are relative indexing ever.
-    /// False: Copy our constant set into UBO if we are relative indexing at the start of a defined constant
-    /// Why?:  In theory, FXC should never generate code where this would be an issue.
-    bool strictConstantCopies;
-
-    /// Whether or not we should care about pow(0, 0) = 1
-    bool strictPow;
-
     /// Whether or not to do a fast path clear if we're close enough to the whole render target.
     bool lenientClear;
 
@@ -81,6 +73,12 @@ namespace dxvk {
     /// D3D9 Floating Point Emulation (anything * 0 = 0)
     D3D9FloatEmulation d3d9FloatEmulation;
 
+    /// Whether shaders use FP16 for partial precision instructions
+    bool useFP16;
+
+    /// Support depth formats for cube textures
+    bool supportCubeDepthFormats;
+
     /// Support the DF16 & DF24 texture format
     bool supportDFFormats;
 
@@ -94,10 +92,6 @@ namespace dxvk {
     /// Specifically to work around a game
     /// bug in The Sims 2 that happens on native too!
     bool disableA8RT;
-
-    /// Work around a NV driver quirk
-    /// Fixes flickering/z-fighting in some games.
-    bool invariantPosition;
 
     /// Whether or not to respect memory tracking for
     /// failing resource allocation.
@@ -126,13 +120,24 @@ namespace dxvk {
     bool enumerateByDisplays;
 
     /// Cached dynamic buffers: Maps all buffers in cached memory.
-    bool cachedDynamicBuffers;
+    bool cachedWriteOnlyBuffers;
 
     /// Use device local memory for constant buffers.
-    bool deviceLocalConstantBuffers;
+    Tristate deviceLocalConstantBuffers;
 
     /// Disable direct buffer mapping
     bool allowDirectBufferMapping;
+
+    /// Force flushing D3DPOOL_DEFAULT buffers at draw time rather than on unlock
+    /// Used to work around game bugs in source engine games like CSGO and Insurgency.
+    /// Those games write to buffers after unlocking them. Uploading on unlock leads to black
+    /// objects because they never get their proper UVs.
+    bool forceDrawTimeBufferUpload;
+
+    /// Ignore the lock range passed to Buffer::Lock for buffers in the D3DPOOL_DEFAULT and mark the whole buffer
+    /// dirty instead.
+    /// Used for games that pass incorrect values.
+    bool ignoreDefaultBufferLockRange;
 
     /// Don't use non seamless cube maps
     bool seamlessCubes;
@@ -164,9 +169,6 @@ namespace dxvk {
 
     /// Enable depth texcoord Z (Dref) scaling (D3D8 quirk)
     int32_t drefScaling;
-
-    /// Enable slow sincos emulation
-    bool sincosEmulation;
 
     /// Add an extra front buffer to make GetFrontBufferData() work correctly when the swapchain only has a single buffer
     bool extraFrontbuffer;

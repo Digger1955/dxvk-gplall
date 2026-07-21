@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../util/config/config.h"
+#include "../util/util_env.h"
 
 #include "../vulkan/vulkan_loader.h"
 
@@ -23,8 +24,14 @@ namespace dxvk {
     /// Enable graphics pipeline library
     Tristate enableGraphicsPipelineLibrary = Tristate::Auto;
 
+    /// Enable descriptor heap
+    Tristate enableDescriptorHeap = Tristate::Auto;
+
     /// Enable descriptor buffer
     Tristate enableDescriptorBuffer = Tristate::Auto;
+
+    /// Enable unified image layout path
+    bool enableUnifiedImageLayout = true;
 
     /// Enables pipeline lifetime tracking
     Tristate trackPipelineLifetime = Tristate::Auto;
@@ -80,7 +87,20 @@ namespace dxvk {
     /// Overrides memory budget for DXVK
     VkDeviceSize maxMemoryBudget = 0u;
 
-    // Device name
+    /// Whether to use custom sin/cos approximation
+    Tristate lowerSinCos = Tristate::Auto;
+
+    /// Enables implicit resolves that are used to
+    /// deal with MSAA-related undefined behaviour.
+    bool enableImplicitResolves = true;
+
+    /// Enables NV_raw_access_chains extension on Nvidia
+    bool enableNvRawAccessChains = true;
+
+    /// Enable descriptor update templates
+    bool enableDescriptorUpdateTemplates = env::is32BitHostPlatform();
+
+    /// Device name
     std::string deviceFilter;
   };
 

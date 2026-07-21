@@ -239,4 +239,32 @@ namespace dxvk::str {
     }
     return tokens;
   }
+
+  /** Compares ASCII characters in a case-insensitive way */
+  inline bool compareCharsCaseInsensitive(char a, char b) {
+    if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
+    if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
+    return a == b;
+  }
+
+  /** Compare ASCII string in a case-insensitive way */
+  inline bool compareCaseInsensitive(const char* a, const char* b) {
+    for (size_t i = 0u; a[i] || b[i]; i++) {
+      if (!compareCharsCaseInsensitive(a[i], b[i]))
+        return false;
+    }
+
+    return true;
+  }
+
+  /** Converts ASCII string to lower case */
+  inline std::string tolower(std::string str) {
+    for (size_t i = 0u; i < str.size(); i++) {
+      if (str[i] >= 'A' && str[i] <= 'Z')
+        str[i] += 'a' - 'A';
+    }
+
+    return str;
+  }
+
 }

@@ -7,13 +7,15 @@
 
 namespace dxvk {
 
-  DxvkDeviceQueue getDeviceQueue(const Rc<vk::DeviceFn>& vkd, DxvkDeviceQueueIndex queue) {
+  DxvkDeviceQueue getDeviceQueue(const Rc<vk::DeviceFn>& vkd, const DxvkDeviceCapabilities& caps, DxvkDeviceQueueIndex queue) {
     DxvkDeviceQueue result = { };
     result.queueFamily = queue.family;
     result.queueIndex = queue.index;
 
-    if (queue.family != VK_QUEUE_FAMILY_IGNORED)
+    if (queue.family != VK_QUEUE_FAMILY_IGNORED) {
+      result.properties = caps.getQueueProperties(queue.family);
       vkd->vkGetDeviceQueue(vkd->device(), queue.family, queue.index, &result.queueHandle);
+    }
 
     return result;
   }
@@ -25,12 +27,26 @@ namespace dxvk {
   : m_instance      (&instance),
     m_handle        (handle),
     m_capabilities  (instance, handle, nullptr) {
+    const auto& properties = m_capabilities.getProperties();
 
+    if (properties.vk11.deviceLUIDValid) {
+      D3DKMT_OPENADAPTERFROMLUID open = { };
+      memcpy(&open.AdapterLuid, properties.vk11.deviceLUID, sizeof(open.AdapterLuid));
+
+      if (D3DKMTOpenAdapterFromLuid(&open))
+        Logger::warn("Failed to open D3DKMT adapter");
+      else
+        m_kmtLocal = open.hAdapter;
+    }
   }
   
   
   DxvkAdapter::~DxvkAdapter() {
-    
+    if (m_kmtLocal) {
+      D3DKMT_CLOSEADAPTER close = { };
+      close.hAdapter = m_kmtLocal;
+      D3DKMTCloseAdapter(&close);
+    }
   }
 
 
@@ -39,6 +55,40 @@ namespace dxvk {
   }
 
   
+  DxvkAdapterInfo DxvkAdapter::info() const {
+    const auto& properties = m_capabilities.getProperties();
+    const auto& memory = m_capabilities.getMemoryInfo().core.memoryProperties;
+
+    DxvkAdapterInfo result = {};
+    result.vendorId = properties.core.properties.vendorID;
+    result.deviceId = properties.core.properties.deviceID;
+    result.deviceType = properties.core.properties.deviceType;
+    std::memcpy(result.deviceName, properties.core.properties.deviceName, sizeof(result.deviceName));
+    std::memcpy(result.deviceUuid, properties.vk11.deviceUUID, sizeof(result.deviceUuid));
+
+    if ((result.luidIsValid = properties.vk11.deviceLUIDValid))
+      std::memcpy(result.deviceLuid, properties.vk11.deviceLUID, sizeof(result.deviceLuid));
+
+    result.driverId = properties.vk12.driverID;
+    std::memcpy(result.driverName, properties.vk12.driverName, sizeof(result.driverName));
+    std::memcpy(result.driverInfo, properties.vk12.driverInfo, sizeof(result.driverInfo));
+    result.driverVersion = properties.core.properties.driverVersion;
+
+    for (uint32_t i = 0u; i < memory.memoryHeapCount; i++) {
+      if (memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+        // In general we'll have one large device-local heap, and an additional
+        // smaller heap on dGPUs in case ReBAR is not supported. Assume that
+        // the largest available heap is the total amount of available VRAM.
+        result.deviceMemory = std::max(result.deviceMemory, memory.memoryHeaps[i].size);
+      } else {
+        result.systemMemory += memory.memoryHeaps[i].size;
+      }
+    }
+
+    return result;
+  }
+
+
   bool DxvkAdapter::isCompatible(std::string& error) {
     std::array<char, 1024u> message = { };
 
@@ -147,26 +197,41 @@ namespace dxvk {
 
 
   Rc<DxvkDevice> DxvkAdapter::createDevice() {
+    Rc<DxvkDevice> device = createDevice(false);
+
+    if (!device)
+      device = createDevice(true);
+
+    if (!device)
+      throw DxvkError("Failed to initialize DXVK device.");
+
+    return device;
+  }
+
+
+  Rc<DxvkDevice> DxvkAdapter::createDevice(bool safeMode) {
     auto vk = m_instance->vki();
 
+    DxvkDeviceCapabilities caps(*m_instance, m_handle, nullptr, safeMode);
+
     Logger::info("Creating device:");
-    m_capabilities.logDeviceInfo();
+    caps.logDeviceInfo();
 
     // Get device features to enable
     size_t featureBlobSize = 0u;
-    m_capabilities.queryDeviceFeatures(&featureBlobSize, nullptr);
+    caps.queryDeviceFeatures(&featureBlobSize, nullptr);
 
     std::vector<char> featureBlob(featureBlobSize);
-    m_capabilities.queryDeviceFeatures(&featureBlobSize, featureBlob.data());
+    caps.queryDeviceFeatures(&featureBlobSize, featureBlob.data());
 
     auto features = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(featureBlob.data());
 
     // Get extension list and add extra extensions
     uint32_t extensionCount = 0u;
-    m_capabilities.queryDeviceExtensions(&extensionCount, nullptr);
+    caps.queryDeviceExtensions(&extensionCount, nullptr);
 
     std::vector<VkExtensionProperties> extensions(extensionCount);
-    m_capabilities.queryDeviceExtensions(&extensionCount, extensions.data());
+    caps.queryDeviceExtensions(&extensionCount, extensions.data());
 
     for (const auto& extra : m_extraExtensions) {
       bool found = false;
@@ -188,13 +253,13 @@ namespace dxvk {
       extensionNames.push_back(ext.extensionName);
 
     // Query queue infos
-    DxvkDeviceQueueMapping queueMapping = m_capabilities.getQueueMapping();
+    DxvkDeviceQueueMapping queueMapping = caps.getQueueMapping();
 
     uint32_t queueCount = { };
-    m_capabilities.queryDeviceQueues(&queueCount, nullptr);
+    caps.queryDeviceQueues(&queueCount, nullptr);
 
     std::vector<VkDeviceQueueCreateInfo> queues(queueCount, { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO });
-    m_capabilities.queryDeviceQueues(&queueCount, queues.data());
+    caps.queryDeviceQueues(&queueCount, queues.data());
 
     uint32_t priorityCount = 0u;
 
@@ -210,7 +275,7 @@ namespace dxvk {
       priorityIndex += q.queueCount;
     }
 
-    m_capabilities.queryDeviceQueues(&queueCount, queues.data());
+    caps.queryDeviceQueues(&queueCount, queues.data());
 
     // Create the actual Vulkan device
     VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
@@ -224,17 +289,20 @@ namespace dxvk {
     VkDevice device = VK_NULL_HANDLE;
     VkResult vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
 
-    if (vr)
-      throw DxvkError(str::format("Failed to create Vulkan device: ", vr));
+    if (vr) {
+      Logger::err(str::format("Failed to create Vulkan device: ", vr,
+        safeMode ? "" : ", retrying 'safe mode'."));
+      return nullptr;
+    }
 
     Rc<vk::DeviceFn> vkd = new vk::DeviceFn(vk, true, device);
 
     DxvkDeviceQueueSet deviceQueues = { };
-    deviceQueues.graphics = getDeviceQueue(vkd, queueMapping.graphics);
-    deviceQueues.transfer = getDeviceQueue(vkd, queueMapping.transfer);
-    deviceQueues.sparse   = getDeviceQueue(vkd, queueMapping.sparse);
+    deviceQueues.graphics = getDeviceQueue(vkd, caps, queueMapping.graphics);
+    deviceQueues.transfer = getDeviceQueue(vkd, caps, queueMapping.transfer);
+    deviceQueues.sparse   = getDeviceQueue(vkd, caps, queueMapping.sparse);
 
-    return new DxvkDevice(m_instance, this, vkd, m_capabilities.getFeatures(), deviceQueues, DxvkQueueCallback());
+    return new DxvkDevice(m_instance, this, vkd, caps, deviceQueues, DxvkQueueCallback());
   }
 
 
@@ -264,11 +332,11 @@ namespace dxvk {
     Rc<vk::DeviceFn> vkd = new vk::DeviceFn(m_instance->vki(), false, args.device);
 
     DxvkDeviceQueueSet deviceQueues = { };
-    deviceQueues.graphics = getDeviceQueue(vkd, queueMapping.graphics);
-    deviceQueues.transfer = getDeviceQueue(vkd, queueMapping.transfer);
-    deviceQueues.sparse   = getDeviceQueue(vkd, queueMapping.sparse);
+    deviceQueues.graphics = getDeviceQueue(vkd, importCaps, queueMapping.graphics);
+    deviceQueues.transfer = getDeviceQueue(vkd, importCaps, queueMapping.transfer);
+    deviceQueues.sparse   = getDeviceQueue(vkd, importCaps, queueMapping.sparse);
 
-    return new DxvkDevice(m_instance, this, vkd, importCaps.getFeatures(), deviceQueues, args.queueCallback);
+    return new DxvkDevice(m_instance, this, vkd, importCaps, deviceQueues, args.queueCallback);
   }
 
 
@@ -305,7 +373,7 @@ namespace dxvk {
 
 
   bool DxvkAdapter::isUnifiedMemoryArchitecture() const {
-    auto memory = this->memoryProperties();
+    auto memory = m_capabilities.getMemoryInfo().core.memoryProperties;
     bool result = true;
 
     for (uint32_t i = 0; i < memory.memoryHeapCount; i++)

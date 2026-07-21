@@ -10,22 +10,16 @@
 #include "d3d9_multithread.h"
 #include "d3d9_adapter.h"
 #include "d3d9_constant_buffer.h"
+#include "d3d9_constant_copy.h"
 #include "d3d9_constant_set.h"
-#include "d3d9_mem.h"
 
 #include "d3d9_state.h"
 
 #include "d3d9_options.h"
 
-#include "../dxso/dxso_module.h"
-#include "../dxso/dxso_util.h"
-#include "../dxso/dxso_options.h"
-#include "../dxso/dxso_modinfo.h"
-
 #include "d3d9_fixed_function.h"
 #include "d3d9_swvp_emu.h"
 
-#include "d3d9_spec_constants.h"
 #include "d3d9_interop.h"
 #include "d3d9_on_12.h"
 
@@ -36,9 +30,11 @@
 #include <vector>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "../util/util_flush.h"
 #include "../util/util_lru.h"
+#include "../util/util_unmap.h"
 
 namespace dxvk {
 
@@ -54,44 +50,45 @@ namespace dxvk {
   class D3D9FormatHelper;
   class D3D9UserDefinedAnnotation;
 
-  enum class D3D9DeviceFlag : uint32_t {
-    DirtyFramebuffer,
-    DirtyClipPlanes,
-    DirtyDepthStencilState,
-    DirtyBlendState,
-    DirtyRasterizerState,
-    DirtyDepthBias,
-    DirtyAlphaTestState,
-    DirtyInputLayout,
-    DirtyViewportScissor,
-    DirtyMultiSampleState,
-    DirtyVertexBuffers,
-    DirtyIndexBuffer,
-
-    DirtyFogState,
-    DirtyFogColor,
-    DirtyFogDensity,
-    DirtyFogScale,
-    DirtyFogEnd,
-
-    DirtyFFVertexData,
-    DirtyFFVertexBlend,
-    DirtyFFVertexShader,
-    DirtyFFPixelShader,
-    DirtyFFViewport,
-    DirtyFFPixelData,
-    DirtyProgVertexShader,
-    DirtySharedPixelShaderData,
-    ValidSampleMask,
-    DirtyDepthBounds,
-    DirtyPointScale,
-
-    InScene,
-
-    DirtySpecializationEntries,
+  enum class D3D9CmdType : uint32_t {
+    None,
+    Draw,
+    DrawIndexed,
   };
 
-  using D3D9DeviceFlags = Flags<D3D9DeviceFlag>;
+  enum class D3D9DeviceDirtyFlag : uint32_t {
+    Framebuffer,
+    ClipPlanes,
+    DepthStencilState,
+    BlendState,
+    RasterizerState,
+    DepthBias,
+    AlphaTestState,
+    InputLayout,
+    ViewportScissor,
+    MultiSampleState,
+    VertexBuffers,
+    IndexBuffer,
+    Fog,
+    FFVertexData,
+    FFVertexBlend,
+    FFVertexShader,
+    FFPixelShader,
+    FFViewport,
+    FFPixelData,
+    SharedPixelShaderData,
+    DepthBounds,
+    PointScale,
+
+    PushDataShared,
+    PushDataVs,
+    PushDataFfvs,
+    PushDataFfps,
+
+    SpecializationEntries,
+  };
+
+  using D3D9DeviceDirtyFlags = Flags<D3D9DeviceDirtyFlag>;
 
   enum class D3D9DeviceLostState {
     Ok = 0,
@@ -131,9 +128,6 @@ namespace dxvk {
      * SM 1.1 and fixed function doesn't allow sampling textures in the VS, so we only need the 16 PS slots.
      * There's 3 texture types, so every texture/sampler slot uses 2 bits. */
     uint32_t textureType = 0;
-
-    /** Whether the type of the texture currently bound to each slot matches the texture type that the shader expects */
-    uint32_t mismatchingTextureType = 0;
 
     /** Whether projected texture lookup is enabled for each texture/sampler slot. This is only used for generating fixed function shaders. */
     uint32_t projected = 0;
@@ -181,6 +175,9 @@ namespace dxvk {
 
     /** Whether there's a texture bound to a slot that needs to have its mip maps generated */
     uint32_t needsMipGen = 0;
+
+    /** Texture stages used by fixed-function pixel shader */
+    uint32_t ffpsTextures = 0u;
   };
 
   struct D3D9RTSlotTracking {
@@ -231,6 +228,8 @@ namespace dxvk {
     friend class D3D9UserDefinedAnnotation;
     friend class DxvkD3D8Bridge;
     friend D3D9VkInteropDevice;
+
+    using CbvIndex = D3D9ShaderResourceMapping::CbvIndex;
   public:
 
     D3D9DeviceEx(
@@ -933,8 +932,6 @@ namespace dxvk {
     void BeginFrame(Rc<DxvkLatencyTracker> LatencyTracker, uint64_t FrameId);
     void EndFrame(Rc<DxvkLatencyTracker> LatencyTracker);
 
-    void UpdateActiveRTs(uint32_t index);
-
     template <uint32_t Index>
     void UpdateAnyColorWrites();
 
@@ -947,42 +944,6 @@ namespace dxvk {
     void EmitFeedbackLoopBarriers();
 
     void UpdateActiveFetch4(uint32_t stateSampler);
-
-    /**
-     * @brief Sets the mismatching texture type bits for all samplers if necessary.
-     *
-     * This function will check all samplers the shader uses and set the  set the mismatching texture type bit for the given sampler if it does not
-     * match the texture type expected by the respective shader.
-     *
-     * It will *not* unset the bit if the texture type does match.
-     *
-     * @param stateSampler Sampler index (according to our internal way of storing samplers)
-     */
-
-     /**
-      * @brief Sets the mismatching texture type bits for all samplers if necessary.
-      *
-      * This function will check all samplers the shader uses and set the  set the mismatching texture type bit for the given sampler if it does not
-      * match the texture type expected by the shader.
-      *
-      * @param shader The shader
-      * @param shaderSamplerMask Mask of all samplers that the shader uses (according to our internal way of storing samplers)
-      * @param shaderSamplerOffset First index of the shader's samplers according to our internal way of storing samplers.
-      *                            Used to transform the sampler indices that are relative to the entire pipeline to ones relative to the shader.
-      */
-    void UpdateTextureTypeMismatchesForShader(const D3D9CommonShader* shader, uint32_t shaderSamplerMask, uint32_t shaderSamplerOffset);
-
-    /**
-     * @brief Sets the mismatching texture type bit for the given sampler.
-     *
-     * This function will set the mismatching texture type bit for the given sampler if it does not
-     * match the texture type expected by the respective shader.
-     *
-     * It will *not* unset the bit if the texture type does match.
-     *
-     * @param stateSampler Sampler index (according to our internal way of storing samplers)
-     */
-    void UpdateTextureTypeMismatchesForTexture(uint32_t stateSampler);
 
     void UploadManagedTexture(D3D9CommonTexture* pResource);
 
@@ -999,6 +960,8 @@ namespace dxvk {
     void UpdatePointMode(bool pointList);
 
     void UpdateFog();
+
+    std::pair<float, float> ComputeWNearFar() const;
 
     void BindFramebuffer();
 
@@ -1032,35 +995,15 @@ namespace dxvk {
 
     void BindDepthBias();
 
-    inline void UploadSoftwareConstantSet(const D3D9ShaderConstantsVSSoftware& Src, const D3D9ConstantLayout& Layout);
-
-    inline void* CopySoftwareConstants(D3D9ConstantBuffer& dstBuffer, const void* src, uint32_t size);
-
-    template <DxsoProgramType ShaderStage, typename HardwareLayoutType, typename SoftwareLayoutType, typename ShaderType>
-    inline void UploadConstantSet(const SoftwareLayoutType& Src, const D3D9ConstantLayout& Layout, const ShaderType& Shader);
-
-    template <DxsoProgramType ShaderStage>
-    void UploadConstants();
+    template<D3D9ShaderType ShaderType>
+    void UpdateShaderConstants();
 
     void UpdateClipPlanes();
 
-    /**
-     * \brief Updates the push constant data at the given offset with data from the specified pointer.
-     *
-     * \param Offset Offset at which the push constant data gets written.
-     * \param Length Length of the push constant data to write.
-     * \param pData Push constant data
-     */
-    template <uint32_t Offset, uint32_t Length>
-    void UpdatePushConstant(const void* pData);
+    template<typename T>
+    void UpdatePushDataBlock(const T& Block);
 
-    /**
-     * \brief Updates the specified push constant based on the device state.
-     *
-     * \param Item Render state push constant to update
-     */
-    template <D3D9RenderStateItem Item>
-    void UpdatePushConstant();
+    void UpdatePushData();
 
     void BindSampler(DWORD Sampler);
 
@@ -1073,6 +1016,8 @@ namespace dxvk {
     void UndirtyTextures(uint32_t usedMask);
 
     void MarkTextureBindingDirty(IDirect3DBaseTexture9* texture);
+
+    bool SamplerUsesBorderColor(DWORD Sampler) const;
 
     HRESULT STDMETHODCALLTYPE SetRenderTargetInternal(
             DWORD              RenderTargetIndex,
@@ -1089,9 +1034,12 @@ namespace dxvk {
 
     void EnsureSamplerLimit();
 
-    template <DxsoProgramType ShaderStage>
+    template <D3D9ShaderType ShaderStage>
     void BindShader(
-      const D3D9CommonShader*                 pShaderModule);
+    const D3D9CommonShader*                 pShaderModule);
+
+    template <D3D9ShaderType ShaderStage>
+    void BindFFUbershader();
 
     void BindInputLayout();
 
@@ -1099,6 +1047,13 @@ namespace dxvk {
             UINT                              Slot,
             D3D9VertexBuffer*                 pBuffer,
             UINT                              Offset,
+            UINT                              Length,
+            UINT                              Stride);
+
+    void BindVertexBufferRange(
+            UINT                              Slot,
+            UINT                              Offset,
+            UINT                              Length,
             UINT                              Stride);
 
     void BindIndices();
@@ -1134,16 +1089,14 @@ namespace dxvk {
 
     void ResolveZ();
 
-    void TransitionImage(D3D9CommonTexture* pResource, VkImageLayout NewLayout);
-
     void TransformImage(
             D3D9CommonTexture*       pResource,
       const VkImageSubresourceRange* pSubresources,
             VkImageLayout            OldLayout,
             VkImageLayout            NewLayout);
 
-    const D3D9ConstantLayout& GetVertexConstantLayout() { return m_consts[DxsoProgramType::VertexShader].layout; }
-    const D3D9ConstantLayout& GetPixelConstantLayout()  { return m_consts[DxsoProgramType::PixelShader].layout; }
+    const D3D9ConstantLayout& GetVertexConstantLayout() { return m_consts[uint32_t(D3D9ShaderType::VertexShader)].layout; }
+    const D3D9ConstantLayout& GetPixelConstantLayout()  { return m_consts[uint32_t(D3D9ShaderType::PixelShader)].layout; }
 
     void ResetState(D3DPRESENT_PARAMETERS* pPresentationParameters);
     HRESULT ResetSwapChain(D3DPRESENT_PARAMETERS* pPresentationParameters, D3DDISPLAYMODEEX* pFullscreenDisplayMode);
@@ -1153,7 +1106,7 @@ namespace dxvk {
     /**
      * \brief Returns the allocator used for unmappable system memory texture data
      */
-    D3D9MemoryAllocator* GetAllocator() {
+    MemoryFilePool* GetAllocator() {
       return &m_memoryAllocator;
     }
 
@@ -1230,20 +1183,6 @@ namespace dxvk {
     }
 
     /**
-     * \brief Returns the number of vertex shader modules generated for fixed function state.
-     */
-    UINT GetFixedFunctionVSCount() const {
-      return m_ffModules.GetVSCount();
-    }
-
-    /**
-     * \brief Returns the number of fragment shader modules generated for fixed function state.
-     */
-    UINT GetFixedFunctionFSCount() const {
-      return m_ffModules.GetFSCount();
-    }
-
-    /**
      * \brief Returns the number of shader modules generated for ProcessVertices.
      */
     UINT GetSWVPShaderCount() const {
@@ -1272,10 +1211,28 @@ namespace dxvk {
       return m_d3d9On12Args.Enable9On12;
     }
 
+    D3D9Adapter* GetAdapter() const {
+      return m_adapter;
+    }
+
+    DxvkShaderOptions GetShaderOptions() const {
+      return m_dxvkShaderOptions;
+    }
+
+    const D3D9ConstantBufferCopy* GetOrCreateConstantLayout(
+            D3D9ConstantBufferLayout  FloatLayout,
+            D3D9ConstantBufferLayout  IntLayout,
+            D3D9ConstantBufferLayout  BoolLayout);
+
   private:
 
     template<bool AllowFlush = true, typename Cmd>
     void EmitCs(Cmd&& command, bool disableFlush=false) {
+      if (unlikely(m_csDataType != D3D9CmdType::None)) {
+        m_csData = nullptr;
+        m_csDataType = D3D9CmdType::None;
+      }
+
       if (unlikely(!m_csChunk->push(command))) {
         EmitCsChunk(std::move(m_csChunk));
         m_csChunk = AllocCsChunk();
@@ -1286,6 +1243,26 @@ namespace dxvk {
 
         m_csChunk->push(command);
       }
+    }
+
+    template<typename M, bool AllowFlush = true, typename Cmd>
+    DxvkCsDataBlock* EmitCsCmd(D3D9CmdType type, size_t count, Cmd&& command) {
+      m_csDataType = type;
+      m_csData = m_csChunk->pushCmd<M, Cmd>(command, count);
+
+      if (unlikely(!m_csData)) {
+        EmitCsChunk(std::move(m_csChunk));
+        m_csChunk = AllocCsChunk();
+
+        if constexpr (AllowFlush)
+          ConsiderFlush(GpuFlushType::ImplicitWeakHint);
+
+        // We must record this command after the potential
+        // flush since the caller may still access the data
+        m_csData = m_csChunk->pushCmd<M, Cmd>(command, count);
+      }
+
+      return m_csData;
     }
 
     void EmitCsChunk(DxvkCsChunkRef&& chunk);
@@ -1306,8 +1283,7 @@ namespace dxvk {
       return m_resetCtr;
     }
 
-    template <bool Synchronize9On12>
-    void ExecuteFlush();
+    void ExecuteFlush(bool Synchronize9On12);
 
     void DetermineConstantLayouts(bool canSWVP);
 
@@ -1324,14 +1300,15 @@ namespace dxvk {
     /**
      * \brief Waits until the amount of used staging memory is below a certain threshold.
      */
-    void WaitStagingBuffer();
+    void ThrottleAllocation();
 
-    HRESULT               CreateShaderModule(
+    DxvkStagingBufferStats GetStagingMemoryStatistics() const;
+
+    HRESULT CreateShaderModule(
             D3D9CommonShader*     pShaderModule,
-            uint32_t*             pLength,
-            VkShaderStageFlagBits ShaderStage,
-      const DWORD*                pShaderBytecode,
-      const DxsoModuleInfo*       pModuleInfo);
+            size_t*               pLength,
+            D3D9ShaderType        ShaderType,
+      const DWORD*                pShaderBytecode);
 
     inline uint32_t GetUPDataSize(uint32_t vertexCount, uint32_t stride) {
       return vertexCount * stride;
@@ -1362,10 +1339,9 @@ namespace dxvk {
     }
 
     // So we don't do OOB.
-    template <DxsoProgramType  ProgramType,
-              D3D9ConstantType ConstantType>
+    template <D3D9ShaderType ShaderType, D3D9ConstantType ConstantType>
     inline static constexpr uint32_t DetermineSoftwareRegCount() {
-      constexpr bool isVS = ProgramType == DxsoProgramType::VertexShader;
+      constexpr bool isVS = ShaderType == D3D9ShaderType::VertexShader;
 
       switch (ConstantType) {
         default:
@@ -1376,16 +1352,15 @@ namespace dxvk {
     }
 
     // So we don't copy more than we need.
-    template <DxsoProgramType  ProgramType,
-              D3D9ConstantType ConstantType>
+    template<D3D9ShaderType ShaderType, D3D9ConstantType ConstantType>
     inline uint32_t DetermineHardwareRegCount() const {
-      const auto& layout = m_consts[ProgramType].layout;
+      constexpr bool isVS = ShaderType == D3D9ShaderType::VertexShader;
 
       switch (ConstantType) {
         default:
-        case D3D9ConstantType::Float:  return layout.floatCount;
-        case D3D9ConstantType::Int:    return layout.intCount;
-        case D3D9ConstantType::Bool:   return layout.boolCount;
+        case D3D9ConstantType::Float:  return isVS ? caps::MaxFloatConstantsVS : caps::MaxSM3FloatConstantsPS;
+        case D3D9ConstantType::Int:    return caps::MaxOtherConstants;
+        case D3D9ConstantType::Bool:   return caps::MaxOtherConstants;
       }
     }
 
@@ -1394,7 +1369,7 @@ namespace dxvk {
     }
 
     template <
-      DxsoProgramType  ProgramType,
+      D3D9ShaderType   ShaderType,
       D3D9ConstantType ConstantType,
       typename         T>
       HRESULT SetShaderConstants(
@@ -1403,7 +1378,7 @@ namespace dxvk {
               UINT  Count);
 
     template <
-      DxsoProgramType  ProgramType,
+      D3D9ShaderType   ShaderType,
       D3D9ConstantType ConstantType,
       typename         T>
     HRESULT GetShaderConstants(
@@ -1411,8 +1386,8 @@ namespace dxvk {
             T*   pConstantData,
             UINT Count) {
       auto GetHelper = [&] (const auto& set) {
-        const     uint32_t regCountHardware = DetermineHardwareRegCount<ProgramType, ConstantType>();
-        constexpr uint32_t regCountSoftware = DetermineSoftwareRegCount<ProgramType, ConstantType>();
+        const     uint32_t regCountHardware = DetermineHardwareRegCount<ShaderType, ConstantType>();
+        constexpr uint32_t regCountSoftware = DetermineSoftwareRegCount<ShaderType, ConstantType>();
 
         if (StartRegister + Count > regCountSoftware)
           return D3DERR_INVALIDCALL;
@@ -1456,7 +1431,7 @@ namespace dxvk {
         return D3D_OK;
       };
 
-      return ProgramType == DxsoProgramTypes::VertexShader
+      return ShaderType == D3D9ShaderType::VertexShader
         ? GetHelper(m_state.vsConsts)
         : GetHelper(m_state.psConsts);
     }
@@ -1465,25 +1440,15 @@ namespace dxvk {
 
     void UpdateFixedFunctionPS();
 
-    void ApplyPrimitiveType(
-      DxvkContext*      pContext,
-      D3DPRIMITIVETYPE  PrimType);
+    void ApplyPrimitiveType(D3DPRIMITIVETYPE PrimType);
 
     bool UseProgrammableVS();
 
     bool UseProgrammablePS();
 
-    uint32_t GetAlphaTestPrecision();
+    uint32_t GetAlphaTestPrecision(D3D9Surface* rt);
 
     void BindAlphaTestState();
-
-    void UpdateAlphaTestSpec(VkCompareOp alphaOp, uint32_t precision);
-    void UpdateVertexBoolSpec(uint32_t value);
-    void UpdatePixelBoolSpec(uint32_t value);
-    void UpdatePixelShaderSamplerSpec(uint32_t types, uint32_t projections, uint32_t fetch4);
-    void UpdateCommonSamplerSpec(uint32_t boundMask, uint32_t depthMask, uint32_t drefMask);
-    void UpdatePointModeSpec(uint32_t mode);
-    void UpdateFogModeSpec(bool fogEnabled, D3DFOGMODE vertexFogMode, D3DFOGMODE pixelFogMode);
 
     void BindSpecConstants();
 
@@ -1559,12 +1524,45 @@ namespace dxvk {
     inline D3D9ShaderMasks PSShaderMasks() const {
       return m_state.pixelShader != nullptr
         ? m_state.pixelShader->GetCommonShader()->GetShaderMask()
-        : FixedFunctionMask;
+        : D3D9ShaderMasks { m_textureSlotTracking.ffpsTextures, 0x1u };
+    }
+
+    inline static uint16_t EncodePointSize(DWORD Value) {
+      // Basically 13.3 fixed point, highest value is 8191.875
+      return uint16_t(std::clamp(bit::cast<float>(Value) * 8.0f, 0.0f, 65535.0f));
+    }
+
+    D3D9ConstantBuffer& GetConstantBuffer(CbvIndex Index) {
+      return m_constantBuffers[uint32_t(Index)];
     }
 
     GpuFlushType GetMaxFlushType() const;
 
+    bool ValidateSharedTexture(
+      HANDLE                          handle,
+      D3DRESOURCETYPE                 type,
+      const D3D9_COMMON_TEXTURE_DESC& textureDesc) const;
+
+    bool ValidateSharedBuffer(
+      HANDLE                        handle,
+      const dxvk::D3D9_BUFFER_DESC& bufferDesc) const;
+
+    bool HasFormatsUnlocked() const { return m_unlockAdditionalFormats; }
+
+    void InitShaderOptions();
+
+    static uint32_t GetTextureStageArgMask(
+            D3DTEXTUREOP          Op);
+
+    static D3D9TextureStageStateFlags GetTextureStageStateFlags(
+            D3DTEXTUREOP          Op,
+            UINT                  Arg0,
+            UINT                  Arg1,
+            UINT                  Arg2,
+            bool                  Premodulate);
+
     Com<D3D9InterfaceEx>            m_parent;
+    D3D9Options                     m_d3d9Options;
     D3DDEVTYPE                      m_deviceType;
     HWND                            m_window;
     WORD                            m_behaviorFlags;
@@ -1572,12 +1570,12 @@ namespace dxvk {
     D3D9Adapter*                    m_adapter;
     Rc<DxvkDevice>                  m_dxvkDevice;
 
-    D3D9MemoryAllocator             m_memoryAllocator;
+    MemoryFilePool                  m_memoryAllocator;
 
     // Second memory allocator used for D3D9 shader bytecode.
     // Most games never access the stored bytecode, so putting that
     // into the same chunks as texture memory would waste address space.
-    D3D9MemoryAllocator             m_shaderAllocator;
+    MemoryFilePool                  m_shaderAllocator;
 
     uint32_t                        m_frameLatency = DefaultFrameLatency;
 
@@ -1591,13 +1589,7 @@ namespace dxvk {
 
     Rc<D3D9ShaderModuleSet>         m_shaderModules;
 
-    D3D9ConstantBuffer              m_vsClipPlanes;
-
-    D3D9ConstantBuffer              m_vsFixedFunction;
-    D3D9ConstantBuffer              m_vsVertexBlend;
-    D3D9ConstantBuffer              m_psFixedFunction;
-    D3D9ConstantBuffer              m_psShared;
-    D3D9ConstantBuffer              m_specBuffer;
+    std::array<D3D9ConstantBuffer, CbvIndex::Count> m_constantBuffers;
 
     Rc<DxvkBuffer>                  m_upBuffer;
     VkDeviceSize                    m_upBufferOffset  = 0ull;
@@ -1607,14 +1599,17 @@ namespace dxvk {
     Rc<sync::Fence>                 m_stagingBufferFence;
     VkDeviceSize                    m_stagingMemorySignaled = 0ull;
 
+    VkDeviceSize                    m_discardMemoryCounter = 0u;
+    VkDeviceSize                    m_discardMemoryOnFlush = 0u;
+
     D3D9Cursor                      m_cursor;
 
     Com<D3D9Surface, false>         m_autoDepthStencil;
 
     Com<D3D9SwapChainEx, false>     m_implicitSwapchain;
 
-    const D3D9Options               m_d3d9Options;
-    DxsoOptions                     m_dxsoOptions;
+    D3D9ShaderOptions               m_shaderOptions;
+    DxvkShaderOptions               m_dxvkShaderOptions;
 
     std::unordered_map<
       DWORD,
@@ -1624,15 +1619,13 @@ namespace dxvk {
     D3D9Multithread                 m_multithread;
     D3D9InputAssemblyState          m_iaState;
 
-    D3D9DeviceFlags                 m_flags;
+    D3D9DeviceDirtyFlags            m_dirty;
 
     D3D9TextureSlotTracking         m_textureSlotTracking;
 
     D3D9RTSlotTracking              m_rtSlotTracking;
 
     D3D9VBSlotTracking              m_vbSlotTracking;
-
-    D3D9SpecializationInfo          m_specInfo = D3D9SpecializationInfo();
 
     bool                            m_isSWVP;
     bool                            m_isD3D8Compatible;
@@ -1646,9 +1639,11 @@ namespace dxvk {
     bool                            m_atocEnabled      = false;
     bool                            m_nvdbEnabled      = false;
 
+    bool                            m_inScene          = false;
+    bool                            m_validSampleMask  = false;
+
     VkImageLayout                   m_hazardLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    bool                            m_usingGraphicsPipelines = false;
     uint32_t                        m_resetCtr = 0u;
 
     DxvkDepthBiasRepresentation     m_depthBiasRepresentation = { VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORMAT_EXT, false };
@@ -1657,7 +1652,7 @@ namespace dxvk {
     uint32_t                        m_robustSSBOAlignment     = 1;
     uint32_t                        m_robustUBOAlignment      = 1;
 
-    D3D9ConstantSets                m_consts[DxsoProgramTypes::Count];
+    D3D9ConstantSets                m_consts[uint32_t(D3D9ShaderType::PixelShader) + 1];
 
     D3D9UserDefinedAnnotation*      m_annotation = nullptr;
 
@@ -1667,6 +1662,9 @@ namespace dxvk {
     DxvkCsThread                    m_csThread;
     DxvkCsChunkRef                  m_csChunk;
     uint64_t                        m_csSeqNum = 0ull;
+
+    D3D9CmdType                     m_csDataType = D3D9CmdType::None;
+    DxvkCsDataBlock*                m_csData = nullptr;
 
     Rc<sync::Fence>                 m_submissionFence;
     uint64_t                        m_submissionId = 0ull;
@@ -1683,13 +1681,19 @@ namespace dxvk {
 
     D3D9SwapChainEx*                m_mostRecentlyUsedSwapchain = nullptr;
 
-#ifdef D3D9_ALLOW_UNMAPPING
+#ifdef DXVK_USE_UNMAPPABLE_MEMORY
     lru_list<D3D9CommonTexture*>    m_mappedTextures;
 #endif
+
+    dxvk::mutex                     m_constantLayoutMutex;
+    std::unordered_set<D3D9ConstantBufferCopy,
+      DxvkHash, DxvkEq>             m_constantLayouts;
 
     // m_state should be declared last (i.e. freed first), because it
     // references objects that can call back into the device when freed.
     Direct3DState9                  m_state;
+    D3D9PushData                    m_pushData = {};
+    D3D9SpecData                    m_specData = {};
 
     D3D9VkInteropDevice             m_d3d9Interop;
     D3D9ON12_ARGS                   m_d3d9On12Args = { };
@@ -1708,6 +1712,8 @@ namespace dxvk {
     // Written by CS thread
     alignas(CACHE_LINE_SIZE)
     std::atomic<uint64_t>           m_lastSamplerStats = { 0u };
+
+    bool m_unlockAdditionalFormats = false;
   };
 
 }

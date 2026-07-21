@@ -18,6 +18,8 @@ namespace dxvk {
 
     if (m_desc.Pool != D3DPOOL_DEFAULT)
       m_dirtyRange = D3D9Range(0, m_desc.Size);
+
+    m_uploadAtDraw = m_parent->GetOptions()->forceDrawTimeBufferUpload;
   }
 
   D3D9CommonBuffer::~D3D9CommonBuffer() {
@@ -82,11 +84,7 @@ namespace dxvk {
     if (m_desc.Pool != D3DPOOL_DEFAULT)
       return D3D9_COMMON_BUFFER_MAP_MODE_BUFFER;
 
-    // CSGO keeps vertex buffers locked across multiple frames and writes to it. It uses them for drawing without unlocking first.
-    // Tests show that D3D9 DEFAULT + USAGE_DYNAMIC behaves like a directly mapped buffer even when unlocked.
-    // DEFAULT + WRITEONLY does not behave like a directly mapped buffer EXCEPT if its locked at the moment.
-    // That's annoying to implement so we just always directly map DEFAULT + WRITEONLY.
-    if (!(m_desc.Usage & (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY)))
+    if (!(m_desc.Usage & D3DUSAGE_DYNAMIC))
       return D3D9_COMMON_BUFFER_MAP_MODE_BUFFER;
 
     if (!options->allowDirectBufferMapping)
@@ -129,10 +127,10 @@ namespace dxvk {
       memoryFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                   |  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-      if ((m_desc.Usage & (D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC)) == 0
+      if ((m_desc.Usage & D3DUSAGE_WRITEONLY) == 0
         || DoPerDrawUpload()
         || m_parent->CanOnlySWVP()
-        || m_parent->GetOptions()->cachedDynamicBuffers) {
+        || m_parent->GetOptions()->cachedWriteOnlyBuffers) {
         // Never use uncached memory on devices that support SWVP because we might end up reading from it.
 
         info.access |= VK_ACCESS_HOST_READ_BIT;

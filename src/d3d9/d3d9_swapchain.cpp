@@ -282,7 +282,7 @@ namespace dxvk {
                        || dstTexExtent.width > srcTexExtent.width
                        || dstTexExtent.height > srcTexExtent.height;
 
-    dstTexInfo->CreateBuffer(clearDst);
+    dstTexInfo->CreateBuffer(clearDst, dstTexInfo->GetTotalSize());
     DxvkBufferSlice dstBufferSlice = dstTexInfo->GetBufferSlice(dst->GetSubresource());
     Rc<DxvkImage>   srcImage       = srcTexInfo->GetImage();
 
@@ -940,6 +940,9 @@ namespace dxvk {
     if (m_renderLatencyHud)
       m_renderLatencyHud->updateLatencyTracker(m_latencyTracker);
 
+    if (m_jitterHud)
+      m_jitterHud->updateLatencyTracker(m_latencyTracker);
+
     if (m_latencyDetailsHud)
       m_latencyDetailsHud->updateLatencyTracker(m_latencyTracker);
 
@@ -958,7 +961,7 @@ namespace dxvk {
     for (uint32_t i = 1; i < rotatingBufferCount; i++)
       m_backBuffers[i]->Swap(m_backBuffers[i - 1].ptr());
 
-    m_parent->m_flags.set(D3D9DeviceFlag::DirtyFramebuffer);
+    m_parent->m_dirty.set(D3D9DeviceDirtyFlag::Framebuffer);
   }
 
 
@@ -1093,16 +1096,18 @@ namespace dxvk {
         m_latencyHud = hud->addItem<hud::HudLatencyItem>("latency", 4);
         FramePacer* framePacer = dynamic_cast<FramePacer*>(m_latencyTracker.ptr());
         if (framePacer) {
-          int32_t fpsItemPos = hud->getItemPos<hud::HudFpsItem>();
-          m_renderLatencyHud = hud->addItem<hud::HudRenderLatencyItem>("renderlatency", fpsItemPos+1);
-          m_latencyDetailsHud = hud->addItem<hud::HudLatencyDetailsItem>("latencydetails", fpsItemPos+2);
+          m_renderLatencyHud = reinterpret_cast<hud::HudRenderLatencyItem*>(
+            hud->getItem<hud::HudRenderLatencyItem>().ptr() );
+          m_jitterHud = reinterpret_cast<hud::HudJitterItem*>(
+            hud->getItem<hud::HudJitterItem>().ptr() );
+          m_latencyDetailsHud = reinterpret_cast<hud::HudLatencyDetailsItem*>(
+            hud->getItem<hud::HudLatencyDetailsItem>().ptr() );
         }
       }
 
-      hud->addItem<hud::HudFixedFunctionShaders>("ffshaders", -1, m_parent);
       hud->addItem<hud::HudSWVPState>("swvp", -1, m_parent);
 
-#ifdef D3D9_ALLOW_UNMAPPING
+#ifdef DXVK_USE_UNMAPPABLE_MEMORY
       hud->addItem<hud::HudTextureMemory>("memory", -1, m_parent);
 #endif
     }
@@ -1135,22 +1140,23 @@ namespace dxvk {
 
 
   void D3D9SwapChainEx::UpdateTargetFrameRate(uint32_t SyncInterval) {
-    double frameRateOption = double(m_parent->GetOptions()->maxFrameRate);
-    double frameRate = std::max(frameRateOption, 0.0);
+    double frameRate = double(m_parent->GetOptions()->maxFrameRate);
 
-    if (frameRateOption == 0.0 && SyncInterval) {
-      bool engageLimiter = SyncInterval > 1u || m_monitor ||
-        m_device->config().latencySleep == Tristate::True;
+    if (frameRate != -1.0) {
+      if (frameRate == 0.0 && SyncInterval) {
+        bool engageLimiter = SyncInterval > 1u || m_monitor ||
+          m_device->config().latencySleep == Tristate::True;
 
-      if (engageLimiter)
-        frameRate = -m_displayRefreshRate / double(SyncInterval);
+        if (engageLimiter)
+          frameRate = -m_displayRefreshRate / double(SyncInterval);
+      }
+
+      m_wctx->presenter->setFrameRateLimit(frameRate, GetActualFrameLatency());
+      FramePacer* framePacer = dynamic_cast<FramePacer*>(m_latencyTracker.ptr());
+      if (framePacer != nullptr)
+        framePacer->setTargetFrameRate(frameRate);
+      m_targetFrameRate = frameRate;
     }
-
-    m_wctx->presenter->setFrameRateLimit(frameRate, GetActualFrameLatency());
-    FramePacer* framePacer = dynamic_cast<FramePacer*>(m_latencyTracker.ptr());
-    if (framePacer != nullptr)
-      framePacer->setTargetFrameRate(frameRate);
-    m_targetFrameRate = frameRate;
   }
 
 
@@ -1194,13 +1200,13 @@ namespace dxvk {
 
       case D3D9Format::X1R5G5B5:
       case D3D9Format::A1R5G5B5:
-        return { VK_FORMAT_B5G5R5A1_UNORM_PACK16, m_colorspace };
+        return { VK_FORMAT_A1R5G5B5_UNORM_PACK16, m_colorspace };
 
       case D3D9Format::R5G6B5:
-        return { VK_FORMAT_B5G6R5_UNORM_PACK16, m_colorspace };
+        return { VK_FORMAT_R5G6B5_UNORM_PACK16, m_colorspace };
 
       case D3D9Format::A16B16G16R16F: {
-        if (!m_unlockAdditionalFormats) {
+        if (!m_parent->HasFormatsUnlocked()) {
           Logger::warn(str::format("D3D9SwapChainEx: Unexpected format: ", format));
           return VkSurfaceFormatKHR { };
         }
@@ -1257,6 +1263,8 @@ namespace dxvk {
     
     m_monitor = wsi::getDefaultMonitor();
 
+    wsi::saveWindowState(m_window, &m_windowState, true);
+
     if (!wsi::enterFullscreenMode(m_monitor, m_window, &m_windowState, true)) {
         Logger::err("D3D9: EnterFullscreenMode: Failed to enter fullscreen mode");
         return D3DERR_INVALIDCALL;
@@ -1279,10 +1287,11 @@ namespace dxvk {
 
     ResetWindowProc(m_window);
     
-    if (!wsi::leaveFullscreenMode(m_window, &m_windowState, false)) {
+    if (!wsi::leaveFullscreenMode(m_window, &m_windowState)) {
       Logger::err("D3D9: LeaveFullscreenMode: Failed to exit fullscreen mode");
       return D3DERR_NOTAVAILABLE;
     }
+    wsi::restoreWindowState(m_window, &m_windowState, false);
 
     m_parent->NotifyFullscreen(m_window, false);
     
@@ -1496,7 +1505,14 @@ namespace dxvk {
   }
 
   void STDMETHODCALLTYPE D3D9VkExtSwapchain::UnlockAdditionalFormats() {
-    m_swapchain->m_unlockAdditionalFormats = true;
+    Logger::err("ID3D9VkExtSwapchain::UnlockAdditionalFormats is deprecated.\n"
+                "Please use ID3D9VkExtInterface::UnlockAdditionalFormats instead.\n");
+
+    Com<ID3D9VkExtInterface> iface;
+
+    if (SUCCEEDED(m_swapchain->GetParent()->QueryInterface(
+        __uuidof(ID3D9VkExtInterface), reinterpret_cast<void**>(&iface))))
+      iface->UnlockAdditionalFormats();
   }
 
 }

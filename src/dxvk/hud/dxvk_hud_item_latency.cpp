@@ -3,10 +3,13 @@
 
 namespace dxvk::hud {
 
+
   HudRenderLatencyItem::HudRenderLatencyItem() { }
   HudRenderLatencyItem::~HudRenderLatencyItem() { }
 
+
   void HudRenderLatencyItem::update(dxvk::high_resolution_clock::time_point time) {
+
     const Rc<DxvkLatencyTracker> tracker = m_tracker;
     const FramePacer* framePacer = dynamic_cast<FramePacer*>( tracker.ptr() );
     if (!framePacer)
@@ -17,21 +20,10 @@ namespace dxvk::hud {
     if (elapsed.count() >= UpdateInterval) {
       m_lastUpdate = time;
 
-      LatencyMarkersReader reader = framePacer->m_latencyMarkersStorage.getReader(100);
-      const LatencyMarkers* markers;
-      uint32_t count = 0;
-      int64_t totalLatency = 0;
-      while (reader.getNext(markers)) {
-        totalLatency += markers->gpuFinished;
-        ++count;
-      }
-
-      if (!count)
-        return;
-
-      int64_t latency = totalLatency / count;
+      int32_t latency = framePacer->getLatencyAverage();
       m_latency = str::format(latency / 1000, ".", (latency/100) % 10, " ms");
     }
+
   }
 
 
@@ -52,8 +44,74 @@ namespace dxvk::hud {
   }
 
 
+  HudJitterItem::HudJitterItem() { }
+  HudJitterItem::~HudJitterItem() { }
+
+
+  void HudJitterItem::update(dxvk::high_resolution_clock::time_point time) {
+
+    const Rc<DxvkLatencyTracker> tracker = m_tracker;
+    FramePacer* framePacer = dynamic_cast<FramePacer*>( tracker.ptr() );
+    if (!framePacer)
+      return;
+
+    if (!framePacer->m_enabledJitterTracking)
+      framePacer->m_enabledJitterTracking.store(true);
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(time - m_lastUpdate);
+
+    if (elapsed.count() >= UpdateInterval) {
+      m_lastUpdate = time;
+
+      JitterTotal jitter = framePacer->getJitterStats();
+
+      if (jitter.count) {
+        float count_inv = 1.0/jitter.count;
+        jitter.frametime *= count_inv;
+        jitter.latency   *= count_inv;
+        jitter.appThreadLatency *= count_inv;
+
+        jitter.frametime = std::min( (int64_t) 9999, jitter.frametime );
+        jitter.latency   = std::min( (int64_t) 9999, jitter.latency );
+        jitter.appThreadLatency = std::min( (int64_t) 9999, jitter.appThreadLatency );
+      }
+
+      m_frametime = str::format( jitter.frametime );
+      m_latency   = str::format( jitter.latency );
+      m_appThread = str::format( jitter.appThreadLatency );
+    }
+  }
+
+
+  HudPos HudJitterItem::render(
+    const Rc<DxvkCommandList>&ctx,
+    const HudPipelineKey&     key,
+    const HudOptions&         options,
+          HudRenderer&        renderer,
+          HudPos              position) {
+
+    constexpr int w = 12;
+    position.y += 12;
+
+    renderer.drawText(16, position, 0xff40ffffu, "Jitter (us):");
+    position.y += 16;
+    int x = 2 * w;
+
+    renderer.drawText(16, { position.x + x, position.y }, 0xff40ffffu, "ft"); x += 3*w;
+    renderer.drawText(16, { position.x + x, position.y }, 0xffffffffu, m_frametime); x += (m_frametime.size()+1)*w;
+    renderer.drawText(16, { position.x + x, position.y }, 0xff40ffffu, "lat"); x += 4*w;
+    renderer.drawText(16, { position.x + x, position.y }, 0xffffffffu, m_latency); x += (m_latency.size()+1)*w;
+    renderer.drawText(16, { position.x + x, position.y }, 0xff40ffffu, "atl"); x += 4*w;
+    renderer.drawText(16, { position.x + x, position.y }, 0xffffffffu, m_appThread);
+
+    position.y += 8;
+    return position;
+  }
+
+
   HudLatencyDetailsItem::HudLatencyDetailsItem() { }
   HudLatencyDetailsItem::~HudLatencyDetailsItem() { }
+
 
   void HudLatencyDetailsItem::update(dxvk::high_resolution_clock::time_point time) {
 
@@ -62,10 +120,10 @@ namespace dxvk::hud {
     if (!framePacer)
       return;
 
-    if (!framePacer->m_enableGpuBufferTracking)
-      framePacer->m_enableGpuBufferTracking.store(true);
-    if (!framePacer->m_enableVSyncBufferTracking && framePacer->getFramePacerMode()->getPresentMode() == VK_PRESENT_MODE_FIFO_KHR)
-      framePacer->m_enableVSyncBufferTracking.store(true);
+    if (!framePacer->m_enabledGpuBufferTracking)
+      framePacer->m_enabledGpuBufferTracking.store(true);
+    if (!framePacer->m_enabledVSyncBufferTracking && framePacer->getFramePacerMode()->getPresentMode() == VK_PRESENT_MODE_FIFO_KHR)
+      framePacer->m_enabledVSyncBufferTracking.store(true);
 
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(time - m_lastUpdate);
 

@@ -305,6 +305,54 @@ namespace dxvk::bit {
     #endif
   }
 
+
+  /**
+   * \brief Compares and copies dwords and returns dirty mask
+   *
+   * \param [in] dstData Destination data
+   * \param [in] srcData Source data
+   * \param [in] count Number of dwords to compare and copy
+   * \returns Mask of dwords actually changed and copied
+   */
+  inline uint32_t bcndcpy(void* dstData, const void* srcData, uint32_t count) {
+    auto srcPtr = reinterpret_cast<const char*>(srcData);
+    auto dstPtr = reinterpret_cast<      char*>(dstData);
+
+    uint32_t mask = 0u;
+    uint32_t index = 0u;
+
+    #if defined(DXVK_ARCH_X86) && (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
+    while (index + 4u <= count) {
+      auto src = reinterpret_cast<const __m128i*>(srcPtr + index * sizeof(uint32_t));
+      auto dst = reinterpret_cast<      __m128i*>(dstPtr + index * sizeof(uint32_t));
+
+      auto srcData = _mm_loadu_si128(src);
+      auto dstData = _mm_loadu_si128(dst);
+
+      auto eqMask = _mm_cmpeq_epi32(dstData, srcData);
+      mask |= (_mm_movemask_ps(_mm_castsi128_ps(eqMask)) ^ 0xf) << index;
+
+      _mm_storeu_si128(dst, srcData);
+
+      index += 4u;
+    }
+    #endif
+
+    while (index < count) {
+      auto src = srcPtr + index * sizeof(uint32_t);
+      auto dst = dstPtr + index * sizeof(uint32_t);
+
+      bool dirty = std::memcmp(dst, src, sizeof(uint32_t));
+      mask |= dirty ? 1u << index : 0u;
+
+      std::memcpy(dst, src, sizeof(uint32_t));
+      index += 1u;
+    }
+
+    return mask;
+  }
+
+
   template <size_t Bits>
   class bitset {
     static constexpr size_t Dwords = align(Bits, 32) / 32;
@@ -715,5 +763,55 @@ namespace dxvk::bit {
       return uint64_t(lo) | (uint64_t(c) << 32);
     }
   };
+
+
+  /**
+   * \brief FNV-1a hash implementation
+   */
+  inline uint64_t fnv1a_init() {
+    return 0xcbf29ce484222325ull;
+  }
+
+  template<typename T, std::enable_if_t<std::is_integral_v<T>, bool> = true>
+  uint64_t fnv1a_iter(uint64_t hash, T value) {
+    return (hash ^ uint64_t(value)) * 0x100000001b3ull;
+  }
+
+  inline uint64_t fnv1a_hash(const unsigned char* data, size_t size) {
+    uint64_t hash = fnv1a_init();
+    size_t idx = 0u;
+
+    while (idx + sizeof(hash) <= size) {
+      uint64_t v = (uint64_t(data[idx + 0u]) <<  0u)
+                 | (uint64_t(data[idx + 1u]) <<  8u)
+                 | (uint64_t(data[idx + 2u]) << 16u)
+                 | (uint64_t(data[idx + 3u]) << 24u)
+                 | (uint64_t(data[idx + 4u]) << 32u)
+                 | (uint64_t(data[idx + 5u]) << 40u)
+                 | (uint64_t(data[idx + 6u]) << 48u)
+                 | (uint64_t(data[idx + 7u]) << 56u);
+
+      hash = fnv1a_iter(hash, v);
+      idx += sizeof(hash);
+    }
+
+    if (idx < size) {
+      uint64_t v = 0u;
+
+      while (idx < size) {
+        v |= uint64_t(data[idx]) << (8u * (idx % sizeof(hash)));
+        idx++;
+      }
+
+      hash = fnv1a_iter(hash, v);
+    }
+
+    hash = fnv1a_iter(hash, size);
+    return hash;
+  }
+
+  inline uint64_t fnv1a_hash(const char* data, size_t size) {
+    return fnv1a_hash(reinterpret_cast<const unsigned char*>(data), size);
+  }
 
 }

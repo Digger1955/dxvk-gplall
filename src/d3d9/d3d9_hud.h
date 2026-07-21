@@ -27,9 +27,9 @@ namespace dxvk::hud {
 
     D3D9DeviceEx* m_device;
 
-    uint32_t m_maxAllocated = 0;
-    uint32_t m_maxUsed      = 0;
-    uint32_t m_maxMapped    = 0;
+    uint64_t m_maxAllocated = 0;
+    uint64_t m_maxUsed      = 0;
+    uint64_t m_maxMapped    = 0;
 
     dxvk::high_resolution_clock::time_point m_lastUpdate
       = dxvk::high_resolution_clock::now();
@@ -41,34 +41,7 @@ namespace dxvk::hud {
 
 
   /**
-   * \brief HUD item to display amount of generated fixed function shaders
-   */
-  class HudFixedFunctionShaders : public HudItem {
-
-  public:
-
-    HudFixedFunctionShaders(D3D9DeviceEx* device);
-
-    void update(dxvk::high_resolution_clock::time_point time);
-
-    HudPos render(
-      const Rc<DxvkCommandList>&ctx,
-      const HudPipelineKey&     key,
-      const HudOptions&         options,
-            HudRenderer&        renderer,
-            HudPos              position);
-
-  private:
-
-    D3D9DeviceEx* m_device;
-
-    std::string m_ffShaderCount;
-
-  };
-
-
-  /**
-   * \brief HUD item to whether or not we're in SWVP mode
+   * \brief HUD item to display amount of generated SWVP shaders
    */
   class HudSWVPState : public HudItem {
 
@@ -90,6 +63,7 @@ namespace dxvk::hud {
     D3D9DeviceEx* m_device;
 
     std::string m_isSWVPText;
+    std::string m_swvpShaderCount;
 
   };
 

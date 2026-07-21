@@ -17,10 +17,10 @@ namespace dxvk {
    * binding the descriptor heap.
    */
   struct DxvkDescriptorHeapBindingInfo {
-    VkBuffer        buffer      = VK_NULL_HANDLE;
-    VkDeviceAddress gpuAddress  = 0u;
-    VkDeviceSize    heapSize    = 0u;
-    VkDeviceSize    bufferSize  = 0u;
+    VkBuffer        buffer        = VK_NULL_HANDLE;
+    VkDeviceAddress gpuAddress    = 0u;
+    VkDeviceSize    reservedSize  = 0u;
+    VkDeviceSize    bufferSize    = 0u;
   };
 
 
@@ -41,7 +41,7 @@ namespace dxvk {
             Rc<DxvkBuffer>                      gpuBuffer,
             VkDeviceSize                        rangeSize,
             VkDeviceSize                        rangeIndex,
-            VkDeviceSize                        rangeCount);
+            VkDeviceSize                        reservedSize);
 
     ~DxvkResourceDescriptorRange();
 
@@ -57,7 +57,7 @@ namespace dxvk {
      * \returns \c true if the descriptor range is in use
      */
     bool isInUse() const {
-      return m_useCount.load(std::memory_order_relaxed) != 0u;
+      return m_useCount.load() != 0u;
     }
 
     /**
@@ -82,7 +82,7 @@ namespace dxvk {
       DxvkDescriptorHeapBindingInfo result = { };
       result.buffer = m_rangeInfo.buffer;
       result.gpuAddress = m_rangeInfo.gpuAddress - m_rangeInfo.offset;
-      result.heapSize = m_heapSize;
+      result.reservedSize = m_reservedSize;
       result.bufferSize = m_bufferSize;
       return result;
     }
@@ -144,8 +144,8 @@ namespace dxvk {
 
     VkDeviceSize            m_allocationOffset = 0u;
 
-    VkDeviceSize            m_heapSize    = 0u;
-    VkDeviceSize            m_bufferSize  = 0u;
+    VkDeviceSize            m_reservedSize = 0u;
+    VkDeviceSize            m_bufferSize = 0u;
 
     DxvkResourceBufferInfo  m_rangeInfo = { };
 
@@ -173,7 +173,7 @@ namespace dxvk {
      * \brief Increments ref count
      */
     void incRef() {
-      m_useCount.fetch_add(1u, std::memory_order_acquire);
+      m_useCount.fetch_add(1u);
     }
 
     /**
@@ -181,7 +181,7 @@ namespace dxvk {
      * Frees object when the last reference is removed.
      */
     void decRef() {
-      if (m_useCount.fetch_sub(1u, std::memory_order_release) == 1u)
+      if (m_useCount.fetch_sub(1u) == 1u)
         delete this;
     }
 
@@ -216,6 +216,8 @@ namespace dxvk {
     DxvkDevice*           m_device    = nullptr;
     std::atomic<uint32_t> m_useCount  = { 0u };
 
+    VkDeviceSize          m_reservedSize = 0u;
+
     std::list<DxvkResourceDescriptorRange> m_ranges;
 
     DxvkResourceDescriptorRange* m_currentRange = nullptr;
@@ -229,13 +231,13 @@ namespace dxvk {
 
 
   inline void DxvkResourceDescriptorRange::incRef() {
-    if (m_useCount.fetch_add(1u, std::memory_order_acquire) == 0u)
+    if (m_useCount.fetch_add(1u) == 0u)
       m_heap->incRef();
   }
 
 
   inline void DxvkResourceDescriptorRange::decRef() {
-    if (m_useCount.fetch_sub(1u, std::memory_order_release) == 1u)
+    if (m_useCount.fetch_sub(1u) == 1u)
       m_heap->decRef();
   }
 

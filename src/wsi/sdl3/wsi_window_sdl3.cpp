@@ -45,6 +45,20 @@ namespace dxvk::wsi {
   }
 
 
+  void Sdl3WsiDriver::saveWindowState(
+            HWND             hWindow,
+            DxvkWindowState* pState,
+            bool             saveStyle) {
+  }
+
+
+  void Sdl3WsiDriver::restoreWindowState(
+            HWND             hWindow,
+            DxvkWindowState* pState,
+            bool             restoreCoordinates) {
+  }
+
+
   bool Sdl3WsiDriver::setWindowMode(
           HMONITOR         hMonitor,
           HWND             hWindow,
@@ -80,8 +94,7 @@ namespace dxvk::wsi {
     }
 
     if (!SDL_SetWindowPosition(window, bounds.x, bounds.y)) {
-      Logger::err(str::format("SDL3 WSI: enterFullscreenMode: SDL_SetWindowPosition: ", SDL_GetError()));
-      return false;
+      Logger::warn(str::format("SDL3 WSI: enterFullscreenMode: SDL_SetWindowPosition: ", SDL_GetError()));
     }
 
     SDL_DisplayMode closestMode = { };
@@ -112,8 +125,7 @@ namespace dxvk::wsi {
 
   bool Sdl3WsiDriver::leaveFullscreenMode(
           HWND             hWindow,
-          DxvkWindowState* pState,
-          bool             restoreCoordinates) {
+          DxvkWindowState* pState) {
     SDL_Window* window = fromHwnd(hWindow);
 
     if (!SDL_SetWindowFullscreen(window, false)) {

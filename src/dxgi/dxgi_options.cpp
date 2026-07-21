@@ -4,10 +4,28 @@
 
 namespace dxvk {
 
+  static bool isVersionAtLeast(
+    uint32_t major,
+    uint32_t minor,
+    uint32_t patch,
+    uint32_t build,
+    uint32_t reqMajor,
+    uint32_t reqMinor,
+    uint32_t reqPatch,
+    uint32_t reqBuild) {
+    if (major != reqMajor)
+      return major > reqMajor;
+    if (minor != reqMinor)
+      return minor > reqMinor;
+    if (patch != reqPatch)
+      return patch > reqPatch;
+    return build >= reqBuild;
+  }
+
   static int32_t parsePciId(const std::string& str) {
     if (str.size() != 4)
       return -1;
-    
+
     int32_t id = 0;
 
     for (size_t i = 0; i < str.size(); i++) {
@@ -26,20 +44,81 @@ namespace dxvk {
     return id;
   }
 
-  /* First generation XeSS causes crash on proton for Intel due to missing
-   * Intel interface. Avoid crash by pretending to be non-Intel if the
-   * libxess.dll module is loaded by an application.
-   */
-  static bool isXessUsed() {
-#ifdef _WIN32
-      if (GetModuleHandleA("libxess") != nullptr ||
-          GetModuleHandleA("libxess_dx11") != nullptr)
-        return true;
-      else
-        return false;
-#else
+  /* Some XeSS versions crash on Proton for Intel due to missing Intel
+   * interfaces. Avoid crash by pretending to be non-Intel if the libxess.dll
+   * module is loaded by an application. */
+  static bool isXessVendorWaNeeded() {
+    #ifdef _WIN32
+    HMODULE libxess = nullptr;
+
+    // Use Ex variant here to keep the library loaded while we use the handle
+    if (!GetModuleHandleExA(0u, "libxess", &libxess)
+     && !GetModuleHandleExA(0u, "libxess_dx11", &libxess))
       return false;
-#endif
+
+    if (!libxess)
+      return false;
+
+    // For some reason it seems to be impossible to just query
+    // the length, need to pre-allocate for the worst case
+    std::array<char, MAX_PATH + 1u> fileName = {};
+    auto nameLen = GetModuleFileNameA(libxess, fileName.data(), fileName.size());
+
+    // Should be safe to release the module now, we only operate
+    // on the actual file from now on
+    FreeLibrary(libxess);
+
+    if (!nameLen) {
+      Logger::warn("DXGI: Failed to get file name for XeSS module");
+      return true;
+    }
+
+    // Query version info blob size...
+    auto fiSize = GetFileVersionInfoSizeA(fileName.data(), nullptr);
+
+    if (!fiSize) {
+      Logger::warn("DXGI: Failed to get XeSS version info size");
+      return true;
+    }
+
+    // Retrieve actual version info blob
+    std::vector<char> fiData(fiSize);
+
+    if (!GetFileVersionInfoA(fileName.data(), 0u, fiSize, fiData.data())) {
+      Logger::warn("DXGI: Failed to get XeSS version info");
+      return true;
+    }
+
+    void* fiBlock = nullptr;
+    UINT fiBlockSize = 0u;
+
+    if (!VerQueryValueA(fiData.data(), "\\", &fiBlock, &fiBlockSize)) {
+      Logger::warn("DXGI: Failed to get XeSS version info block");
+      return true;
+    }
+
+    auto fiBlockTyped = reinterpret_cast<const VS_FIXEDFILEINFO*>(fiBlock);
+
+    if (!fiBlockTyped || fiBlockSize < sizeof(*fiBlockTyped)) {
+      Logger::warn("DXGI: Invalid XeSS version info block");
+      return true;
+    }
+
+    const uint32_t major = fiBlockTyped->dwProductVersionMS >> 16;
+    const uint32_t minor = fiBlockTyped->dwProductVersionMS & 0xffffu;
+    const uint32_t patch = fiBlockTyped->dwProductVersionLS >> 16;
+    const uint32_t build = fiBlockTyped->dwProductVersionLS & 0xffffu;
+
+    // Some early 2.0 builds are still affected, keep the workaround enabled
+    // until at least 2.0.2.68.
+    const bool isKnownGood = isVersionAtLeast(
+      major, minor, patch, build,
+      2u, 0u, 2u, 68u);
+
+    return !isKnownGood;
+    #else
+    return false;
+    #endif
   }
 
   static bool isNvapiEnabled() {
@@ -79,18 +158,19 @@ namespace dxvk {
     return false;
   }
 
-  
+
   DxgiOptions::DxgiOptions(const Config& config) {
     // Fetch these as a string representing a hexadecimal number and parse it.
     this->customVendorId = parsePciId(config.getOption<std::string>("dxgi.customVendorId"));
     this->customDeviceId = parsePciId(config.getOption<std::string>("dxgi.customDeviceId"));
     this->customDeviceDesc = config.getOption<std::string>("dxgi.customDeviceDesc", "");
-    
+
     // Interpret the memory limits as Megabytes
     this->maxDeviceMemory = VkDeviceSize(config.getOption<int32_t>("dxgi.maxDeviceMemory", 0)) << 20;
     this->maxSharedMemory = VkDeviceSize(config.getOption<int32_t>("dxgi.maxSharedMemory", 0)) << 20;
 
-    this->maxFrameRate     = config.getOption<int32_t>("dxgi.maxFrameRate", 0);
+    this->maxFrameRate     = config.getOption<int32_t>("dxvk.maxFrameRate",
+                             config.getOption<int32_t>("dxgi.maxFrameRate", 0));
     this->syncInterval     = config.getOption<int32_t>("dxgi.syncInterval", -1);
     this->forceRefreshRate = config.getOption<int32_t>("dxgi.forceRefreshRate", 0u);
 
@@ -112,9 +192,8 @@ namespace dxvk {
     this->hideAmdGpu = config.getOption<Tristate>("dxgi.hideAmdGpu", Tristate::Auto) == Tristate::True;
     this->hideIntelGpu = config.getOption<Tristate>("dxgi.hideIntelGpu", Tristate::Auto) == Tristate::True;
 
-    /* Force vendor ID to non-Intel ID when XeSS is in use */
-    if (isXessUsed()) {
-      Logger::info(str::format("Detected XeSS usage, hiding Intel GPU Vendor"));
+    if (isXessVendorWaNeeded()) {
+      Logger::info(str::format("XeSS: hiding Intel GPU Vendor ID"));
       this->hideIntelGpu = true;
     }
 
@@ -127,5 +206,5 @@ namespace dxvk {
       this->enableHDR = false;
     }
   }
-  
+
 }

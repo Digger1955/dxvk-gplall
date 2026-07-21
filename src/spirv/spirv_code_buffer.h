@@ -8,6 +8,11 @@
 
 namespace dxvk {
   
+  /** SPIR-V version token builder */
+  constexpr uint32_t spvVersion(uint32_t major, uint32_t minor) {
+    return (major << 16) | (minor << 8);
+  }
+
   /**
    * \brief SPIR-V code buffer
    * 
@@ -25,6 +30,7 @@ namespace dxvk {
     SpirvCodeBuffer(SpirvCodeBuffer &&) = default;
     SpirvCodeBuffer(uint32_t size, const uint32_t* data);
     SpirvCodeBuffer(std::istream& stream);
+    SpirvCodeBuffer(std::vector<uint32_t>&& data);
     
     template<size_t N>
     SpirvCodeBuffer(const uint32_t (&data)[N])

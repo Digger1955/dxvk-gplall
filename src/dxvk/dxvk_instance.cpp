@@ -82,9 +82,9 @@ namespace dxvk {
 
   Rc<DxvkAdapter> DxvkInstance::findAdapterByLuid(const void* luid) const {
     for (const auto& adapter : m_adapters) {
-      const auto& vk11 = adapter->deviceProperties().vk11;
+      auto adapterInfo = adapter->info();
 
-      if (vk11.deviceLUIDValid && !std::memcmp(luid, vk11.deviceLUID, VK_LUID_SIZE))
+      if (adapterInfo.luidIsValid && !std::memcmp(luid, adapterInfo.deviceLuid, VK_LUID_SIZE))
         return adapter;
     }
 
@@ -94,10 +94,10 @@ namespace dxvk {
   
   Rc<DxvkAdapter> DxvkInstance::findAdapterByDeviceId(uint16_t vendorId, uint16_t deviceId) const {
     for (const auto& adapter : m_adapters) {
-      const auto& props = adapter->deviceProperties();
+      auto adapterInfo = adapter->info();
 
-      if (props.core.properties.vendorID == vendorId
-       && props.core.properties.deviceID == deviceId)
+      if (adapterInfo.vendorId == vendorId
+       && adapterInfo.deviceId == deviceId)
         return adapter;
     }
 
@@ -163,16 +163,26 @@ namespace dxvk {
         ext->specVersion = entry->specVersion;
     }
 
+    // Only enable one of the surface maintenance extensions
+    if (m_extensionInfo.khrSurfaceMaintenance1.specVersion)
+      m_extensionInfo.extSurfaceMaintenance1.specVersion = 0u;
+
     // Hide debug mode behind an environment variable since it adds
     // significant overhead, and some games will not work with it enabled.
     std::string debugEnv = env::getEnvVar("DXVK_DEBUG");
+
+    bool capture = debugEnv.empty() && (
+      env::getEnvVar("ENABLE_VULKAN_RENDERDOC_CAPTURE") == "1" ||
+      env::getEnvVar("MESA_VK_TRACE") != "");
 
     if (debugEnv == "validation")
       m_debugFlags.set(DxvkDebugFlag::Validation);
     else if (debugEnv == "markers")
       m_debugFlags.set(DxvkDebugFlag::Capture, DxvkDebugFlag::Markers);
-    else if (debugEnv == "capture" || m_options.enableDebugUtils)
+    else if (debugEnv == "capture" || m_options.enableDebugUtils || capture)
       m_debugFlags.set(DxvkDebugFlag::Capture);
+    else if (debugEnv == "hang")
+      m_debugFlags.set(DxvkDebugFlag::Capture, DxvkDebugFlag::Hang);
 
     if (m_debugFlags.isClear()) {
       // Disable any usage of the extension altogether
@@ -230,7 +240,7 @@ namespace dxvk {
       std::vector<const char*> extensionNames;
 
       for (const auto& layer : layersEnabled)
-        extensionNames.push_back(layer.c_str());
+        layerNames.push_back(layer.c_str());
 
       for (const auto& ext : extensionsEnabled)
         extensionNames.push_back(ext.extensionName);
@@ -239,7 +249,7 @@ namespace dxvk {
       appInfo.pApplicationName      = appName.c_str();
       appInfo.applicationVersion    = flags.raw();
       appInfo.pEngineName           = "DXVK";
-      appInfo.engineVersion         = VK_MAKE_API_VERSION(0, 2, 7, 1);
+      appInfo.engineVersion         = VK_MAKE_API_VERSION(0, 3, 0, 2);
       appInfo.apiVersion            = DxvkVulkanApiVersion;
 
       VkInstanceCreateInfo info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
@@ -327,8 +337,8 @@ namespace dxvk {
         uint32_t bRank = deviceTypes.size();
 
         for (uint32_t i = 0; i < std::min(aRank, bRank); i++) {
-          if (a->deviceProperties().core.properties.deviceType == deviceTypes[i]) aRank = i;
-          if (b->deviceProperties().core.properties.deviceType == deviceTypes[i]) bRank = i;
+          if (a->info().deviceType == deviceTypes[i]) aRank = i;
+          if (b->info().deviceType == deviceTypes[i]) bRank = i;
         }
 
         return aRank < bRank;
@@ -368,6 +378,7 @@ namespace dxvk {
       &extensions.extSurfaceMaintenance1,
       &extensions.khrGetSurfaceCapabilities2,
       &extensions.khrSurface,
+      &extensions.khrSurfaceMaintenance1,
     }};
   }
 
@@ -387,22 +398,21 @@ namespace dxvk {
       case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:   logLevel = LogLevel::Error; break;
     }
 
-    static const std::array<uint32_t, 9> ignoredIds = {
+    static const std::array<uint32_t, 6> ignoredIds = {
       // Ignore image format features for depth-compare instructions.
       // These errors are expected in D3D9 and some D3D11 apps.
       0x23259a0d,
       0x4b9d1597,
       0x534c50ad,
       0x9750b479,
-      // Ignore vkCmdBindPipeline errors related to dynamic rendering.
-      // Validation layers are buggy here and will complain about any
-      // command buffer with more than one render pass.
-      0x11b37e31,
-      0x151f5e5a,
-      0x6c16bfb4,
-      0xd6d77e1e,
-      // Ignore spam about OpSampledImage, validation is wrong here.
-      0xa5625282,
+      // Spammy perf warning about unused fragment shader outputs.
+      // This is expected and will be optimized by any sane driver.
+      0x46877e3e,
+      // Spammy warning about vertex format mismatches in many games.
+      // Quite common and we rely on hardware/drivers implementing
+      // D3D behaviour here since this is really just an app bug
+      // that we can't easily work around in most cases.
+      0x9367b2c1,
     };
 
     for (auto id : ignoredIds) {
@@ -413,7 +423,7 @@ namespace dxvk {
     std::stringstream str;
 
     if (pCallbackData->pMessageIdName)
-      str << pCallbackData->pMessageIdName << ": " << std::endl;
+      str << pCallbackData->pMessageIdName << " (0x" << std::hex << pCallbackData->messageIdNumber << ")" << std::endl;
 
     str << pCallbackData->pMessage;
 

@@ -4,6 +4,7 @@
 #include "d3d9_caps.h"
 #include "d3d9_device.h"
 #include "d3d9_bridge.h"
+#include "d3d9_window.h"
 
 #include "../util/util_singleton.h"
 
@@ -18,7 +19,8 @@ namespace dxvk {
     , m_d3d8Bridge  ( this )
     , m_extended    ( bExtended ) 
     , m_d3d9Options ( nullptr, m_instance->config() )
-    , m_d3d9Interop ( this ) {
+    , m_d3d9Interop ( this )
+    , m_d3d9ExtInterface( this ) {
     // D3D9 doesn't enumerate adapters like physical adapters...
     // only as connected displays.
 
@@ -49,7 +51,7 @@ namespace dxvk {
 
         if (adapter != nullptr) {
           const auto* d3d9On12Args = Find9On12Args(adapter, pOverrideList, OverrideCount);
-          m_adapters.emplace_back(this, d3d9On12Args, adapter, adapterOrdinal++, i - 1);
+          m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, adapter, adapterOrdinal++, i - 1));
         }
       }
     }
@@ -61,7 +63,7 @@ namespace dxvk {
 
       for (uint32_t i = 0; i < adapterCount; i++) {
         const auto* d3d9On12Args = Find9On12Args(m_instance->enumAdapters(i), pOverrideList, OverrideCount);
-        m_adapters.emplace_back(this, d3d9On12Args, m_instance->enumAdapters(i), i, 0);
+        m_adapters.emplace_back(new D3D9Adapter(this, d3d9On12Args, m_instance, m_instance->enumAdapters(i), i, 0));
       }
     }
 
@@ -103,6 +105,11 @@ namespace dxvk {
     if (riid == __uuidof(ID3D9VkInteropInterface)
      || riid == __uuidof(ID3D9VkInteropInterface1)) {
       *ppvObject = ref(&m_d3d9Interop);
+      return S_OK;
+    }
+
+    if (riid == __uuidof(ID3D9VkExtInterface)) {
+      *ppvObject = ref(&m_d3d9ExtInterface);
       return S_OK;
     }
 
@@ -408,6 +415,9 @@ namespace dxvk {
         BehaviorFlags,
         dxvkDevice);
 
+      if (!pPresentationParameters->Windowed)
+        ActivateFocusWindow(hFocusWindow ? hFocusWindow : pPresentationParameters->hDeviceWindow);
+
       hr = device->InitialReset(pPresentationParameters, pFullscreenDisplayMode);
 
       if (unlikely(FAILED(hr)))
@@ -435,15 +445,15 @@ namespace dxvk {
   HRESULT D3D9InterfaceEx::ValidatePresentationParametersEx(
     const D3DPRESENT_PARAMETERS* pPresentationParameters,
     const D3DDISPLAYMODEEX*      pFullscreenDisplayMode) {
+    if (unlikely(pPresentationParameters == nullptr))
+      return D3DERR_INVALIDCALL;
+
     // pFullscreenDisplayMode must not be NULL in full screen mode.
     if (unlikely(!pPresentationParameters->Windowed && pFullscreenDisplayMode == nullptr))
       return D3DERR_INVALIDCALL;
 
     // pFullscreenDisplayMode must be NULL in windowed mode.
     if (unlikely(pPresentationParameters->Windowed && pFullscreenDisplayMode != nullptr))
-      return D3DERR_INVALIDCALL;
-
-    if (unlikely(pPresentationParameters == nullptr))
       return D3DERR_INVALIDCALL;
 
     // On extended devices, the backbuffer dimensions
@@ -525,15 +535,15 @@ namespace dxvk {
 #ifdef _WIN32
     for (uint32_t i = 0u; i < OverrideCount; i++) {
       if (pOverrides[i].pD3D12Device) {
-        const auto& vk11 = Adapter->deviceProperties().vk11;
+        auto info = Adapter->info();
 
-        if (vk11.deviceLUIDValid) {
+        if (info.luidIsValid) {
           Com<ID3D12Device> device = nullptr;
 
           if (SUCCEEDED(pOverrides[i].pD3D12Device->QueryInterface(__uuidof(ID3D12Device), reinterpret_cast<void**>(&device)))) {
             LUID luid = device->GetAdapterLuid();
 
-            if (!std::memcmp(&luid, vk11.deviceLUID, sizeof(vk11.deviceLUID)))
+            if (!std::memcmp(&luid, info.deviceLuid, sizeof(info.deviceLuid)))
               arg = &pOverrides[i];
           }
         }

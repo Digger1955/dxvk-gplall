@@ -12,7 +12,6 @@
 namespace dxvk {
 
   class FramePacer;
-  class LatencyMarkersStorage;
 
 
   struct LatencyMarkers {
@@ -22,6 +21,7 @@ namespace dxvk {
     time_point start;
     time_point end;
 
+    int32_t appThreadFinished;
     int32_t csStart;
     int32_t csFinished;
     int32_t cpuFinished;
@@ -49,33 +49,17 @@ namespace dxvk {
   };
 
 
-  class LatencyMarkersReader {
-
-  public:
-
-    LatencyMarkersReader( const LatencyMarkersStorage* storage, uint32_t numEntries );
-    bool getNext( const LatencyMarkers*& result );
-
-  private:
-
-    const LatencyMarkersStorage* m_storage;
-    uint64_t m_index;
-
-  };
-
-
   class LatencyMarkersStorage {
-    friend class LatencyMarkersReader;
     friend class FramePacer;
   public:
 
     LatencyMarkersStorage( uint64_t firstFrameId )
-    : m_firstFrameId(firstFrameId) { }
-    ~LatencyMarkersStorage() { }
-
-    LatencyMarkersReader getReader( uint32_t numEntries ) const {
-      return LatencyMarkersReader(this, numEntries);
+    : m_firstFrameId(firstFrameId) {
+      LatencyMarkers* markers = getMarkers(firstFrameId);
+      markers->start = high_resolution_clock::now();
     }
+
+    ~LatencyMarkersStorage() { }
 
     void registerFrameStart( uint64_t frameId ) {
       if (unlikely(frameId <= m_timeline.frameFinished.load())) {
@@ -119,31 +103,12 @@ namespace dxvk {
     }
 
     // simple modulo hash mapping is used for frameIds. They are expected to monotonically increase by one.
-    // select the size large enough, so we never come into a situation where the reader cannot keep up with the producer
-    static constexpr uint16_t m_numMarkers = 128;
+    // only store a small number of past frames to keep the memory footprint low.
+    static constexpr uint16_t m_numMarkers = 4;
     const uint64_t m_firstFrameId;
     std::array<LatencyMarkers, m_numMarkers> m_markers = { };
     LatencyMarkersTimeline m_timeline;
 
   };
-
-
-
-  inline LatencyMarkersReader::LatencyMarkersReader( const LatencyMarkersStorage* storage, uint32_t numEntries )
-  : m_storage(storage) {
-    m_index = 0;
-    if (m_storage->m_timeline.frameFinished.load() > numEntries + storage->m_firstFrameId + 2)
-      m_index = m_storage->m_timeline.frameFinished.load() - numEntries;
-  }
-
-
-  inline bool LatencyMarkersReader::getNext( const LatencyMarkers*& result ) {
-    if (m_index == 0 || m_index > m_storage->m_timeline.frameFinished.load())
-      return false;
-
-    result = &m_storage->m_markers[m_index % m_storage->m_numMarkers];
-    m_index++;
-    return true;
-  }
 
 }

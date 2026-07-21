@@ -217,7 +217,7 @@ namespace dxvk {
         ctx->endQuery(m_query[0]);
     }
 
-    m_resetCtr.fetch_sub(1, std::memory_order_release);
+    m_resetCtr.fetch_sub(1);
   }
   
   
@@ -236,7 +236,7 @@ namespace dxvk {
     bool result = m_state == D3D11_VK_QUERY_BEGUN || !IsScoped();
 
     m_state = D3D11_VK_QUERY_ENDED;
-    m_resetCtr.fetch_add(1, std::memory_order_acquire);
+    m_resetCtr.fetch_add(1);
     return result;
   }
 
@@ -342,10 +342,7 @@ namespace dxvk {
   
   
   UINT64 D3D11Query::GetTimestampQueryFrequency() const {
-    Rc<DxvkDevice>  device  = m_parent->GetDXVKDevice();
-    Rc<DxvkAdapter> adapter = device->adapter();
-
-    const auto& limits = adapter->deviceProperties().core.properties.limits;
+    const auto& limits = m_parent->GetDXVKDevice()->properties().core.properties.limits;
     return uint64_t(1'000'000'000.0f / limits.timestampPeriod);
   }
 

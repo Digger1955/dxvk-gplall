@@ -132,8 +132,6 @@ namespace dxvk {
 
     void SyncFrameLatency();
 
-    bool HasFormatsUnlocked() const { return m_unlockAdditionalFormats; }
-
     void DestroyBackBuffers();
 
     bool UpdateWindowCtx();
@@ -186,10 +184,10 @@ namespace dxvk {
     Rc<hud::HudClientApiItem>       m_apiHud;
     Rc<hud::HudLatencyItem>         m_latencyHud;
     Rc<hud::HudRenderLatencyItem>   m_renderLatencyHud;
+    Rc<hud::HudJitterItem>          m_jitterHud;
     Rc<hud::HudLatencyDetailsItem>  m_latencyDetailsHud;
 
     std::optional<VkHdrMetadataEXT> m_hdrMetadata;
-    bool m_unlockAdditionalFormats = false;
 
     D3D9VkExtSwapchain m_swapchainExt;
 

@@ -390,7 +390,6 @@ namespace dxvk::hud {
     depInfo.pImageMemoryBarriers = &imageBarrier;
 
     ctx->cmdPipelineBarrier(DxvkCmdBuffer::InitBuffer, &depInfo);
-    m_fontTexture->trackInitialization(imageBarrier.subresourceRange);
 
     VkBufferCopy2 bufferRegion = { VK_STRUCTURE_TYPE_BUFFER_COPY_2 };
     bufferRegion.srcOffset = uploadSlice.offset;
@@ -446,6 +445,8 @@ namespace dxvk::hud {
 
     ctx->cmdPipelineBarrier(DxvkCmdBuffer::InitBuffer, &depInfo);
 
+    m_fontTexture->trackLayout(m_fontTexture->getAvailableSubresources(), m_fontTexture->info().layout);
+
     ctx->track(uploadBuffer, DxvkAccess::Read);
     ctx->track(m_fontBuffer, DxvkAccess::Write);
     ctx->track(m_fontTexture, DxvkAccess::Write);
@@ -488,7 +489,7 @@ namespace dxvk::hud {
     util::DxvkBuiltInGraphicsState state;
     state.vs = util::DxvkBuiltInShaderStage(hud_text_vert, nullptr);
     state.fs = util::DxvkBuiltInShaderStage(hud_text_frag, &specInfo);
-    state.colorFormat = key.format;
+    state.colorFormats[0] = key.format;
     state.cbAttachment = &cbAttachment;
 
     return m_device->createBuiltInGraphicsPipeline(m_textPipelineLayout, state);

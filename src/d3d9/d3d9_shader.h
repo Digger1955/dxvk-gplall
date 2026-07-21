@@ -1,14 +1,82 @@
 #pragma once
 
-#include "d3d9_resource.h"
-#include "../dxso/dxso_module.h"
-#include "d3d9_util.h"
-#include "d3d9_mem.h"
-
 #include <array>
+#include <string>
+
+#include <sm3/sm3_parser.h>
+
+#include "../dxvk/dxvk_shader.h"
+#include "../dxvk/dxvk_shader_key.h"
+#include "../dxvk/dxvk_shader_ir.h"
+
+#include "../util/util_unmap.h"
+
+#include "d3d9_resource.h"
+#include "d3d9_shader_analysis.h"
+#include "d3d9_util.h"
 
 namespace dxvk {
 
+  struct D3D9ShaderOptions {
+    /** Whether the device is configured to do SWVP.
+     * This must only be true for vertex shaders.
+     * It results in significantly larger amounts of shader constants.
+     */
+    bool isSWVP;
+
+    /** Whether to emulate d3d9 float behaviour using clampps
+     * True:  Perform emulation to emulate behaviour (ie. anything * 0 = 0)
+     * False: Don't do anything.
+     */
+    D3D9FloatEmulation d3d9FloatEmulation;
+
+    /** Always use a spec constant to determine sampler type (instead of just in PS 1.x)
+     * Works around a game bug in Halo CE where it gives cube textures to 2d/volume samplers
+     */
+    bool forceSamplerTypeSpecConstants;
+  };
+
+  static_assert(sizeof(D3D9ShaderOptions) == 3u);
+
+  struct D3D9ShaderCreateInfo {
+    DxvkIrShaderCreateInfo irCreateInfo;
+
+    D3D9ShaderOptions shaderOptions;
+  };
+
+  /**
+   * \brief Shader resource mapping
+   *
+   * Helper class to compute backend resource
+   * indices for D3D9 binding slots.
+   */
+  struct D3D9ShaderResourceMapping {
+    enum CbvIndex : uint32_t {
+      VSClipPlanes            = 0u,
+      VSFixedFunction         = 1u,
+      VSVertexBlendData       = 2u,
+      VSStaticConstants       = 3u,
+      VSDynamicConstants      = 4u,
+      PSShared                = 5u,
+      PSStaticConstants       = 6u,
+
+      Count
+    };
+
+    static constexpr uint32_t computeTextureBinding(D3D9ShaderType shaderType, uint32_t index) {
+      auto base = (shaderType == D3D9ShaderType::VertexShader) ? FirstVSSamplerSlot : 0u;
+      return base + index;
+    }
+
+    static constexpr uint32_t getSwvpBufferIndex() {
+      return caps::MaxTextures;
+    }
+
+    static constexpr std::pair<VkShaderStageFlags, uint32_t> getTextureSlotInfo(uint32_t index) {
+      // Sampler slot and binding indices match 1:1, see above
+      return std::make_pair(IsVSSampler(index) ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT, index);
+    }
+  };
 
   /**
    * \brief Common shader object
@@ -21,16 +89,14 @@ namespace dxvk {
 
   public:
 
-    D3D9CommonShader();
+    D3D9CommonShader() = default;
 
     D3D9CommonShader(
             D3D9DeviceEx*         pDevice,
-            VkShaderStageFlagBits ShaderStage,
-      const DxvkShaderKey&        Key,
-      const DxsoModuleInfo*       pDxbcModuleInfo,
-      const void*                 pShaderBytecode,
-      const DxsoAnalysisInfo&     AnalysisInfo,
-            DxsoModule*           pModule);
+      const DxvkShaderHash&       ShaderKey,
+            D3D9ShaderAnalysis&&  Analysis,
+      const D3D9ShaderCreateInfo& ModuleInfo,
+      const void*                 pShaderBytecode);
 
 
     Rc<DxvkShader> GetShader() const {
@@ -41,43 +107,24 @@ namespace dxvk {
       return m_shader->debugName();
     }
 
-    const DxsoIsgn& GetIsgn() const {
-      return m_isgn;
+    const D3D9InputSignature& GetInputSignature() const {
+      return m_analysis.GetInputSignature();
     }
 
-    const DxsoShaderMetaInfo& GetMeta() const { return m_meta; }
-    const DxsoDefinedConstants& GetConstants() const { return m_constants; }
+    const D3D9ShaderConstantsInfo& GetConstantsInfo() const { return m_analysis.GetConstantsInfo(); }
+    const D3D9ImmediateConstantsInfo& GetImmediateConstants() const { return m_analysis.GetImmediateConstants(); }
 
-    D3D9ShaderMasks GetShaderMask() const { return D3D9ShaderMasks{ m_usedSamplers, m_usedRTs }; }
-
-    const DxsoProgramInfo& GetInfo() const { return m_info; }
-
-    int32_t GetMaxDefinedFloatConstant() const { return m_maxDefinedFloatConst; }
-
-    int32_t GetMaxDefinedIntConstant() const { return m_maxDefinedIntConst; }
-
-    int32_t GetMaxDefinedBoolConstant() const { return m_maxDefinedBoolConst; }
-
-    VkImageViewType GetImageViewType(uint32_t samplerSlot) const {
-      const uint32_t offset = samplerSlot * 2;
-      const uint32_t mask = 0b11;
-      return static_cast<VkImageViewType>((m_textureTypes >> offset) & mask);
+    const D3D9ConstantBufferCopy* GetConstantLayout() const {
+      return m_analysis.GetConstantLayout();
     }
+
+    D3D9ShaderMasks GetShaderMask() const { return D3D9ShaderMasks{ m_analysis.GetSamplerMask(), m_analysis.GetRenderTargetMask() }; }
+
+    dxbc_spv::sm3::ShaderInfo GetInfo() const { return m_analysis.GetShaderInfo(); }
 
   private:
 
-    DxsoIsgn              m_isgn;
-    uint32_t              m_usedSamplers;
-    uint32_t              m_usedRTs;
-    uint32_t              m_textureTypes;
-
-    DxsoProgramInfo       m_info;
-    DxsoShaderMetaInfo    m_meta;
-    DxsoDefinedConstants  m_constants;
-    int32_t               m_maxDefinedFloatConst = -1;
-    int32_t               m_maxDefinedIntConst = -1;
-    int32_t               m_maxDefinedBoolConst = -1;
-
+    D3D9ShaderAnalysis    m_analysis;
     Rc<DxvkShader>        m_shader;
 
   };
@@ -96,17 +143,16 @@ namespace dxvk {
 
     D3D9Shader(
             D3D9DeviceEx*        pDevice,
-            D3D9MemoryAllocator* pAllocator,
+            MemoryFilePool*      pAllocator,
       const D3D9CommonShader&    CommonShader,
       const void*                pShaderBytecode,
             uint32_t             BytecodeLength)
       : D3D9DeviceChild<Base>( pDevice )
       , m_shader             ( CommonShader )
-      , m_bytecode           ( pAllocator->Alloc(BytecodeLength) )
+      , m_bytecode           ( *pAllocator, BytecodeLength )
       , m_bytecodeLength     ( BytecodeLength ) {
-      m_bytecode.Map();
-      std::memcpy(m_bytecode.Ptr(), pShaderBytecode, BytecodeLength);
-      m_bytecode.Unmap();
+      std::memcpy(m_bytecode.map(), pShaderBytecode, BytecodeLength);
+      m_bytecode.unmap();
     }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) {
@@ -138,11 +184,9 @@ namespace dxvk {
         return D3D_OK;
       }
 
-      m_bytecode.Map();
       uint32_t copyAmount = std::min(*pSizeOfData, m_bytecodeLength);
-      std::memcpy(pOut, m_bytecode.Ptr(), copyAmount);
-      m_bytecode.Unmap();
-
+      std::memcpy(pOut, m_bytecode.map(), copyAmount);
+      m_bytecode.unmap();
       return D3D_OK;
     }
 
@@ -154,7 +198,7 @@ namespace dxvk {
 
     D3D9CommonShader m_shader;
 
-    D3D9Memory       m_bytecode;
+    MemoryFileRegion m_bytecode;
     uint32_t         m_bytecodeLength;
 
   };
@@ -167,7 +211,7 @@ namespace dxvk {
 
     D3D9VertexShader(
             D3D9DeviceEx*        pDevice,
-            D3D9MemoryAllocator* pAllocator,
+            MemoryFilePool*      pAllocator,
       const D3D9CommonShader&    CommonShader,
       const void*                pShaderBytecode,
             uint32_t             BytecodeLength)
@@ -181,7 +225,7 @@ namespace dxvk {
 
     D3D9PixelShader(
             D3D9DeviceEx*        pDevice,
-            D3D9MemoryAllocator* pAllocator,
+            MemoryFilePool*      pAllocator,
       const D3D9CommonShader&    CommonShader,
       const void*                pShaderBytecode,
             uint32_t             BytecodeLength)
@@ -201,20 +245,20 @@ namespace dxvk {
     
   public:
     
-    void GetShaderModule(
-            D3D9DeviceEx*         pDevice,
-            D3D9CommonShader*     pShaderModule,
-            uint32_t*             pLength,
-            VkShaderStageFlagBits ShaderStage,
-      const DxsoModuleInfo*       pDxbcModuleInfo,
-      const void*                 pShaderBytecode);
+    HRESULT GetShaderModule(
+            D3D9DeviceEx*           pDevice,
+      const DxvkShaderHash&         ShaderKey,
+            D3D9ShaderAnalysis&&    ShaderAnalysis,
+      const D3D9ShaderCreateInfo&   ModuleInfo,
+      const void*                   pShaderBytecode,
+            D3D9CommonShader*       pShader);
     
   private:
     
     dxvk::mutex m_mutex;
     
     std::unordered_map<
-      DxvkShaderKey,
+      DxvkShaderHash,
       D3D9CommonShader,
       DxvkHash, DxvkEq> m_modules;
     

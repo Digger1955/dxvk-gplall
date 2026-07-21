@@ -527,7 +527,7 @@ namespace dxvk::hud {
     state.vs = util::DxvkBuiltInShaderStage(hud_graph_vert, nullptr);
     state.fs = util::DxvkBuiltInShaderStage(hud_graph_frag, &specInfo);
     state.iaState = &iaState;
-    state.colorFormat = key.format;
+    state.colorFormats[0] = key.format;
     state.cbAttachment = &cbAttachment;
 
     return m_device->createBuiltInGraphicsPipeline(m_gfxPipelineLayout, state);
@@ -752,17 +752,23 @@ namespace dxvk::hud {
       m_copyThreadLoad = uint32_t(double(100.0 * (busyTicks - m_copyThreadBusyTicks)) / ticks);
       m_copyThreadBusyTicks = busyTicks;
 
+      m_descriptorSetCountDisplay = m_descriptorSetCountMax;
+      m_descriptorSetCountMax = 0u;
+
       m_descriptorHeapUsed = m_descriptorHeapMax;
       m_descriptorHeapMax = 0u;
 
       m_lastUpdate = time;
     }
 
+    auto descriptorSetCount  = counters.getCtr(DxvkStatCounter::DescriptorSetCount);
     m_descriptorPoolCount = counters.getCtr(DxvkStatCounter::DescriptorPoolCount);
-    m_descriptorSetCount  = counters.getCtr(DxvkStatCounter::DescriptorSetCount);
 
     m_descriptorHeapCount = counters.getCtr(DxvkStatCounter::DescriptorHeapCount);
     m_descriptorHeapAlloc = counters.getCtr(DxvkStatCounter::DescriptorHeapSize);
+
+    m_descriptorSetCountMax = std::max(m_descriptorSetCountMax, descriptorSetCount - m_descriptorSetCount);
+    m_descriptorSetCount = descriptorSetCount;
 
     auto descriptorHeapUsed = counters.getCtr(DxvkStatCounter::DescriptorHeapUsed);
     m_descriptorHeapMax = std::max(descriptorHeapUsed - m_descriptorHeapPrev, m_descriptorHeapMax);
@@ -783,7 +789,7 @@ namespace dxvk::hud {
 
       position.y += 20;
       renderer.drawText(16, position, 0xff8040ff, "Descriptor sets:");
-      renderer.drawText(16, { position.x + 216, position.y }, 0xffffffffu, str::format(m_descriptorSetCount));
+      renderer.drawText(16, { position.x + 216, position.y }, 0xffffffffu, str::format(m_descriptorSetCountDisplay));
     }
 
     if (m_descriptorHeapAlloc) {
@@ -1146,7 +1152,7 @@ namespace dxvk::hud {
 
     util::DxvkBuiltInGraphicsState state = { };
     state.iaState = &iaState;
-    state.colorFormat = key.format;
+    state.colorFormats[0] = key.format;
     state.cbAttachment = &cbAttachment;
 
     state.vs = util::DxvkBuiltInShaderStage(hud_chunk_vert_background, nullptr);

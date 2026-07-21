@@ -10,6 +10,7 @@
 namespace dxvk {
 
   static Singleton<DxvkInstance>   g_dxvkInstance;
+  static Singleton<DxgiOptions>    g_dxgiOptions;
 
   static dxvk::mutex               s_globalHDRStateMutex;
   static DXVK_VK_GLOBAL_HDR_STATE  s_globalHDRState{};
@@ -81,8 +82,8 @@ namespace dxvk {
   DxgiFactory::DxgiFactory(UINT Flags)
   : m_instance        (g_dxvkInstance.acquire(0)),
     m_interop         (this),
-    m_options         (m_instance->config()),
-    m_monitorInfo     (this, m_options),
+    m_options         (g_dxgiOptions.acquire(m_instance->config())),
+    m_monitorInfo     (this, *m_options),
     m_flags           (Flags),
     m_monitorFallback (false),
     m_destructionNotifier(this) {
@@ -105,13 +106,15 @@ namespace dxvk {
 
       // Remove all monitors that are associated
       // with the current adapter from the list.
-      const auto& vk11 = adapter->deviceProperties().vk11;
+      auto info = adapter->info();
 
-      if (vk11.deviceLUIDValid) {
-        auto luid = reinterpret_cast<const LUID*>(&vk11.deviceLUID);
+      if (info.luidIsValid) {
+        LUID luid = {};
+        std::memcpy(&luid, &info.deviceLuid[0u], sizeof(luid));
 
         for (uint32_t j = 0; ; j++) {
-          HMONITOR hmon = wsi::enumMonitors(&luid, 1, j);
+          const LUID* pLuid = &luid;
+          HMONITOR hmon = wsi::enumMonitors(&pLuid, 1, j);
 
           if (!hmon)
             break;
@@ -132,6 +135,7 @@ namespace dxvk {
   
   
   DxgiFactory::~DxgiFactory() {
+    g_dxgiOptions.release();
     g_dxvkInstance.release();
   }
   
@@ -282,7 +286,7 @@ namespace dxvk {
           IDXGISwapChain1**     ppSwapChain) {
     InitReturnPtr(ppSwapChain);
 
-    if (!m_options.enableDummyCompositionSwapchain) {
+    if (!m_options->enableDummyCompositionSwapchain) {
       Logger::err("DxgiFactory::CreateSwapChainForComposition: Not implemented");
       return E_NOTIMPL;
     }

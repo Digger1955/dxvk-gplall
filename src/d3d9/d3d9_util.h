@@ -7,7 +7,6 @@
 
 #include "d3d9_format.h"
 
-#include "../dxso/dxso_common.h"
 #include "../dxvk/dxvk_device.h"
 
 #include "../util/util_matrix.h"
@@ -21,9 +20,6 @@ namespace dxvk {
     uint32_t samplerMask;
     uint32_t rtMask;
   };
-
-  static constexpr D3D9ShaderMasks FixedFunctionMask =
-    { 0b11111111, 0b1 };
 
   struct D3D9BlendState {
     D3DBLEND   Src;
@@ -79,30 +75,15 @@ namespace dxvk {
     return Sampler;
   }
 
-  /**
-   * @brief Remaps the sampler from an index applying to the entire pipeline to one relative to the shader stage and returns the shader type
-   *
-   * The displacement map sampler will be treated as a 17th pixel shader sampler.
-   *
-   * @param Sampler Sampler index (according to our internal way of storing samplers)
-   * @return std::pair<DxsoProgramType, DWORD> Shader stage that it belongs to and the relative sampler index
-   */
-  inline std::pair<DxsoProgramType, DWORD> RemapStateSamplerShader(DWORD Sampler) {
-    if (Sampler >= FirstVSSamplerSlot)
-      return std::make_pair(DxsoProgramTypes::VertexShader, Sampler - FirstVSSamplerSlot);
-
-    return std::make_pair(DxsoProgramTypes::PixelShader, Sampler);
-  }
 
   /**
    * @brief Returns whether the sampler belongs to the vertex shader.
    *
    * The displacement map sampler is part of a fixed function feature,
    * so it does not belong to the vertex shader.
-   *
    * @param Sampler Sampler index (according to our internal way of storing samplers)
    */
-  inline bool IsVSSampler(uint32_t Sampler) {
+  constexpr bool IsVSSampler(uint32_t Sampler) {
     return Sampler >= FirstVSSamplerSlot;
   }
 
@@ -110,25 +91,13 @@ namespace dxvk {
    * @brief Returns whether the sampler belongs to the pixel shader.
    *
    * The displacement map sampler is part of a fixed function feature,
-   * so (unlike in RemapStateSamplerShader) it does not belong to the pixel shader.
-   *
+   * so it does not belong to the pixel shader.
    * @param Sampler Sampler index (according to our internal way of storing samplers)
    */
-  inline bool IsPSSampler(uint32_t Sampler) {
+  constexpr bool IsPSSampler(uint32_t Sampler) {
     return Sampler <= caps::MaxTexturesPS;
   }
 
-  /**
-   * @brief Remaps the sampler from an index (counted according to the API) to one relative to the shader stage and returns the shader type
-   *
-   * @param Sampler Sampler index (according to the API)
-   * @return std::pair<DxsoProgramType, DWORD> Shader stage that it belongs to and the relative sampler index
-   */
-  inline std::pair<DxsoProgramType, DWORD> RemapSamplerShader(DWORD Sampler) {
-    Sampler = RemapSamplerState(Sampler);
-
-    return RemapStateSamplerShader(Sampler);
-  }
 
   template <typename T, typename J>
   void CastRefPrivate(J* ptr, bool AddRef) {
@@ -146,7 +115,6 @@ namespace dxvk {
           ID3DBlob** ppDisassembly);
 
   HRESULT DecodeMultiSampleType(
-    const Rc<DxvkDevice>&           pDevice,
           D3DMULTISAMPLE_TYPE       MultiSample,
           DWORD                     MultisampleQuality,
           VkSampleCountFlagBits*    pSampleCount);
@@ -161,11 +129,11 @@ namespace dxvk {
     return srgb ? srgbFormat : format;
   }
 
-  constexpr VkShaderStageFlagBits GetShaderStage(DxsoProgramType ProgramType) {
-    switch (ProgramType) {
-      case DxsoProgramTypes::VertexShader:  return VK_SHADER_STAGE_VERTEX_BIT;
-      case DxsoProgramTypes::PixelShader:   return VK_SHADER_STAGE_FRAGMENT_BIT;
-      default:                              return VkShaderStageFlagBits(0);
+  constexpr VkShaderStageFlagBits GetShaderStage(D3D9ShaderType ShaderType) {
+    switch (ShaderType) {
+      case D3D9ShaderType::VertexShader: return VK_SHADER_STAGE_VERTEX_BIT;
+      case D3D9ShaderType::PixelShader:  return VK_SHADER_STAGE_FRAGMENT_BIT;
+      default:                           return VkShaderStageFlagBits(0);
     }
   }
 
@@ -350,6 +318,9 @@ inline bool operator != (const D3DVIEWPORT9& a, const D3DVIEWPORT9& b) {
   return !(a == b);
 }
 
+
+// Missing in some versions of mingw headers
+#ifndef _MSC_VER
 inline bool operator == (const RECT& a, const RECT& b) {
   return a.left   == b.left  &&
          a.right  == b.right &&
@@ -360,6 +331,7 @@ inline bool operator == (const RECT& a, const RECT& b) {
 inline bool operator != (const RECT& a, const RECT& b) {
   return !(a == b);
 }
+#endif /* _MSC_VER */
 
 inline bool operator == (const POINT& a, const POINT& b) {
   return a.x == b.x && a.y == b.y;
