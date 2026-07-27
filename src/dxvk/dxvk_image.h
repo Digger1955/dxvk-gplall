@@ -301,7 +301,7 @@ namespace dxvk {
      * \returns \c true if async compilation is supported
      */
     [[nodiscard]] bool getRtBindingAsyncCompilationCompat() const {
-      return m_rtBindingFrameCount >= 2;
+      return m_rtBindingFrameCount >= 6;
     }
 
 
