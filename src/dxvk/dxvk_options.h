@@ -76,7 +76,7 @@ namespace dxvk {
     VkDeviceSize maxMemoryBudget = 0u;
 
     /// Frame pacing
-    std::string framePace;
+    std::string framePace = "max-frame-latency";
 
     /// A value in microseconds to fine-tune the low-latency frame pacing.
     /// Positive values make a frame begin later which might improve responsiveness.

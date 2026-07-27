@@ -25,7 +25,7 @@ namespace dxvk {
     hideIntegratedGraphics = config.getOption<bool>   ("dxvk.hideIntegratedGraphics", false);
     zeroMappedMemory      = config.getOption<bool>    ("dxvk.zeroMappedMemory",       false);
     allowFse              = config.getOption<bool>    ("dxvk.allowFse",               false);
-    framePace             = config.getOption<std::string>("dxvk.framePace",           "");
+    framePace             = config.getOption<std::string>("dxvk.framePace",           "max-frame-latency");
     lowLatencyOffset      = config.getOption<int32_t> ("dxvk.lowLatencyOffset",       0);
     lowLatencyAllowCpuFramesOverlap
                           = config.getOption<bool>    ("dxvk.lowLatencyAllowCpuFramesOverlap", true);

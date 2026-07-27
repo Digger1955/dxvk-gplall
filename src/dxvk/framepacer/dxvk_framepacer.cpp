@@ -16,11 +16,12 @@ namespace dxvk {
 
   FramePacer::FramePacer( DxvkDevice* device, const DxvkOptions& options, uint64_t firstFrameId )
   : m_latencyMarkersStorage(firstFrameId), m_device(device), m_calibratedDeviceTimestamps(device) {
-    // We'll default to LOW_LATENCY, which generally provides the best "input lag"
-    // along with time consistency and often appears the smoothest too.
-    // MAX_FRAME_LATENCY can have advantages in some games like God of War that provide inconsistent
-    // cpu frametimes. Also, it's tuned for highest fps which can be relevant in benchmarks.
-    FramePacerMode::Mode mode = FramePacerMode::LOW_LATENCY;
+    // MAX_FRAME_LATENCY is the default FramePacerMode, due to GPLALL improvements,
+    // such as improved Sleep, which provides precise and efficient FPS limiting,
+    // removed refresh rate heuristics, which interfered with FPS limiter, etc.
+    // It has advantages in games that provide inconsistent CPU frametimes. 
+    // Also, it does not sacrifice perfomance or energy efficiency.
+    FramePacerMode::Mode mode = FramePacerMode::MAX_FRAME_LATENCY;
     int refreshRate = 0;
 
     std::string configStr = env::getEnvVar("DXVK_FRAME_PACE");
