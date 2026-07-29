@@ -6899,8 +6899,6 @@ namespace dxvk {
 
       // End active render pass and reset load/store ops for the new render targets.
       DxvkFramebufferInfo fbInfo = makeFramebufferInfo(m_state.om.renderTargets);
-      this->updateRenderTargetLayouts(fbInfo, m_state.om.framebufferInfo);
-
 
       this->spillRenderPass(true);
 
