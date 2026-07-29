@@ -12,11 +12,14 @@ dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
 compiler_args = [
   '-O3', # Optimizes for speed. -Os fails to compile due to compiler bug
   '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code
-  '-march=x86-64', # SSE2 required
-  '-mtune=x86-64', # Tuning for SSE2 CPUs 
+  '-march=x86-64-v2', # SSE4.2 required
+  '-mtune=intel', # Tuning for Intel CPUs
   '-msse',
   '-msse2',
   '-mfpmath=sse',
+  '-mbmi', # LZCNT/TZCNT etc. Improves the speed of bit manipulation.
+  '-mbmi2', # PDEP/PEXT etc. Improves the speed of bit manipulation.
+  '-mmovbe', # Optimizes byte swapping of four and eight byte entities.
   '-fno-semantic-interposition', # Semantic interposition prevents a range of inter-procedural optimizations
   '-ffunction-sections', # Place each function into its own section, improves locality of reference in the instruction space
   '-fdata-sections', # Place each data item into its own section, improves locality of reference in the instruction space
@@ -108,8 +111,8 @@ if platform == 'windows'
   else
     # Windows (MSVC) Compiler Options
     compiler_args += [
-      '/arch:SSE2', # MSVC default, SSE2 required
-      '/favor:blend', # MSVC default, designed to give the best performance across a broad range of x86 and x64 processors
+      '/arch:SSE4.2', # SSE4.2 required. Enables POPCNT and LZCNT.
+      '/favor:INTEL64', # Tuning for INTEL64 CPUs
       '/O1', # Minimizes Size, eqvivalent to - /Og /Os /Oy /Ob2 /GF /Gy. For out-of-order CPUs fitting a code segment into the instruction cache is preffered to fastest code
       '/Oi', # Replaces function calls with intrinsic or otherwise special forms of the function
       '/Ob3', # More aggressive inlining than /Ob2, but has the same restrictions
