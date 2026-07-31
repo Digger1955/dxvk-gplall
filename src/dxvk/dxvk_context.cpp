@@ -6013,7 +6013,9 @@ namespace dxvk {
       }
     }
 
+/*
     VkFormat depthStencilFormat = VK_FORMAT_UNDEFINED;
+*/
     VkImageAspectFlags depthStencilAspects = 0;
     VkImageAspectFlags depthStencilWritable = 0;
 
@@ -6023,7 +6025,9 @@ namespace dxvk {
     const auto& depthTarget = framebufferInfo.getDepthTarget();
 
     if (depthTarget.view) {
+/*
       depthStencilFormat = depthTarget.view->info().format;
+*/
       depthStencilAspects = depthTarget.view->info().aspects;
       depthStencilWritable = vk::getWritableAspectsForLayout(depthTarget.view->info().layout);
 
