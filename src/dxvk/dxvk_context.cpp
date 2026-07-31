@@ -5962,8 +5962,8 @@ namespace dxvk {
 
     m_state.om.attachmentMask.clear();
 
-    VkCommandBufferInheritanceRenderingInfo renderingInheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO };
 /*
+    VkCommandBufferInheritanceRenderingInfo renderingInheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO };
     VkCommandBufferInheritanceInfo inheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO, &renderingInheritance };
 */
 
@@ -5989,7 +5989,9 @@ namespace dxvk {
         colorInfo.loadOp = ops.colorOps[i].loadOp;
         colorInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
+/*
         renderingInheritance.rasterizationSamples = colorTarget.view->image()->info().sampleCount;
+*/
 
         if (ops.colorOps[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
           colorInfo.clearValue.color = ops.colorOps[i].clearValue;
@@ -6038,8 +6040,9 @@ namespace dxvk {
         depthInfo.clearValue.depthStencil.depth = ops.depthOps.clearValue.depth;
         depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
       }
-
+/*
       renderingInheritance.rasterizationSamples = depthTarget.view->image()->info().sampleCount;
+*/
     }
 
     auto& stencilInfo = m_state.om.renderingInfo.stencil;
@@ -6065,18 +6068,24 @@ namespace dxvk {
     if (colorInfoCount) {
       renderingInfo.colorAttachmentCount = colorInfoCount;
       renderingInfo.pColorAttachments = m_state.om.renderingInfo.color.data();
+/*
       renderingInheritance.colorAttachmentCount = colorInfoCount;
       renderingInheritance.pColorAttachmentFormats = colorFormats.data();
+*/
     }
 
     if (depthStencilAspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
       renderingInfo.pDepthAttachment = &depthInfo;
+/*
       renderingInheritance.depthAttachmentFormat = depthStencilFormat;
+*/
     }
 
     if (depthStencilAspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       renderingInfo.pStencilAttachment = &stencilInfo;
+/*
       renderingInheritance.stencilAttachmentFormat = depthStencilFormat;
+*/
     }
 
     // Reset render area tracking, will be adjusted when drawing with viewports.
