@@ -5963,7 +5963,9 @@ namespace dxvk {
     m_state.om.attachmentMask.clear();
 
     VkCommandBufferInheritanceRenderingInfo renderingInheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO };
+/*
     VkCommandBufferInheritanceInfo inheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO, &renderingInheritance };
+*/
 
     uint32_t colorInfoCount = 0;
     uint32_t lateClearCount = 0;
