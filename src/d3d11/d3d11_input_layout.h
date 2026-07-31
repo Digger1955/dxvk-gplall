@@ -8,6 +8,11 @@ namespace dxvk {
   
   class D3D11Device;
 
+  struct alignas(16) D3D11VertexInput {
+    std::array<DxvkVertexInput, MaxNumVertexAttributes + MaxNumVertexBindings> inputs;
+  };
+
+
   class D3D11InputLayout : public D3D11DeviceChild<ID3D11InputLayout> {
     
   public:
@@ -34,22 +39,22 @@ namespace dxvk {
     }
 
     DxvkVertexInput GetInput(uint32_t Index) const {
-      return m_inputs[Index];
+      return m_input.inputs[Index];
     }
 
     bool Compare(
       const D3D11InputLayout*     pOther) const;
-    
+
     D3D10InputLayout* GetD3D10Iface() {
       return &m_d3d10;
     }
-    
+
   private:
+
+    D3D11VertexInput m_input = { };
 
     uint32_t m_attributeCount = 0;
     uint32_t m_bindingCount = 0;
-
-    std::array<DxvkVertexInput, MaxNumVertexAttributes + MaxNumVertexBindings> m_inputs = { };
 
     D3D10InputLayout m_d3d10;
 
