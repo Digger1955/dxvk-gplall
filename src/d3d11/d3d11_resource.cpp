@@ -87,7 +87,9 @@ namespace dxvk {
     if (!m_supported) {
       if (!m_warned) {
         m_warned = true;
+/*
         Logger::err("D3D11DXGIKeyedMutex::AcquireSync: Not supported");
+*/
       }
       return S_OK;
     }
@@ -281,8 +283,10 @@ namespace dxvk {
         !(texture->Desc()->MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE))
       return E_INVALIDARG;
 
+/*
     if (lpName)
       Logger::warn("Naming shared resources not supported");
+*/
 
     HANDLE handle = texture->GetImage()->sharedHandle();
 

@@ -54,7 +54,6 @@ namespace dxvk {
     , m_d3d9Options        ( dxvkDevice, pParent->GetInstance()->config() )
     , m_multithread        ( BehaviorFlags & D3DCREATE_MULTITHREADED )
     , m_isSWVP             ( (BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) != 0 )
-    , m_isD3D8Compatible   ( pParent->IsD3D8Compatible() )
     , m_csThread           ( dxvkDevice, dxvkDevice->createContext() )
     , m_csChunk            ( AllocCsChunk() )
     , m_submissionFence    ( new sync::Fence() )
@@ -62,15 +61,18 @@ namespace dxvk {
     , m_d3d9Interop        ( this )
     , m_d3d9On12Args       ( pAdapter->Get9On12Args() )
     , m_d3d9On12           ( this )
-    , m_d3d8Bridge         ( this ) {
+    , m_legacyD3DBridge    ( this )
+    , m_d3dCompatibility   ( pParent->GetD3DCompatibilityFlags() ) {
 
     // If we can SWVP, then we use an extended constant set
     // as SWVP has many more slots available than HWVP.
     bool canSWVP = CanSWVP();
     DetermineConstantLayouts(canSWVP);
 
+/*
     if (canSWVP)
       Logger::info("D3D9DeviceEx: Using extended constant set for software vertex processing.");
+*/
 
     if (m_dxvkDevice->debugFlags().test(DxvkDebugFlag::Markers))
       m_annotation = new D3D9UserDefinedAnnotation(this);
@@ -123,9 +125,12 @@ namespace dxvk {
       vsConstSet.maxChangedConstB = vsConstSet.layout.boolCount;
       psConstSet.maxChangedConstF = psConstSet.layout.floatCount;
 
+/*
       if (supportsRobustness2) {
         Logger::warn("Disabling robust constant buffer access because of alignment.");
       }
+*/
+
     }
 
     // Check for VK_EXT_graphics_pipeline_libraries
@@ -222,18 +227,16 @@ namespace dxvk {
 
     *ppvObject = nullptr;
 
-    bool extended = m_parent->IsExtended()
-                 && riid == __uuidof(IDirect3DDevice9Ex);
-
     if (riid == __uuidof(IUnknown)
      || riid == __uuidof(IDirect3DDevice9)
-     || extended) {
+     || (m_d3dCompatibility.test(D3DCompatibility::D3D9Ex) &&
+         riid == __uuidof(IDirect3DDevice9Ex))) {
       *ppvObject = ref(this);
       return S_OK;
     }
 
-    if (riid == __uuidof(IDxvkD3D8Bridge)) {
-      *ppvObject = ref(&m_d3d8Bridge);
+    if (riid == __uuidof(IDxvkLegacyD3DDeviceBridge)) {
+      *ppvObject = ref(&m_legacyD3DBridge);
       return S_OK;
     }
 
@@ -256,10 +259,12 @@ namespace dxvk {
     if (riid == __uuidof(IDirect3DDevice9Ex))
       return E_NOINTERFACE;
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DDevice9), riid)) {
       Logger::warn("D3D9DeviceEx::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -506,7 +511,7 @@ namespace dxvk {
         return hr;
     }
 
-    if (!IsExtended()) {
+    if (!m_d3dCompatibility.test(D3DCompatibility::D3D9Ex)) {
       // The internal references are always cleared, regardless of whether the Reset call succeeds.
       ResetState(pPresentationParameters);
       m_implicitSwapchain->DestroyBackBuffers();
@@ -545,6 +550,8 @@ namespace dxvk {
 
     m_cursor.ResetCursor();
 
+    const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+
     /*
       * Before calling the IDirect3DDevice9::Reset method for a device,
       * an application should release any explicit render targets,
@@ -554,16 +561,16 @@ namespace dxvk {
       * We have to check after ResetState clears the references held by SetTexture, etc.
       * This matches what Windows D3D9 does.
     */
-    if (unlikely(m_losableResourceCounter.load() != 0 && !IsExtended() && m_d3d9Options.countLosableResources)) {
+    if (unlikely(m_losableResourceCounter.load() != 0 && !isExtended && m_d3d9Options.countLosableResources)) {
       Logger::warn(str::format("Device reset failed because device still has alive losable resources: Device not reset. Remaining resources: ", m_losableResourceCounter.load()));
       m_deviceLostState = D3D9DeviceLostState::NotReset;
       // D3D8 returns D3DERR_DEVICELOST here, whereas D3D9 returns D3DERR_INVALIDCALL.
-      return m_isD3D8Compatible ? D3DERR_DEVICELOST : D3DERR_INVALIDCALL;
+      return m_d3dCompatibility.test(D3DCompatibility::D3D8) ? D3DERR_DEVICELOST : D3DERR_INVALIDCALL;
     }
 
     hr = ResetSwapChain(pPresentationParameters, nullptr);
     if (unlikely(FAILED(hr))) {
-      if (!IsExtended()) {
+      if (!isExtended) {
         Logger::warn("Device reset failed: Device not reset");
         m_deviceLostState = D3D9DeviceLostState::NotReset;
       }
@@ -692,7 +699,8 @@ namespace dxvk {
       if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
         return D3DERR_INVALIDCALL;
 
-      const Com<D3D9Texture2D> texture = new D3D9Texture2D(this, &desc, IsExtended(), pSharedHandle);
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9Texture2D> texture = new D3D9Texture2D(this, &desc, isExtended, pSharedHandle);
 
       m_initializer->InitTexture(texture->GetCommonTexture(), initialData);
       *ppTexture = texture.ref();
@@ -727,8 +735,10 @@ namespace dxvk {
     if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
       return D3DERR_INVALIDCALL;
 
+/*
     if (unlikely(pSharedHandle))
         Logger::err("CreateVolumeTexture: Shared volume textures not supported");
+*/
 
     D3D9_COMMON_TEXTURE_DESC desc;
     desc.Width              = Width;
@@ -755,7 +765,8 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9Texture3D> texture = new D3D9Texture3D(this, &desc, IsExtended());
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9Texture3D> texture = new D3D9Texture3D(this, &desc, isExtended);
       m_initializer->InitTexture(texture->GetCommonTexture());
       *ppVolumeTexture = texture.ref();
 
@@ -788,8 +799,10 @@ namespace dxvk {
     if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
       return D3DERR_INVALIDCALL;
 
+/*
     if (unlikely(pSharedHandle))
         Logger::err("CreateCubeTexture: Shared cube textures not supported");
+*/
 
     D3D9_COMMON_TEXTURE_DESC desc;
     desc.Width              = EdgeLength;
@@ -816,7 +829,8 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9TextureCube> texture = new D3D9TextureCube(this, &desc, IsExtended());
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9TextureCube> texture = new D3D9TextureCube(this, &desc, isExtended);
       m_initializer->InitTexture(texture->GetCommonTexture());
       *ppCubeTexture = texture.ref();
 
@@ -848,8 +862,10 @@ namespace dxvk {
     if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
       return D3DERR_NOTAVAILABLE;
 
+/*
     if (unlikely(pSharedHandle))
         Logger::err("CreateVertexBuffer: Shared vertex buffers not supported");
+*/
 
     D3D9_BUFFER_DESC desc;
     desc.Format = D3D9Format::VERTEXDATA;
@@ -859,11 +875,13 @@ namespace dxvk {
     desc.Type   = D3DRTYPE_VERTEXBUFFER;
     desc.Usage  = Usage;
 
-    if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, IsExtended())))
+    const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+
+    if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, isExtended)))
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9VertexBuffer> buffer = new D3D9VertexBuffer(this, &desc, IsExtended());
+      const Com<D3D9VertexBuffer> buffer = new D3D9VertexBuffer(this, &desc, isExtended);
       m_initializer->InitBuffer(buffer->GetCommonBuffer());
       *ppVertexBuffer = buffer.ref();
 
@@ -895,8 +913,10 @@ namespace dxvk {
     if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
       return D3DERR_NOTAVAILABLE;
 
+/*
     if (unlikely(pSharedHandle))
         Logger::err("CreateIndexBuffer: Shared index buffers not supported");
+*/
 
     D3D9_BUFFER_DESC desc;
     desc.Format = EnumerateFormat(Format);
@@ -905,11 +925,13 @@ namespace dxvk {
     desc.Type   = D3DRTYPE_INDEXBUFFER;
     desc.Usage  = Usage;
 
-    if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, IsExtended())))
+    const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+
+    if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, isExtended)))
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9IndexBuffer> buffer = new D3D9IndexBuffer(this, &desc, IsExtended());
+      const Com<D3D9IndexBuffer> buffer = new D3D9IndexBuffer(this, &desc, isExtended);
       m_initializer->InitBuffer(buffer->GetCommonBuffer());
       *ppIndexBuffer = buffer.ref();
 
@@ -1097,12 +1119,13 @@ namespace dxvk {
 
       if (srcFirstMipExtent != dstFirstMipExtent)
         return D3DERR_INVALIDCALL;
-    } else {
+    } /* else {
       if (unlikely(srcFirstMipExtent.width  > dstFirstMipExtent.width
                 || srcFirstMipExtent.height > dstFirstMipExtent.height
                 || srcFirstMipExtent.depth  > dstFirstMipExtent.depth))
         Logger::warn("D3D9DeviceEx::UpdateTexture: Source dimensions exceed the destination");
     }
+*/
 
     for (uint32_t a = 0; a < arraySlices; a++) {
       // The docs claim that the dirty box is just a performance optimization, however in practice games rely on it.
@@ -1383,7 +1406,7 @@ namespace dxvk {
       bool srcHasAttachmentUsage = (srcTextureInfo->Desc()->Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) != 0;
 
       // D3D9Ex allows StretchRect to regular (non-RT) textures if it is a simple copy.
-      bool isCopy = IsExtended()
+      bool isCopy = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex)
         && pSourceRect == nullptr && pDestRect == nullptr // Yes, the rects have to be null. Even passing a rect that is the same size as the texture is invalid.
         && srcTextureInfo->Desc()->Pool == D3DPOOL_DEFAULT
         && dstTextureInfo->Desc()->Pool == D3DPOOL_DEFAULT
@@ -1394,7 +1417,8 @@ namespace dxvk {
       // - both destination and source are depth stencil surfaces
       // - both destination and source are offscreen plain surfaces.
       // The only way to get a surface with resource type D3DRTYPE_SURFACE without USAGE_RT or USAGE_DS is CreateOffscreenPlainSurface.
-      if (unlikely((!dstHasAttachmentUsage && (!dstIsSurface || !srcIsSurface || srcHasAttachmentUsage)) && !m_isD3D8Compatible && !isCopy))
+      if (unlikely((!dstHasAttachmentUsage && (!dstIsSurface || !srcIsSurface || srcHasAttachmentUsage)) &&
+                                               !m_d3dCompatibility.test(D3DCompatibility::D3D8) && !isCopy))
         return D3DERR_INVALIDCALL;
     }
 
@@ -2517,7 +2541,7 @@ namespace dxvk {
             if ((Value == AlphaToCoverageEnable
               || Value == AlphaToCoverageDisable) &&
                  vendorId == amdVendorId &&
-                 !m_isD3D8Compatible) {
+                 !m_d3dCompatibility.test(D3DCompatibility::D3D8)) {
               UpdateAlphaToCoverangeAndAlphaTest();
               break;
             }
@@ -2534,7 +2558,7 @@ namespace dxvk {
             // INST (AMD specific)
             if (unlikely(Value == uint32_t(D3D9Format::INST) &&
                          vendorId == amdVendorId &&
-                         !m_isD3D8Compatible)) {
+                         !m_d3dCompatibility.test(D3DCompatibility::D3D8))) {
               // Geometry instancing is supported by SM3, but ATI/AMD
               // exposed this hack to retroactively enable it on their
               // SM2-capable hardware. It's esentially a no-op.
@@ -2543,7 +2567,7 @@ namespace dxvk {
 
             // CENT (AMD & Nvidia)
             if (unlikely(Value == uint32_t(D3D9Format::CENT) &&
-                         !m_isD3D8Compatible)) {
+                         !m_d3dCompatibility.test(D3DCompatibility::D3D8))) {
               // Centroid (alternate pixel center) hack.
               // Taken into account anyway, so yet another no-op.
               break;
@@ -2597,7 +2621,7 @@ namespace dxvk {
           const uint32_t vendorId = m_adapter->GetVendorId();
 
           // Nvidia's driver hack for ATOC (also supported on Intel), COPM and SSAA
-          if (likely(vendorId != amdVendorId && !m_isD3D8Compatible)) {
+          if (likely(vendorId != amdVendorId && !m_d3dCompatibility.test(D3DCompatibility::D3D8))) {
             // ATOC (Nvidia & Intel)
             constexpr uint32_t AlphaToCoverageEnable  = uint32_t(D3D9Format::ATOC);
             // Disabling both ATOC and SSAA is done using D3DFMT_UNKNOWN (0)
@@ -2613,14 +2637,18 @@ namespace dxvk {
             if (unlikely(Value == uint32_t(D3D9Format::COPM) &&
                          vendorId == nvidiaVendorId)) {
               // UE3 calls this MinimalNVIDIADriverShaderOptimization
+/*
               Logger::info("D3D9DeviceEx::SetRenderState: MinimalNVIDIADriverShaderOptimization is unsupported");
+*/
               break;
             }
 
             // SSAA (Nvidia specific)
             if (unlikely(Value == uint32_t(D3D9Format::SSAA) &&
                          vendorId == nvidiaVendorId)) {
+/*
               Logger::warn("D3D9DeviceEx::SetRenderState: Transparency supersampling (SSAA) is unsupported");
+*/
               break;
             }
           }
@@ -2705,7 +2733,7 @@ namespace dxvk {
     try {
       const Com<D3D9StateBlock> sb = new D3D9StateBlock(this, stateBlockType);
       *ppSB = sb.ref();
-      if (!m_isD3D8Compatible)
+      if (!m_d3dCompatibility.test(D3DCompatibility::D3D8))
         m_losableResourceCounter++;
 
       return D3D_OK;
@@ -2740,7 +2768,7 @@ namespace dxvk {
     InitReturnPtr(ppSB);
 
     *ppSB = m_recorder.ref();
-    if (!m_isD3D8Compatible)
+    if (!m_d3dCompatibility.test(D3DCompatibility::D3D8))
       m_losableResourceCounter++;
     m_recorder = nullptr;
 
@@ -4323,7 +4351,8 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, IsExtended(), nullptr, pSharedHandle);
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, isExtended, nullptr, pSharedHandle);
       m_initializer->InitTexture(surface->GetCommonTexture());
       *ppSurface = surface.ref();
       m_losableResourceCounter++;
@@ -4392,7 +4421,8 @@ namespace dxvk {
       if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
         return D3DERR_INVALIDCALL;
 
-      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, IsExtended(), nullptr, pSharedHandle);
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, isExtended, nullptr, pSharedHandle);
       m_initializer->InitTexture(surface->GetCommonTexture(), initialData);
       *ppSurface = surface.ref();
 
@@ -4452,7 +4482,8 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     try {
-      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, IsExtended(), nullptr, pSharedHandle);
+      const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+      const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, isExtended, nullptr, pSharedHandle);
       m_initializer->InitTexture(surface->GetCommonTexture());
       *ppSurface = surface.ref();
       m_losableResourceCounter++;
@@ -4703,11 +4734,6 @@ namespace dxvk {
     }
 
     return D3D_OK;
-  }
-
-
-  bool D3D9DeviceEx::IsExtended() {
-    return m_parent->IsExtended();
   }
 
 
@@ -5128,9 +5154,11 @@ namespace dxvk {
       DxvkBufferSlice mappedBufferSlice = pResource->GetBufferSlice(Subresource);
       const Rc<DxvkBuffer> mappedBuffer = pResource->GetBuffer();
 
+/*
       if (unlikely(pResource->GetFormatMapping().ConversionFormatInfo.FormatType != D3D9ConversionFormat_None)) {
         Logger::err(str::format("Reading back format", pResource->Desc()->Format, " is not supported. It is uploaded using the fomrat converter."));
       }
+*/
 
       if (pResource->GetImage() != nullptr) {
         Rc<DxvkImage> resourceImage = pResource->GetImage();
@@ -5445,12 +5473,14 @@ namespace dxvk {
       // The texture uses a format which gets converted by a compute shader.
       const void* mapPtr = MapTexture(pSrcTexture, SrcSubresource);
 
+/*
       // The compute shader does not support only converting a subrect of the texture
       if (unlikely(SrcOffset.x != 0 || SrcOffset.y != 0 || SrcOffset.z != 0
         || DestOffset.x != 0 || DestOffset.y != 0 || DestOffset.z != 0
         || SrcExtent != srcTexLevelExtent)) {
         Logger::warn("Offset and rect not supported with the texture converter.");
       }
+*/
 
       if (unlikely(srcTexLevelExtent != dstTexLevelExtent)) {
         Logger::err("Different extents are not supported with the texture converter.");
@@ -7149,7 +7179,7 @@ namespace dxvk {
 
 
   void D3D9DeviceEx::UpdateAlphaToCoverangeAndAlphaTest() {
-    if (likely(!m_isD3D8Compatible)) {
+    if (likely(!m_d3dCompatibility.test(D3DCompatibility::D3D8))) {
       // ATOC is not supported by D3D8
       bool alphaToCoverageEnabled = true;
 
@@ -8758,7 +8788,7 @@ namespace dxvk {
     rs[D3DRS_POINTSCALE_B]               = bit::cast<DWORD>(0.0f);
     rs[D3DRS_POINTSCALE_C]               = bit::cast<DWORD>(0.0f);
     rs[D3DRS_POINTSIZE]                  = bit::cast<DWORD>(1.0f);
-    rs[D3DRS_POINTSIZE_MIN]              = m_isD3D8Compatible ? bit::cast<DWORD>(0.0f) : bit::cast<DWORD>(1.0f);
+    rs[D3DRS_POINTSIZE_MIN]              = m_d3dCompatibility.test(D3DCompatibility::D3D8) ? bit::cast<DWORD>(0.0f) : bit::cast<DWORD>(1.0f);
     rs[D3DRS_POINTSIZE_MAX]              = bit::cast<DWORD>(limits.pointSizeRange[1]);
     UpdatePushConstant<D3D9RenderStateItem::PointSize>();
     UpdatePushConstant<D3D9RenderStateItem::PointSizeMin>();
@@ -8908,7 +8938,7 @@ namespace dxvk {
 
     // In D3D8, this represents the value of D3DRS_PATCHSEGMENTS.
     // It defaults to 1.0f and is reset as any other render state.
-    if (m_isD3D8Compatible)
+    if (m_d3dCompatibility.test(D3DCompatibility::D3D8))
       m_state.nPatchSegments = 1.0f;
 
     m_alphaTestEnabled = false;
@@ -8959,6 +8989,8 @@ namespace dxvk {
       m_mostRecentlyUsedSwapchain = m_implicitSwapchain.ptr();
     }
 
+    const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+
     if (pPresentationParameters->EnableAutoDepthStencil) {
       D3D9_COMMON_TEXTURE_DESC desc;
       desc.Width              = pPresentationParameters->BackBufferWidth;
@@ -8979,13 +9011,13 @@ namespace dxvk {
       if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc)))
         return D3DERR_NOTAVAILABLE;
 
-      m_autoDepthStencil = new D3D9Surface(this, &desc, IsExtended(), nullptr, nullptr);
+      m_autoDepthStencil = new D3D9Surface(this, &desc, isExtended, nullptr, nullptr);
       m_initializer->InitTexture(m_autoDepthStencil->GetCommonTexture());
       SetDepthStencilSurface(m_autoDepthStencil.ptr());
       m_losableResourceCounter++;
     }
 
-    if (!IsExtended()) {
+    if (!isExtended) {
       SetRenderTarget(0, m_implicitSwapchain->GetBackBuffer(0));
     } else {
       // Extended devices will not reset the MinZ/MaxZ viewport values
@@ -9120,7 +9152,7 @@ namespace dxvk {
   void D3D9DeviceEx::NotifyWindowActivated(HWND window, bool activated) {
     D3D9DeviceLock lock = LockDevice();
 
-    if (likely(!m_d3d9Options.deviceLossOnFocusLoss || IsExtended()))
+    if (likely(!m_d3d9Options.deviceLossOnFocusLoss || m_d3dCompatibility.test(D3DCompatibility::D3D9Ex)))
       return;
 
     if (activated && m_deviceLostState == D3D9DeviceLostState::Lost) {

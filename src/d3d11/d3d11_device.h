@@ -1001,7 +1001,15 @@ namespace dxvk {
 
     D3DDestructionNotifier   m_destructionNotifier;
 
+    struct {
+      HMODULE igd10iumd64 = nullptr;
+    } m_vendorHacks;
+
     uint32_t m_frameLatency = DefaultFrameLatency;
+
+    HMODULE initVendorHacks();
+
+    void cleanupVendorHacks();
 
   };
   

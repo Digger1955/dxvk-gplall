@@ -86,7 +86,8 @@ namespace dxvk {
 
     if (riid == __uuidof(IUnknown)
      || riid == __uuidof(IDirect3DSwapChain9)
-     || (GetParent()->IsExtended() && riid == __uuidof(IDirect3DSwapChain9Ex))) {
+     || (m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex) &&
+         riid == __uuidof(IDirect3DSwapChain9Ex))) {
       *ppvObject = ref(this);
       return S_OK;
     }
@@ -96,10 +97,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DSwapChain9), riid)) {
       Logger::warn("D3D9SwapChainEx::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -1053,10 +1056,12 @@ namespace dxvk {
     // we might need to lock for the BlitGDI fallback path
     desc.IsLockable         = true;
 
+    const bool isExtended = m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex);
+
     for (uint32_t i = 0; i < bufferCount; i++) {
       D3D9Surface* surface;
       try {
-        surface = new D3D9Surface(m_parent, &desc, m_parent->IsExtended(), this, nullptr);
+        surface = new D3D9Surface(m_parent, &desc, isExtended, this, nullptr);
         m_parent->IncrementLosableCounter();
       } catch (const DxvkError& e) {
         DestroyBackBuffers();
@@ -1354,11 +1359,10 @@ namespace dxvk {
       m_srcRect.left   = 0;
       m_srcRect.right  = m_presentParams.BackBufferWidth;
       m_srcRect.bottom = m_presentParams.BackBufferHeight;
-    }
-    else
+    } else {
       m_srcRect = *pSourceRect;
+    }
 
-    
     UINT width, height;
     wsi::getWindowSize(m_window, &width, &height);
 
@@ -1369,10 +1373,9 @@ namespace dxvk {
       dstRect.left   = 0;
       dstRect.right  = LONG(width);
       dstRect.bottom = LONG(height);
-      
-    }
-    else
+    } else {
       dstRect = *pDestRect;
+    }
 
     m_partialCopy =
        dstRect.left != 0
@@ -1397,11 +1400,11 @@ namespace dxvk {
 
 
   std::string D3D9SwapChainEx::GetApiName() {
-    if (this->GetParent()->Is9On12Device())
-      return this->GetParent()->IsExtended() ? "D3D9On12Ex" : "D3D9On12";
+    if (m_parent->Is9On12Device())
+      return m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex) ? "D3D9ExOn12" : "D3D9On12";
 
-    return this->GetParent()->IsD3D8Compatible() ? "D3D8" :
-           this->GetParent()->IsExtended() ? "D3D9Ex" : "D3D9";
+    return m_parent->IsD3DCompatibile(D3DCompatibility::D3D8) ? "D3D8" :
+           m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex) ? "D3D9Ex" : "D3D9";
   }
 
 

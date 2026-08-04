@@ -79,12 +79,14 @@ namespace dxvk {
     copyToStringArray(pIdentifier->DeviceName,  displayName.c_str());    // The GDI device name. Not the actual device name.
     copyToStringArray(pIdentifier->Driver,      m_deviceDriver.c_str()); // This is the driver's dll.
 
+    const bool isExtended = m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex);
+
     pIdentifier->DeviceIdentifier       = m_deviceGuid;
     pIdentifier->DeviceId               = m_deviceId;
     pIdentifier->VendorId               = m_vendorId;
     pIdentifier->Revision               = 0;
     pIdentifier->SubSysId               = 0;
-    pIdentifier->WHQLLevel              = m_parent->IsExtended() ? 1 : 0; // This doesn't check with the driver on Direct3D9Ex and is always 1.
+    pIdentifier->WHQLLevel              = isExtended ? 1 : 0; // This doesn't check with the driver on Direct3D9Ex and is always 1.
     pIdentifier->DriverVersion.QuadPart = INT64_MAX;
 
     return D3D_OK;
@@ -121,7 +123,7 @@ namespace dxvk {
     if (!IsSupportedAdapterFormat(AdapterFormat))
       return D3DERR_NOTAVAILABLE;
 
-    const bool isD3D8Compatible = m_parent->IsD3D8Compatible();
+    const bool isD3D8Compatible = m_parent->IsD3DCompatibile(D3DCompatibility::D3D8);
     const bool isNvidia         = m_vendorId == uint32_t(DxvkGpuVendor::Nvidia);
     const bool isAmd            = m_vendorId == uint32_t(DxvkGpuVendor::Amd);
 
@@ -353,7 +355,7 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     if (unlikely(DeviceType == D3DDEVTYPE_SW)) {
-      if (m_parent->IsD3D8Compatible())
+      if (m_parent->IsD3DCompatibile(D3DCompatibility::D3D8))
         return D3DERR_INVALIDCALL;
       else
         return D3DERR_NOTAVAILABLE;
@@ -361,7 +363,8 @@ namespace dxvk {
 
     auto& options = m_parent->GetOptions();
 
-    const uint32_t maxShaderModel = m_parent->IsD3D8Compatible() ? std::min(1u, options.shaderModel) : options.shaderModel;
+    const uint32_t maxShaderModel = m_parent->IsD3DCompatibile(D3DCompatibility::D3D8) ? std::min(1u, options.shaderModel)
+                                                                                       : options.shaderModel;
     const VkPhysicalDeviceLimits& limits = m_adapter->deviceProperties().limits;
 
     // TODO: Actually care about what the adapter supports here.
@@ -480,7 +483,7 @@ namespace dxvk {
                                     | D3DPBLENDCAPS_BLENDFACTOR;
 
     // Only 9Ex devices advertise D3DPBLENDCAPS_SRCCOLOR2 and D3DPBLENDCAPS_INVSRCCOLOR2
-    if (m_parent->IsExtended())
+    if (m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex))
       pCaps->SrcBlendCaps          |= D3DPBLENDCAPS_SRCCOLOR2
                                     | D3DPBLENDCAPS_INVSRCCOLOR2;
 
@@ -830,13 +833,13 @@ namespace dxvk {
   }
 
 
-  bool D3D9Adapter::IsExtended() const {
-    return m_parent->IsExtended();
+  void D3D9Adapter::RefreshFormatsTable() const {
+    m_d3d9Formats->RefreshFormatSupport(this);
   }
 
 
-  bool D3D9Adapter::IsD3D8Compatible() const {
-    return m_parent->IsD3D8Compatible();
+  bool D3D9Adapter::IsD3DCompatibile(D3DCompatibility d3dCompatibility) const {
+    return m_parent->IsD3DCompatibile(d3dCompatibility);
   }
 
 

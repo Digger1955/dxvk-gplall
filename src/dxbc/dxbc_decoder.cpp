@@ -80,12 +80,14 @@ namespace dxvk {
   
   void DxbcDecodeContext::decodeCustomData(DxbcCodeSlice code) {
     const uint32_t blockLength = code.at(1);
-    
+
     if (blockLength < 2) {
+/*
       Logger::err("DxbcDecodeContext: Invalid custom data block");
+*/
       return;
     }
-    
+
     // Custom data blocks have their own instruction class
     m_instruction.op      = DxbcOpcode::CustomData;
     m_instruction.opClass = DxbcInstClass::CustomData;
@@ -139,9 +141,11 @@ namespace dxvk {
           break;  // part of resource description
         
         default:
+/*
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled extended opcode: ",
             extOpcode));
+*/
       }
     }
     
@@ -209,12 +213,16 @@ namespace dxvk {
           } break;
           
           default:
+/*
             Logger::warn("DxbcDecodeContext: Invalid component selection mode");
+*/
         }
       } break;
           
       default:
+/*
         Logger::warn("DxbcDecodeContext: Invalid component count");
+*/
     }
   }
   
@@ -235,9 +243,11 @@ namespace dxvk {
           break;
         
         default:
+/*
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled extended operand token: ",
             extTokenType));
+*/
       }
     }
   }
@@ -262,7 +272,9 @@ namespace dxvk {
         } break;
 
         default:
+/*
           Logger::warn("DxbcDecodeContext: Invalid component count for immediate operand");
+*/
       }
     }
   }
@@ -302,9 +314,11 @@ namespace dxvk {
           break;
         
         default:
+/*
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled index representation: ",
             repr));
+*/
       }
     }
   }

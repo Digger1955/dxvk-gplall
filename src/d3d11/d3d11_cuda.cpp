@@ -19,8 +19,11 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     Logger::warn("CubinShaderWrapper::QueryInterface: Unknown interface query");
     Logger::warn(str::format(riid));
+*/
+
     return E_NOINTERFACE;
   }
 

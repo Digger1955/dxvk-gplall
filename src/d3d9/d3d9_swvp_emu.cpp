@@ -213,7 +213,9 @@ namespace dxvk {
 
         if (elementInfo.Class == DecltypeClass::Dec) {
           // TODO!
+/*
           Logger::warn("Encountered DEC3/UDEC3N class, ignoring...");
+*/
           continue;
         }
 

@@ -166,15 +166,17 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11Buffer), riid)) {
       Logger::warn("D3D11Buffer::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
-  
-  
+
+
   UINT STDMETHODCALLTYPE D3D11Buffer::GetEvictionPriority() {
     return DXGI_RESOURCE_PRIORITY_NORMAL;
   }
@@ -186,18 +188,18 @@ namespace dxvk {
     if (!std::exchange(s_errorShown, true))
       Logger::warn("D3D11Buffer::SetEvictionPriority: Stub");
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11Buffer::GetType(D3D11_RESOURCE_DIMENSION* pResourceDimension) {
     *pResourceDimension = D3D11_RESOURCE_DIMENSION_BUFFER;
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11Buffer::GetDesc(D3D11_BUFFER_DESC* pDesc) {
     *pDesc = m_desc;
   }
-  
-  
+
+
   bool D3D11Buffer::CheckViewCompatibility(
           UINT                BindFlags,
           DXGI_FORMAT         Format) const {

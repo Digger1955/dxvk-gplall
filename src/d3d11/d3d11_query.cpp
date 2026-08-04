@@ -126,10 +126,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11Query), riid)) {
       Logger::warn("D3D11Query: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -169,7 +171,7 @@ namespace dxvk {
       case D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM3:
         return sizeof(BOOL);
     }
-    
+
     Logger::err("D3D11Query: Failed to query data size");
     return 0;
   }

@@ -428,7 +428,9 @@ namespace dxvk {
       case D3D9Format::AL16: return {}; // Unsupported
 
       default:
+/*
         Logger::warn(str::format("ConvertFormat: Unknown format encountered: ", Format));
+*/
         return {}; // Unsupported
     }
   }
@@ -458,8 +460,7 @@ namespace dxvk {
             D3D9Adapter*     pParent,
       const Rc<DxvkAdapter>& adapter,
       const D3D9Options&     options)
-    : m_isExtended (pParent->IsExtended()),
-      m_isD3D8Compatible (pParent->IsD3D8Compatible()) {
+    : m_isExtended (pParent->IsD3DCompatibile(D3DCompatibility::D3D9Ex)) {
 
     const uint32_t vendorId = pParent->GetVendorId();
     const bool     isNvidia = vendorId == uint32_t(DxvkGpuVendor::Nvidia);
@@ -469,6 +470,8 @@ namespace dxvk {
     // NVIDIA does not natively support any DF formats
     m_dfSupport = !isNvidia ? options.supportDFFormats : false;
     m_x4r4g4b4Support = options.supportX4R4G4B4;
+    // W11V11U10 is only supported by D3D8
+    m_w11v11u10Support = false;
     // Only AMD supports D16_LOCKABLE natively
     m_d16lockableSupport = isAmd;
 
@@ -490,6 +493,7 @@ namespace dxvk {
     // Only Intel supports D24FS8 natively
     m_d24fs8Support = isIntel;
 
+/*
     if (!m_d24s8Support)
       Logger::info("D3D9: VK_FORMAT_D24_UNORM_S8_UINT -> VK_FORMAT_D32_SFLOAT_S8_UINT");
 
@@ -499,6 +503,8 @@ namespace dxvk {
       else
         Logger::info("D3D9: VK_FORMAT_D16_UNORM_S8_UINT -> VK_FORMAT_D32_SFLOAT_S8_UINT");
     }
+*/
+
   }
 
   D3D9_VK_FORMAT_MAPPING D3D9VkFormatTable::GetFormatMapping(
@@ -508,8 +514,7 @@ namespace dxvk {
     if (Format == D3D9Format::X4R4G4B4 && !m_x4r4g4b4Support)
       return D3D9_VK_FORMAT_MAPPING();
 
-    // W11V11U10 is only supported by d3d8
-    if (Format == D3D9Format::W11V11U10 && !m_isD3D8Compatible)
+    if (Format == D3D9Format::W11V11U10 && !m_w11v11u10Support)
       return D3D9_VK_FORMAT_MAPPING();
 
     if (Format == D3D9Format::D16_LOCKABLE && !m_d16lockableSupport)
@@ -575,7 +580,7 @@ namespace dxvk {
       case D3D9Format::P8:
         return &p8;
 
-      // only supported by d3d8
+      // only supported by D3D8
       case D3D9Format::W11V11U10:
         return &w11v11u10;
 
@@ -596,14 +601,14 @@ namespace dxvk {
       case D3D9Format::D32F_LOCKABLE:
         return &d32f_lockable;
 
-      // only considered on d3d9Ex interfaces
+      // only considered on D3D9Ex interfaces
       case D3D9Format::D32_LOCKABLE:
         if (m_isExtended)
           return &d32_lockable;
 
         [[fallthrough]];
 
-      // only considered on d3d9Ex interfaces
+      // only considered on D3D9Ex interfaces
       case D3D9Format::S8_LOCKABLE:
         if (m_isExtended)
           return &s8_lockable;
@@ -624,6 +629,12 @@ namespace dxvk {
 
     return (supported.linear  & Features) == Features
         || (supported.optimal & Features) == Features;
+  }
+
+  void D3D9VkFormatTable::RefreshFormatSupport(
+    const D3D9Adapter*          pParent) {
+    // W11V11U10 is only supported by D3D8
+    m_w11v11u10Support = pParent->IsD3D8Compatible();
   }
 
 }
