@@ -654,7 +654,9 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE D3D10Device::CreateCounter(
     const D3D10_COUNTER_DESC*               pCounterDesc,
           ID3D10Counter**                   ppCounter) {
+/*
     Logger::err("D3D10Device::CreateCounter: Not implemented");
+*/
     return E_NOTIMPL;
   }
 
@@ -677,7 +679,9 @@ namespace dxvk {
 
   void STDMETHODCALLTYPE D3D10Device::CheckCounterInfo(
           D3D10_COUNTER_INFO*               pCounterInfo) {
+/*
     Logger::err("D3D10Device::CheckCounterInfo: Not implemented");
+*/
   }
 
 
@@ -691,7 +695,9 @@ namespace dxvk {
           UINT*                             pUnitsLength,
           char*                             description,
           UINT*                             pDescriptionLength) {
+/*
     Logger::err("D3D10Device::CheckCounter: Not implemented");
+*/
     return E_NOTIMPL;
   }
 

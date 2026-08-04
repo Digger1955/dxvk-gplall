@@ -175,8 +175,7 @@ namespace dxvk {
       case DxbcInstClass::VectorSinCos:
         return this->emitVectorSinCos(ins);
 
-      default:
-/*
+/*     default:
         Logger::warn(
           str::format("DxbcCompiler: Unhandled opcode class: ",
           ins.op));
@@ -345,9 +344,9 @@ namespace dxvk {
       
       case DxbcOpcode::DclGsInstanceCount:
         return this->emitDclGsInstanceCount(ins);
-      
-      default:
+
 /*
+      default:
         Logger::warn(
           str::format("DxbcCompiler: Unhandled opcode: ",
           ins.op));
@@ -497,9 +496,8 @@ namespace dxvk {
           case DxbcOpcode::DclOutputSiv:
             this->emitDclOutput(regIdx, regDim, ins.dst[0].mask, sv, im);
             break;
-          
-          default:
 /*
+          default:
             Logger::err(str::format(
               "DxbcCompiler: Unexpected opcode: ",
               ins.op));
@@ -676,8 +674,8 @@ namespace dxvk {
             m_module.constu32(0)));
       } break;
 
-      default:
 /*
+      default:
         Logger::err(str::format(
           "DxbcCompiler: Unsupported operand type declaration: ",
           ins.dst[0].type));
@@ -1629,9 +1627,8 @@ namespace dxvk {
     switch (ins.customDataType) {
       case DxbcCustomDataClass::ImmConstBuf:
         return emitDclImmediateConstantBuffer(ins);
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unsupported custom data block: ",
           ins.customDataType));
@@ -1863,9 +1860,8 @@ namespace dxvk {
         dst.id = m_module.opConvertFtoU(
           typeId, src.at(0).id);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2023,9 +2019,9 @@ namespace dxvk {
         condition = m_module.opULessThan(
           conditionType, src.at(0).id, src.at(1).id);
         break;
-      
-      default:
+
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2094,9 +2090,8 @@ namespace dxvk {
       case DxbcOpcode::DerivRtyFine:
         value.id = m_module.opDpdyFine(typeId, value.id);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2330,9 +2325,8 @@ namespace dxvk {
           getVectorTypeId(result.type),
           shiftReg.id, countReg.id);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2556,9 +2550,8 @@ namespace dxvk {
           pointer.id, scopeId, semanticsId,
           src[0].id);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2622,9 +2615,8 @@ namespace dxvk {
         value.id = m_module.opISub(typeId, value.id,
           m_module.constu32(1));
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -2801,7 +2793,7 @@ namespace dxvk {
       case DxbcOpcode::FirstBitLo:  dst.id = m_module.opFindILsb(typeId, src.id); break;
       case DxbcOpcode::FirstBitHi:  dst.id = m_module.opFindUMsb(typeId, src.id); break;
       case DxbcOpcode::FirstBitShi: dst.id = m_module.opFindSMsb(typeId, src.id); break;
-      default: /* Logger::warn(str::format("DxbcCompiler: Unhandled instruction: ", ins.op)); */ return;
+      /* default:  Logger::warn(str::format("DxbcCompiler: Unhandled instruction: ", ins.op)); */ return;
     }
     
     // The 'Hi' variants are counted from the MSB in DXBC
@@ -3379,9 +3371,8 @@ namespace dxvk {
         result.id = m_module.opConvertUtoF(
           getVectorTypeId(result.type), val.id);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format("DxbcCompiler: Unhandled instruction: ", ins.op));
 */
         return;
@@ -3437,9 +3428,8 @@ namespace dxvk {
         m_module.setDebugName(phase.functionId,
           str::format("hs_join_", m_hs.currPhaseId).c_str());
       } break;
-        
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -3496,9 +3486,8 @@ namespace dxvk {
           m_vRegs.at(registerId).id,
           offset.id);
       } break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -3978,9 +3967,8 @@ namespace dxvk {
             resultTypeId, sampledImageId, coord.id,
             referenceValue.id, imageOperands);
         } break;
-
-        default:
 /*
+        default:
           Logger::warn(str::format(
             "DxbcCompiler: Unhandled instruction: ",
             ins.op));
@@ -4181,9 +4169,8 @@ namespace dxvk {
             resultTypeId, sampledImageId, coord.id,
             imageOperands);
         } break;
-
-        default:
 /*
+        default:
           Logger::warn(str::format(
             "DxbcCompiler: Unhandled instruction: ",
             ins.op));
@@ -4831,9 +4818,8 @@ namespace dxvk {
         this->emitControlFlowCallc(ins);
         this->emitUavBarrier(-1, -1);
         break;
-
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled instruction: ",
           ins.op));
@@ -5145,7 +5131,7 @@ namespace dxvk {
       case DxbcScalarType::Float64: value.id = m_module.opFAbs(typeId, value.id); break;
       case DxbcScalarType::Sint32:  value.id = m_module.opSAbs(typeId, value.id); break;
       case DxbcScalarType::Sint64:  value.id = m_module.opSAbs(typeId, value.id); break;
-      default: /* Logger::warn("DxbcCompiler: Cannot get absolute value for given type"); */
+      /* default:  Logger::warn("DxbcCompiler: Cannot get absolute value for given type"); */
     }
     
     return value;
@@ -5161,7 +5147,7 @@ namespace dxvk {
       case DxbcScalarType::Float64: value.id = m_module.opFNegate(typeId, value.id); break;
       case DxbcScalarType::Sint32:  value.id = m_module.opSNegate(typeId, value.id); break;
       case DxbcScalarType::Sint64:  value.id = m_module.opSNegate(typeId, value.id); break;
-      default: /* Logger::warn("DxbcCompiler: Cannot negate given type"); */
+      /* default:  Logger::warn("DxbcCompiler: Cannot negate given type"); */
     }
     
     return value;
@@ -6725,9 +6711,8 @@ namespace dxvk {
           ptr, emitRegisterExtract(value, mask),
           DxbcRegMask(true, false, false, false));
       } break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled VS SV output: ", sv));
 */
@@ -6792,12 +6777,12 @@ namespace dxvk {
       
       emitValueStore(ptr, tessValue,
         DxbcRegMask(true, false, false, false));
-    } else {
-/*
+    } /*else {
+
       Logger::warn(str::format(
         "DxbcCompiler: Unhandled HS SV output: ", sv));
-*/
-    }
+
+    }*/
   }
   
   
@@ -6831,9 +6816,8 @@ namespace dxvk {
           ptr, emitRegisterExtract(value, mask),
           DxbcRegMask(true, false, false, false));
       } break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled GS SV output: ", sv));
 */
@@ -6864,9 +6848,8 @@ namespace dxvk {
       case DxbcSystemValue::ViewportId:
         emitVsSystemValueStore(sv, mask, value);
         break;
-      
-      default:
 /*
+      default:
         Logger::warn(str::format(
           "DxbcCompiler: Unhandled DS SV output: ", sv));
 */
