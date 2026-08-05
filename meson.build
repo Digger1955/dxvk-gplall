@@ -1,4 +1,4 @@
-project('dxvk', ['c', 'cpp'], version : '2.6.8', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
+project('dxvk', ['c', 'cpp'], version : '2.6.9', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
 
 pkg = import('pkgconfig')
 cpu_family = target_machine.cpu_family()
@@ -23,6 +23,7 @@ compiler_args = [
   '-flto=auto', # Enables FullLTO for Clang and GCC
   '-Wimplicit-fallthrough',
   '-Wno-deprecated', # Silences warnings about use of -mtune=x86-64
+  '-Wno-switch', # Silences warnings about an enum value missing in a switch statement; used due to commenting out default sections that are used only for logging.
   # gcc
   '-fuse-linker-plugin', # Enabled by default in newer GCC toolchains
   '-Wno-missing-field-initializers',
