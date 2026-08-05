@@ -949,12 +949,17 @@ namespace dxvk {
     // one, but in practice this should not be much of a problem.
     auto xType = static_cast<DxbcResourceReturnType>(
       bit::extract(ins.imm[0].u32, 0, 3));
+/*
+    // Since DxbcCompiler: dcl_resource: Ignoring resource return types
+    // yType, zType, wType are needed only for logging and, therefore,
+    // can be safely commented out.
     auto yType = static_cast<DxbcResourceReturnType>(
       bit::extract(ins.imm[0].u32, 4, 7));
     auto zType = static_cast<DxbcResourceReturnType>(
       bit::extract(ins.imm[0].u32, 8, 11));
     auto wType = static_cast<DxbcResourceReturnType>(
       bit::extract(ins.imm[0].u32, 12, 15));
+*/
 
 /*
     if ((xType != yType) || (xType != zType) || (xType != wType))
