@@ -651,10 +651,8 @@ namespace dxvk {
       metadata.MiscFlags          = D3D11_RESOURCE_MISC_SHARED;
       metadata.TextureLayout      = D3D11_TEXTURE_LAYOUT_UNDEFINED;
 
-/*
       if (ntHandle == INVALID_HANDLE_VALUE || !setSharedMetadata(ntHandle, &metadata, sizeof(metadata)))
         Logger::warn("D3D9: Failed to write shared resource info for a texture");
-*/
 
       if (ntHandle != INVALID_HANDLE_VALUE)
         ::CloseHandle(ntHandle);
