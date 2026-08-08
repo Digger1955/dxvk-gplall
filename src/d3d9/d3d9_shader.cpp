@@ -114,7 +114,7 @@ namespace dxvk {
     // Vertex shader version checks
     if (ShaderStage == VK_SHADER_STAGE_VERTEX_BIT) {
       // Late fixed-function capable hardware exposed support for VS 1.1
-      const uint32_t shaderModelVS = pDevice->IsD3D8Compatible() ? 1u : std::max(1u, options->shaderModel);
+      const uint32_t shaderModelVS = pDevice->IsD3DCompatibile(D3DCompatibility::D3D8) ? 1u : std::max(1u, options->shaderModel);
 
       if (unlikely(majorVersion > shaderModelVS
                || (majorVersion == 1 && minorVersion > 1)
@@ -124,7 +124,7 @@ namespace dxvk {
       }
     // Pixel shader version checks
     } else if (ShaderStage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-      const uint32_t shaderModelPS = pDevice->IsD3D8Compatible() ? std::min(1u, options->shaderModel) : options->shaderModel;
+      const uint32_t shaderModelPS = pDevice->IsD3DCompatibile(D3DCompatibility::D3D8) ? std::min(1u, options->shaderModel) : options->shaderModel;
 
       if (unlikely(majorVersion > shaderModelPS
                || (majorVersion == 1 && minorVersion > 4)
