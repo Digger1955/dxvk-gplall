@@ -514,7 +514,7 @@ namespace dxvk {
     // Allow D3DSWAPEFFECT_COPY to bypass this restriction in D3D8 compatibility
     // mode, since it may be a remapping of D3DSWAPEFFECT_COPY_VSYNC and RC Cars
     // depends on it not being validated.
-    if (unlikely(!IsD3D8Compatible()
+    if (unlikely(!m_d3dCompatibility.test(D3DCompatibility::D3D8)
               && pPresentationParameters->SwapEffect == D3DSWAPEFFECT_COPY
               && pPresentationParameters->BackBufferCount > 1))
       return D3DERR_INVALIDCALL;
