@@ -1162,10 +1162,10 @@ namespace dxvk {
       // to skip the validation, in order to prevent issues.
       const bool isOnePixelWider  = pViewport->X + pViewport->Width  == rtDesc.Width  + 1;
       const bool isOnePixelTaller = pViewport->Y + pViewport->Height == rtDesc.Height + 1;
-/*
+
       if (unlikely(m_presentParams.Windowed && (isOnePixelWider || isOnePixelTaller))) {
         Logger::debug("D3D8Device::SetViewport: Viewport exceeds render target dimensions by one pixel");
-      } */ else {
+      }  else {
         return D3DERR_INVALIDCALL;
       }
 
