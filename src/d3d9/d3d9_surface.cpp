@@ -94,10 +94,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DSurface9), riid)) {
       Logger::warn("D3D9Surface::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -137,7 +139,8 @@ namespace dxvk {
     // for surfaces in D3DPOOL_DEFAULT. D3D8 additionally clears the content
     // for non-D3DPOOL_DEFAULT surfaces if their type is not D3DRTYPE_TEXTURE.
     if (desc.Pool == D3DPOOL_DEFAULT
-     || (m_texture->Device()->IsD3D8Compatible() && type != D3DRTYPE_TEXTURE)) {
+     || (m_texture->Device()->IsD3DCompatibile(D3DCompatibility::D3D8) &&
+         type != D3DRTYPE_TEXTURE)) {
       pLockedRect->pBits = nullptr;
       pLockedRect->Pitch = 0;
     }
@@ -152,7 +155,7 @@ namespace dxvk {
       // with formats which need to be block aligned, surfaces created via
       // CreateImageSurface and D3D8 cube textures outside of D3DPOOL_DEFAULT
       if ((isBlockAlignedFormat && desc.Pool == D3DPOOL_DEFAULT) || isSystemMemSurface
-       || (m_texture->Device()->IsD3D8Compatible() &&
+       || (m_texture->Device()->IsD3DCompatibile(D3DCompatibility::D3D8) &&
            desc.Pool != D3DPOOL_DEFAULT && type == D3DRTYPE_CUBETEXTURE)) {
         const LONG width  = pRect->right  - pRect->left;
         const LONG height = pRect->bottom - pRect->top;

@@ -19,8 +19,11 @@ namespace dxvk {
     const uint32_t bytecodeLength = AnalysisInfo.bytecodeByteLength;
 
     const std::string name = Key.toString();
+
+/*
     Logger::debug(str::format("Compiling shader ", name));
-    
+*/
+
     // If requested by the user, dump both the raw DXBC
     // shader and the compiled SPIR-V module to a file.
     const std::string& dumpPath = pDevice->GetOptions()->shaderDumpPath;

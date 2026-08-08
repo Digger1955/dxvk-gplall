@@ -4,6 +4,7 @@
 
 #include "d3d9_options.h"
 #include "d3d9_format.h"
+#include "d3d9_bridge.h"
 
 #include "../dxvk/dxvk_adapter.h"
 
@@ -98,9 +99,9 @@ namespace dxvk {
       return m_9On12Args;
     }
 
-    bool IsExtended() const;
+    void RefreshFormatsTable() const;
 
-    bool IsD3D8Compatible() const;
+    bool IsD3DCompatibile(D3DCompatibility d3dCompatibility) const;
 
   private:
 
@@ -153,7 +154,7 @@ namespace dxvk {
     std::vector<D3DDISPLAYMODEEX>            m_modes;
     D3D9Format                               m_modeCacheFormat;
 
-    std::unique_ptr<const D3D9VkFormatTable> m_d3d9Formats;
+    std::unique_ptr<D3D9VkFormatTable>       m_d3d9Formats;
 
   };
 
