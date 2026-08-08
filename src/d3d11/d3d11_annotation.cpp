@@ -16,7 +16,9 @@ namespace dxvk {
 
     HMODULE d3d9Module = ::LoadLibraryA("d3d9.dll");
     if (!d3d9Module) {
+/*
       Logger::info("Unable to find d3d9, some annotations may be missed.");
+*/
       return;
     }
 
@@ -25,7 +27,9 @@ namespace dxvk {
       reinterpret_cast<const char*>(static_cast<uintptr_t>(ordinal))));
 
     if (!registrationFunction) {
+/*
       Logger::info("Unable to find DXVK_RegisterAnnotation, some annotations may be missed.");
+*/
       return;
     }
 

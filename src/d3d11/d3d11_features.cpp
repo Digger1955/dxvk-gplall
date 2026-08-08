@@ -174,7 +174,9 @@ namespace dxvk {
       case D3D11_FEATURE_THREADING:
         return GetTypedFeatureData(FeatureDataSize, pFeatureData, &m_threading);
       default:
+/*
         Logger::err(str::format("D3D11: Unknown feature: ", Feature));
+*/
         return E_INVALIDARG;
     }
   }

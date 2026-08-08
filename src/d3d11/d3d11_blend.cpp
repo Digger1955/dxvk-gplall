@@ -18,23 +18,25 @@ namespace dxvk {
           ? desc.RenderTarget[i]
           : desc.RenderTarget[0]);
     }
-    
+
     // Multisample state is part of the blend state in D3D11
     m_msState.setSampleMask(0u); // Set during bind
     m_msState.setAlphaToCoverage(desc.AlphaToCoverageEnable);
-    
+
+/*
     // Vulkan only supports a global logic op for the blend
     // state, which might be problematic in some cases.
     if (desc.IndependentBlendEnable && desc.RenderTarget[0].LogicOpEnable)
       Logger::warn("D3D11: Per-target logic ops not supported");
-    
+*/
+
     m_loState.setLogicOp(desc.RenderTarget[0].LogicOpEnable,
       DecodeLogicOp(desc.RenderTarget[0].LogicOp));
   }
-  
-  
+
+
   D3D11BlendState::~D3D11BlendState() {
-    
+
   }
 
 
@@ -43,7 +45,7 @@ namespace dxvk {
       return E_POINTER;
 
     *ppvObject = nullptr;
-    
+
     if (riid == __uuidof(IUnknown)
      || riid == __uuidof(ID3D11DeviceChild)
      || riid == __uuidof(ID3D11BlendState)
@@ -64,10 +66,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11BlendState), riid)) {
       Logger::warn("D3D11BlendState::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }

@@ -14,8 +14,11 @@ namespace dxvk {
     const void*           pShaderBytecode,
           size_t          BytecodeLength) {
     const std::string name = pShaderKey->toString();
+
+/*
     Logger::debug(str::format("Compiling shader ", name));
-    
+*/
+
     DxbcReader reader(
       reinterpret_cast<const char*>(pShaderBytecode),
       BytecodeLength);

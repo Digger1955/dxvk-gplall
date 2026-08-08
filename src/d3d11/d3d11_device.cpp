@@ -564,10 +564,12 @@ namespace dxvk {
     GetCommonResourceDesc(pResource, &resourceDesc);
     
     if (resourceDesc.Dim == D3D11_RESOURCE_DIMENSION_BUFFER) {
+/*
       Logger::warn("D3D11: Cannot create render target view for a buffer");
+*/
       return S_OK; // It is required to run Battlefield 3 and Battlefield 4.
     }
-    
+
     // The view description is optional. If not defined, it
     // will use the resource's format and all array layers.
     D3D11_RENDER_TARGET_VIEW_DESC1 desc;
@@ -885,9 +887,11 @@ namespace dxvk {
 
     // Set stream to rasterize, if any
     xfb.rasterizedStream = -1;
-    
+
+/*
     if (RasterizedStream != D3D11_SO_NO_RASTERIZED_STREAM)
       Logger::err("D3D11: CreateGeometryShaderWithStreamOutput: Rasterized stream not supported");
+*/
 
     // Create the actual shader module
     DxbcModuleInfo moduleInfo;
@@ -1280,8 +1284,9 @@ namespace dxvk {
     const D3D11_COUNTER_DESC*         pCounterDesc,
           ID3D11Counter**             ppCounter) {
     InitReturnPtr(ppCounter);
-    
+/*
     Logger::err(str::format("D3D11: Unsupported counter: ", pCounterDesc->Counter));
+*/
     return E_INVALIDARG;
   }
   
@@ -1468,8 +1473,9 @@ namespace dxvk {
           REFIID      returnedInterface, 
           void**      ppResource) {
     InitReturnPtr(ppResource);
-    
+/*
     Logger::err("D3D11Device::OpenSharedResourceByName: Not implemented");
+*/
     return E_NOTIMPL;
   }
 
@@ -1594,7 +1600,9 @@ namespace dxvk {
           UINT*               pUnitsLength,
           LPSTR               szDescription,
           UINT*               pDescriptionLength) {
+/*
     Logger::err("D3D11: Counters not supported");
+*/
     return E_INVALIDARG;
   }
   
@@ -1691,13 +1699,17 @@ namespace dxvk {
   
   
   HRESULT STDMETHODCALLTYPE D3D11Device::SetExceptionMode(UINT RaiseFlags) {
+/*
     Logger::err("D3D11Device::SetExceptionMode: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
   
   UINT STDMETHODCALLTYPE D3D11Device::GetExceptionMode() {
+/*
     Logger::err("D3D11Device::GetExceptionMode: Not implemented");
+*/
     return 0;
   }
 
@@ -3390,8 +3402,6 @@ namespace dxvk {
     return m_apiVersion;
   }
 
-  
-
 
   D3D11DXGIDevice::D3D11DXGIDevice(
           IDXGIAdapter*       pAdapter,
@@ -3415,15 +3425,14 @@ namespace dxvk {
     m_metaDevice    (this),
     m_dxvkFactory   (this, &m_d3d11Device),
     m_destructionNotifier(this) {
-
   }
-  
-  
+
+
   D3D11DXGIDevice::~D3D11DXGIDevice() {
 
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11DXGIDevice::QueryInterface(REFIID riid, void** ppvObject) {
     if (ppvObject == nullptr)
       return E_POINTER;
@@ -3515,10 +3524,12 @@ namespace dxvk {
     if (riid == GUID{0xd56e2a4c,0x5127,0x8437,{0x65,0x8a,0x98,0xc5,0xbb,0x78,0x94,0x98}})
       return E_NOINTERFACE;
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGIDXVKDevice), riid)) {
       Logger::warn("D3D11DXGIDevice::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -3589,9 +3600,11 @@ namespace dxvk {
     if (FAILED(hr))
       return hr;
 
+/*
     // We don't support shared resources
     if (NumSurfaces && pSharedResource)
       Logger::err("D3D11: CreateSurface: Shared surfaces not supported");
+*/
 
     // Try to create the given number of surfaces
     uint32_t surfacesCreated = 0;
@@ -3662,8 +3675,10 @@ namespace dxvk {
           INT                   Priority) {
     if (Priority < -7 || Priority > 7)
       return E_INVALIDARG;
-    
+
+/*
     Logger::err("DXGI: SetGPUThreadPriority: Ignoring");
+*/
     return S_OK;
   }
   

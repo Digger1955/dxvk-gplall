@@ -316,10 +316,12 @@ extern "C" {
       return E_INVALIDARG;
     }
 
+/*
     if (NumQueues > 1) {
       // Not sure what to do with more than one graphics queue
       Logger::warn("D3D11On12CreateDevice: Only one queue supported");
     }
+*/
 
     if (FAILED(ppCommandQueues[0]->QueryInterface(__uuidof(ID3D12CommandQueue), reinterpret_cast<void**>(&d3d12Queue)))) {
       Logger::err("D3D11On12CreateDevice: Queue is not a valid D3D12 command queue");
