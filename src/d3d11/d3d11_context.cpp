@@ -87,10 +87,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11DeviceContext), riid)) {
       Logger::warn("D3D11DeviceContext::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -465,7 +467,9 @@ namespace dxvk {
       rawFormat = uavFormat;
 
     if (uavFormat && !rawFormat) {
+/*
       Logger::err(str::format("D3D11: ClearUnorderedAccessViewUint: No raw format found for ", uavFormat));
+*/
       return;
     }
 
@@ -1485,8 +1489,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11HullShader*>(pHullShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.hs != shader) {
       m_state.hs = shader;
@@ -1623,8 +1629,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11DomainShader*>(pDomainShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.ds != shader) {
       m_state.ds = shader;
@@ -1761,8 +1769,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11GeometryShader*>(pShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.gs != shader) {
       m_state.gs = shader;
@@ -1899,8 +1909,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11PixelShader*>(pPixelShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.ps != shader) {
       m_state.ps = shader;
@@ -2037,8 +2049,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11ComputeShader*>(pComputeShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.cs != shader) {
       m_state.cs = shader;

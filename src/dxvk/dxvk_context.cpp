@@ -5962,8 +5962,10 @@ namespace dxvk {
 
     m_state.om.attachmentMask.clear();
 
+/*
     VkCommandBufferInheritanceRenderingInfo renderingInheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO };
     VkCommandBufferInheritanceInfo inheritance = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO, &renderingInheritance };
+*/
 
     uint32_t colorInfoCount = 0;
     uint32_t lateClearCount = 0;
@@ -5986,9 +5988,9 @@ namespace dxvk {
         colorInfo.imageLayout = colorTarget.view->getLayout();
         colorInfo.loadOp = ops.colorOps[i].loadOp;
         colorInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
+/*
         renderingInheritance.rasterizationSamples = colorTarget.view->image()->info().sampleCount;
-
+*/
         if (ops.colorOps[i].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) {
           colorInfo.clearValue.color = ops.colorOps[i].clearValue;
 
@@ -6009,7 +6011,9 @@ namespace dxvk {
       }
     }
 
+/*
     VkFormat depthStencilFormat = VK_FORMAT_UNDEFINED;
+*/
     VkImageAspectFlags depthStencilAspects = 0;
     VkImageAspectFlags depthStencilWritable = 0;
 
@@ -6019,7 +6023,9 @@ namespace dxvk {
     const auto& depthTarget = framebufferInfo.getDepthTarget();
 
     if (depthTarget.view) {
+/*
       depthStencilFormat = depthTarget.view->info().format;
+*/
       depthStencilAspects = depthTarget.view->info().aspects;
       depthStencilWritable = vk::getWritableAspectsForLayout(depthTarget.view->info().layout);
 
@@ -6036,8 +6042,10 @@ namespace dxvk {
         depthInfo.clearValue.depthStencil.depth = ops.depthOps.clearValue.depth;
         depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
       }
-
+/*
       renderingInheritance.rasterizationSamples = depthTarget.view->image()->info().sampleCount;
+*/
+
     }
 
     auto& stencilInfo = m_state.om.renderingInfo.stencil;
@@ -6063,18 +6071,24 @@ namespace dxvk {
     if (colorInfoCount) {
       renderingInfo.colorAttachmentCount = colorInfoCount;
       renderingInfo.pColorAttachments = m_state.om.renderingInfo.color.data();
+/*
       renderingInheritance.colorAttachmentCount = colorInfoCount;
       renderingInheritance.pColorAttachmentFormats = colorFormats.data();
+*/
     }
 
     if (depthStencilAspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
       renderingInfo.pDepthAttachment = &depthInfo;
+/*
       renderingInheritance.depthAttachmentFormat = depthStencilFormat;
+*/
     }
 
     if (depthStencilAspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       renderingInfo.pStencilAttachment = &stencilInfo;
+/*
       renderingInheritance.stencilAttachmentFormat = depthStencilFormat;
+*/
     }
 
     // Reset render area tracking, will be adjusted when drawing with viewports.
@@ -6084,19 +6098,16 @@ namespace dxvk {
     if (lateClearCount)
       std::swap(m_state.om.renderAreaLo, m_state.om.renderAreaHi);
 
+/*
     // On drivers that don't natively support secondary command buffers, only use
     // them to enable MSAA resolve attachments. Also ignore render passes with only
     // one color attachment here since those tend to only have a small number of
     // draws and we are almost certainly going to use the output anyway.
-    bool useSecondaryCmdBuffer = !m_device->perfHints().preferPrimaryCmdBufs
-      && renderingInheritance.rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
+    bool useSecondaryCmdBuffer = false;
 
     if (m_device->perfHints().preferRenderPassOps) {
-      useSecondaryCmdBuffer = renderingInheritance.rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
-
-      if (!m_device->perfHints().preferPrimaryCmdBufs)
-        useSecondaryCmdBuffer |= depthStencilAspects || colorInfoCount > 1u || !hasMipmappedRt;
-    }
+      useSecondaryCmdBuffer = renderingInheritance.rasterizationSamples > VK_SAMPLE_COUNT_1_BIT
+                           || depthStencilAspects || colorInfoCount > 1u || !hasMipmappedRt;
 
     if (useSecondaryCmdBuffer) {
       // Begin secondary command buffer on tiling GPUs so that subsequent
@@ -6110,6 +6121,10 @@ namespace dxvk {
       // Begin rendering right away on regular GPUs
       m_cmd->cmdBeginRendering(&renderingInfo);
     }
+*/
+
+      // Begin rendering right away on regular GPUs
+      m_cmd->cmdBeginRendering(&renderingInfo);
 
     if (lateClearCount) {
       VkClearRect clearRect = { };

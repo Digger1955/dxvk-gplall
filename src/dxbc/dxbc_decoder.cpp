@@ -80,12 +80,14 @@ namespace dxvk {
   
   void DxbcDecodeContext::decodeCustomData(DxbcCodeSlice code) {
     const uint32_t blockLength = code.at(1);
-    
+
     if (blockLength < 2) {
+/*
       Logger::err("DxbcDecodeContext: Invalid custom data block");
+*/
       return;
     }
-    
+
     // Custom data blocks have their own instruction class
     m_instruction.op      = DxbcOpcode::CustomData;
     m_instruction.opClass = DxbcInstClass::CustomData;
@@ -137,11 +139,12 @@ namespace dxvk {
         case DxbcExtOpcode::ResourceDim:
         case DxbcExtOpcode::ResourceReturnType:
           break;  // part of resource description
-        
+/*
         default:
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled extended opcode: ",
             extOpcode));
+*/
       }
     }
     
@@ -198,7 +201,7 @@ namespace dxvk {
               bit::extract(token,  8,  9),
               bit::extract(token, 10, 11));
             break;
-          
+
           // Selection of one component. We can generate both a
           // mask and a swizzle for this so that the compiler
           // won't have to deal with this case specifically.
@@ -207,18 +210,22 @@ namespace dxvk {
             reg.mask    = DxbcRegMask(n == 0, n == 1, n == 2, n == 3);
             reg.swizzle = DxbcRegSwizzle(n, n, n, n);
           } break;
-          
+
+/*
           default:
             Logger::warn("DxbcDecodeContext: Invalid component selection mode");
+*/
         }
       } break;
-          
+
+/*
       default:
         Logger::warn("DxbcDecodeContext: Invalid component count");
+*/
     }
   }
-  
-  
+
+
   void DxbcDecodeContext::decodeOperandExtensions(DxbcCodeSlice& code, DxbcRegister& reg, uint32_t token) {
     while (bit::extract(token, 31, 31)) {
       token = code.read();
@@ -233,11 +240,12 @@ namespace dxvk {
         case DxbcOperandExt::OperandModifier:
           reg.modifiers = bit::extract(token, 6, 13);
           break;
-        
+/*
         default:
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled extended operand token: ",
             extTokenType));
+*/
       }
     }
   }
@@ -260,14 +268,16 @@ namespace dxvk {
           reg.imm.u32_4[2] = code.read();
           reg.imm.u32_4[3] = code.read();
         } break;
-
+/*
         default:
           Logger::warn("DxbcDecodeContext: Invalid component count for immediate operand");
+*/
+
       }
     }
   }
-  
-  
+
+
   void DxbcDecodeContext::decodeOperandIndex(DxbcCodeSlice& code, DxbcRegister& reg, uint32_t token) {
     reg.idxDim = bit::extract(token, 20, 21);
     
@@ -300,11 +310,12 @@ namespace dxvk {
             m_indices.at(m_indexId++),
             DxbcScalarType::Sint32);
           break;
-        
+/*
         default:
           Logger::warn(str::format(
             "DxbcDecodeContext: Unhandled index representation: ",
             repr));
+*/
       }
     }
   }

@@ -38,10 +38,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DTexture9), riid)) {
       Logger::warn("D3D9Texture2D::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -138,10 +140,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DVolumeTexture9), riid)) {
       Logger::warn("D3D9Texture3D::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -232,10 +236,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DCubeTexture9), riid)) {
       Logger::warn("D3D9TextureCube::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }

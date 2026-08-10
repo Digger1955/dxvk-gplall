@@ -37,10 +37,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11VideoProcessorEnumerator), riid)) {
       Logger::warn("D3D11VideoProcessorEnumerator::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -56,7 +58,9 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE D3D11VideoProcessorEnumerator::CheckVideoProcessorFormat(
           DXGI_FORMAT             Format,
           UINT*                   pFlags) {
+/*
     Logger::warn(str::format("D3D11VideoProcessorEnumerator::CheckVideoProcessorFormat: stub, format ", Format));
+*/
 
     if (!pFlags)
       return E_INVALIDARG;
@@ -165,10 +169,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11VideoProcessor), riid)) {
       Logger::warn("D3D11VideoProcessor::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -317,10 +323,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11VideoProcessorInputView), riid)) {
       Logger::warn("D3D11VideoProcessorInputView::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -392,10 +400,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11VideoProcessorOutputView), riid)) {
       Logger::warn("D3D11VideoProcessorOutputView::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -1276,7 +1286,9 @@ namespace dxvk {
           ID3D11CryptoSession*            pSession,
           UINT                            DataSize,
           void*                           pData) {
+/*
     Logger::warn("D3D11VideoContext::NegotiateCryptoSessionKeyExchange: Stub");
+*/
     return E_NOTIMPL;
   }
 
@@ -1287,7 +1299,9 @@ namespace dxvk {
           ID3D11Texture2D*                pDstSurface,
           UINT                            IVSize,
           void*                           pIV) {
+/*
     Logger::warn("D3D11VideoContext::EncryptionBlt: Stub");
+*/
   }
 
 
@@ -1300,7 +1314,10 @@ namespace dxvk {
     const void*                           pKey,
           UINT                            IVSize,
           void*                           pIV) {
+/*
     Logger::warn("D3D11VideoContext::DecryptionBlt: Stub");
+*/
+
   }
 
 
@@ -1308,13 +1325,17 @@ namespace dxvk {
           ID3D11CryptoSession*            pSession,
           UINT                            RandomNumberSize,
           void*                           pRandomNumber) {
+/*
     Logger::warn("D3D11VideoContext::StartSessionKeyRefresh: Stub");
+*/
   }
 
 
   void STDMETHODCALLTYPE D3D11VideoContext::FinishSessionKeyRefresh(
           ID3D11CryptoSession*            pSession) {
+/*
     Logger::warn("D3D11VideoContext::FinishSessionKeyRefresh: Stub");
+*/
   }
 
 
@@ -1322,7 +1343,9 @@ namespace dxvk {
           ID3D11CryptoSession*            pSession,
           UINT                            KeySize,
           void*                           pKey) {
+/*
     Logger::warn("D3D11VideoContext::GetEncryptionBltKey: Stub");
+*/
     return E_NOTIMPL;
   }
 
@@ -1331,7 +1354,9 @@ namespace dxvk {
           ID3D11AuthenticatedChannel*     pChannel,
           UINT                            DataSize,
           void*                           pData) {
+/*
     Logger::warn("D3D11VideoContext::NegotiateAuthenticatedChannelKeyExchange: Stub");
+*/
     return E_NOTIMPL;
   }
 
@@ -1342,7 +1367,9 @@ namespace dxvk {
     const void*                           pInput,
           UINT                            OutputSize,
           void*                           pOutput) {
+/*
     Logger::warn("D3D11VideoContext::QueryAuthenticatedChannel: Stub");
+*/
     return E_NOTIMPL;
   }
 
@@ -1352,7 +1379,9 @@ namespace dxvk {
           UINT                            InputSize,
     const void*                           pInput,
           D3D11_AUTHENTICATED_CONFIGURE_OUTPUT* pOutput) {
+/*
     Logger::warn("D3D11VideoContext::ConfigureAuthenticatedChannel: Stub");
+*/
     return E_NOTIMPL;
   }
 
@@ -1433,6 +1462,7 @@ namespace dxvk {
     const D3D11_VIDEO_PROCESSOR_STREAM*   pStream) {
     CreateResources();
 
+/*
     if (pStream->PastFrames || pStream->FutureFrames)
       Logger::err("D3D11VideoContext: Ignoring non-zero PastFrames and FutureFrames");
 
@@ -1441,6 +1471,7 @@ namespace dxvk {
 
     if (pStream->InputFrameOrField)
       Logger::err("D3D11VideoContext: Ignoring non-zero InputFrameOrField");
+*/
 
     auto& view = static_cast<D3D11VideoProcessorInputView*>(pStream->pInputSurface)->GetCommon();
 

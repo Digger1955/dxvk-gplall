@@ -194,7 +194,7 @@ namespace dxvk {
    * Stores a list of commands.
    */
   class DxvkCsChunk : public RcObject {
-  friend class DxvkCsChunkPool;
+
   public:
 
     DxvkCsChunk();
@@ -326,7 +326,6 @@ namespace dxvk {
     DxvkCsCmd** m_next = &m_head;
 
     DxvkCsChunkFlags m_flags;
-    DxvkCsChunk* m_nextCached = nullptr;
 
     alignas(64)
     char m_data[DxvkCsChunkSize];
@@ -389,8 +388,8 @@ namespace dxvk {
     
   private:
 
-    alignas(CACHE_LINE_SIZE)
-    std::atomic<DxvkCsChunk*> m_stackTop = { nullptr };
+    dxvk::mutex               m_mutex;
+    std::vector<DxvkCsChunk*> m_chunks;
 
   };
   

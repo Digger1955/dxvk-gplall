@@ -23,8 +23,10 @@ namespace dxvk {
       fenceInfo.sharedHandle = hFence;
     }
 
+/*
     if (Flags & ~D3D11_FENCE_FLAG_SHARED)
       Logger::err(str::format("Fence flags 0x", std::hex, Flags, " not supported"));
+*/
 
     m_fence = pDevice->GetDXVKDevice()->createFence(fenceInfo);
   }
@@ -55,10 +57,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11Fence), riid)) {
       Logger::warn("D3D11Fence: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -72,12 +76,14 @@ namespace dxvk {
     if (!(m_flags & D3D11_FENCE_FLAG_SHARED))
       return E_INVALIDARG;
 
+/*
     if (pAttributes)
       Logger::warn(str::format("CreateSharedHandle: attributes ", pAttributes, " not handled"));
     if (dwAccess)
       Logger::warn(str::format("CreateSharedHandle: access ", dwAccess, " not handled"));
     if (lpName)
       Logger::warn(str::format("CreateSharedHandle: name ", dxvk::str::fromws(lpName), " not handled"));
+*/
 
     HANDLE sharedHandle = m_fence->sharedHandle();
     if (sharedHandle == INVALID_HANDLE_VALUE)

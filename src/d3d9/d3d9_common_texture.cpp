@@ -164,10 +164,12 @@ namespace dxvk {
     ///////////////////
     // Desc Validation
 
+    const bool isExtended = pDevice->IsD3DCompatibile(D3DCompatibility::D3D9Ex);
+
     // Resources can't be created in D3DPOOL_MANAGED
     // when using extended devices. Note that the D3DPOOL
     // value of 6 (D3DPOOL_MANAGED_EX) can be used.
-    if (pDevice->IsExtended() && pDesc->Pool == D3DPOOL_MANAGED)
+    if (isExtended && pDesc->Pool == D3DPOOL_MANAGED)
       return D3DERR_INVALIDCALL;
 
     if (pDesc->Width == 0 || pDesc->Height == 0 || pDesc->Depth == 0)
@@ -240,7 +242,7 @@ namespace dxvk {
     // plain surfaces outside of D3DPOOL_SCRATCH in D3D9Ex
     if (pDesc->Format == D3D9Format::ATI2
      && (pDesc->Usage & D3DUSAGE_RENDERTARGET ||
-        (pDevice->IsExtended() && isPlainSurface && pDesc->Pool != D3DPOOL_SCRATCH)))
+        (isExtended && isPlainSurface && pDesc->Pool != D3DPOOL_SCRATCH)))
       return D3DERR_INVALIDCALL;
 
     // Auto-Mipgen is only valid on textures (for obvious reasons)
@@ -624,7 +626,9 @@ namespace dxvk {
       case D3D9Format::A8R8G8B8: dxgiFormat = DXGI_FORMAT_B8G8R8A8_UNORM; break;
       case D3D9Format::X8R8G8B8: dxgiFormat = DXGI_FORMAT_B8G8R8X8_UNORM; break;
       default:
+/*
         Logger::warn(str::format("D3D9: Unsupported format for shared textures: ", m_desc.Format));
+*/
         return;
     }
 

@@ -35,6 +35,7 @@ namespace dxvk::sync {
         // safe guard, but this allocator is not meant to hit this condition
         if (unlikely(desired.allocCount > size)) {
           checkThrowError(allocTime);
+          expected = m_indices.load();
           continue;
         }
 
@@ -52,10 +53,12 @@ namespace dxvk::sync {
       Indices expected = m_indices.load();
       Indices desired;
 
+/*
       if (unlikely(expected.consumer != index)) {
         Logger::err( str::format( "RingbufferAllocator expected release ",
           expected.consumer, ", got ", index ) );
       }
+*/
 
       do {
         desired = expected;
@@ -63,9 +66,12 @@ namespace dxvk::sync {
         desired.allocCount--;
       } while (!m_indices.compare_exchange_weak( expected, desired ));
 
+/*
       if (unlikely(desired.allocCount < 0)) {
         Logger::err( "RingbufferAllocator allocCount < 0" );
       }
+*/
+
     }
 
     T* getDataUnsafe()

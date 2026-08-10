@@ -161,9 +161,11 @@ namespace dxvk {
     m_ctx   = std::make_unique<DxsoDecodeContext>(DxsoProgramInfo{ programType, m_minorVersion, m_majorVersion });
     m_state = D3D9ShaderValidatorState::ValidatingInstructions;
 
+/*
     const char* shaderTypeOutput = m_isPixelShader ? "PS" : "VS";
     Logger::debug(str::format("IDirect3DShaderValidator9::Instruction: Validating ",
                               shaderTypeOutput, " version ", m_majorVersion, ".", m_minorVersion));
+*/
 
     return D3D_OK;
   }
@@ -194,10 +196,13 @@ namespace dxvk {
     if (m_callback)
       m_callback(pFile, Line, Unknown, MessageID, Message.c_str(), m_userData);
 
+/*
     // TODO: Consider switching this to debug, once we're
     // confident the implementation doesn't cause any issues
     Logger::warn(Message);
+*/
 
+/*
     // Log instruction that caused the error as raw bytecode
     if (Logger::logLevel() <= LogLevel::Debug && pInstr && InstrLength) {
       std::stringstream instMsg;
@@ -210,6 +215,7 @@ namespace dxvk {
 
       Logger::debug(instMsg.str());
     }
+*/
 
     m_state = D3D9ShaderValidatorState::Error;
     return E_FAIL;

@@ -34,15 +34,17 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(ID3D11ClassLinkage), riid)) {
       Logger::warn("D3D11ClassLinkage::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11ClassLinkage::CreateClassInstance(
           LPCSTR              pClassTypeName,
           UINT                ConstantBufferOffset,
@@ -51,8 +53,11 @@ namespace dxvk {
           UINT                SamplerOffset,
           ID3D11ClassInstance **ppInstance) {
     InitReturnPtr(ppInstance);
-    
+
+/*
     Logger::err("D3D11ClassLinkage::CreateClassInstance: Not implemented yet");
+*/
+
     return E_NOTIMPL;
   }
   
@@ -61,8 +66,11 @@ namespace dxvk {
           LPCSTR              pClassInstanceName,
           UINT                InstanceIndex,
           ID3D11ClassInstance **ppInstance) {
+/*
     Logger::err("D3D11ClassLinkage::GetClassInstance: Not implemented yet");
+*/
+
     return E_NOTIMPL;
   }
-  
+
 }

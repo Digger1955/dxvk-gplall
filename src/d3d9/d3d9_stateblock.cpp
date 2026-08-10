@@ -18,7 +18,7 @@ namespace dxvk {
   }
 
   D3D9StateBlock::~D3D9StateBlock() {
-    if (!m_parent->IsD3D8Compatible())
+    if (!m_parent->IsD3DCompatibile(D3DCompatibility::D3D8))
       m_parent->DecrementLosableCounter();
   }
 
@@ -36,10 +36,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DStateBlock9), riid)) {
       Logger::warn("D3D9StateBlock::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }

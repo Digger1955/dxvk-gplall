@@ -40,10 +40,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDirect3DVertexDeclaration9), riid)) {
       Logger::warn("D3D9VertexDecl::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
