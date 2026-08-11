@@ -23,7 +23,7 @@ compiler_args = [
   '-fno-semantic-interposition', # Semantic interposition prevents a range of inter-procedural optimizations
 
   '-favoid-store-forwarding', #
-  '-fdeclone-ctor-dtor', #
+#   '-fdeclone-ctor-dtor', #
   '-fdevirtualize-at-ltrans', # 
   '-fext-dce', # 
   '-flive-range-shrinkage', # 
