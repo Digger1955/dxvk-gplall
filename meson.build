@@ -1,4 +1,4 @@
-project('dxvk', ['c', 'cpp'], version : '2.6.9', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
+project('dxvk', ['c', 'cpp'], version : '2.6.9', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2', 'b_ndebug=true' ])
 
 pkg = import('pkgconfig')
 cpu_family = target_machine.cpu_family()
@@ -17,10 +17,44 @@ compiler_args = [
   '-msse',
   '-msse2',
   '-mfpmath=sse',
+  '-mstackrealign', # Re-align the stack at the start of every function to guarantee the standard stack alignment
+  '-fwrapv', # Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior
+  '-fno-strict-aliasing', # Pointers of different types can point to the same memory location (alias each other), disables optimizations that rely on the strict aliasing rule.
   '-fno-semantic-interposition', # Semantic interposition prevents a range of inter-procedural optimizations
+
+  '-favoid-store-forwarding', #
+  '-fdeclone-ctor-dtor', #
+  '-fdevirtualize-at-ltrans', # 
+  '-fext-dce', # 
+  '-flive-range-shrinkage', # 
+
+  '-fira-algorithm=CB', # 
+  '-fira-region=all', # 
+  '-fira-hoist-pressure', # 
+  '-fira-loop-pressure', #
+
+  '-fsched-pressure', # 
+  '-fsched-spec-load', # 
+  '-fsched-critical-path-heuristic', # 
+
+  '-fspeculatively-call-stored-functions', # 
+
+  '-fipa-reorder-for-locality', # 
+  '-fipa-pta', # 
+
+  '-fgraphite-identity', # 
+
+  '-ftree-loop-im', # 
+  '-ftree-loop-ivcanon', # 
+
+  '-fvect-cost-model=cheap', # 
+
+  '-ftracer', # 
+
   '-ffunction-sections', # Place each function into its own section, improves locality of reference in the instruction space
   '-fdata-sections', # Place each data item into its own section, improves locality of reference in the instruction space
   '-flto=auto', # Enables FullLTO for Clang and GCC
+
   '-Wimplicit-fallthrough',
   '-Wno-deprecated', # Silences warnings about use of -mtune=x86-64
   '-Wno-switch', # Silences warnings about an enum value missing in a switch statement; used due to commenting out default sections that are used only for logging.
@@ -101,9 +135,11 @@ if platform == 'windows'
         '-Wl,--enable-stdcall-fixup',
         '-Wl,--kill-at',
       ]
-      # Fix stack alignment issues with mingw on 32-bit
+      # Fix stack alignment issues with gcc-mingw on 32-bit
+      # and with llvm-mingw on 32-bit
       compiler_args += [
-        '-mpreferred-stack-boundary=2'
+        '-mpreferred-stack-boundary=2', # GCC-exclusive
+        '-mstack-alignment=4' # Clang-exclusive
       ]
     endif
   else
@@ -118,7 +154,8 @@ if platform == 'windows'
       '/Gw', # Package global data in COMDAT sections for optimization, required for LTCG
       '/Qpar',# Enables automatic parallelization of loops
       '/Qpar-report:1', # Outputs an informational message for loops that are parallelized
-      '/Qvec-report:1' # Outputs an informational message for loops that are vectorized
+      '/Qvec-report:1', # Outputs an informational message for loops that are vectorized
+      '/UndefIntOverflow-' # Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior
     ]
     # MSVC Linker Options
     link_args += [
