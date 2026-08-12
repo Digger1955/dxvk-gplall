@@ -1,4 +1,4 @@
-project('dxvk', ['c', 'cpp'], version : '2.6.9', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2' ])
+project('dxvk', ['c', 'cpp'], version : '2.6.9', meson_version : '>= 0.58', default_options : [ 'cpp_std=c++17', 'b_vscrt=static_from_buildtype', 'warning_level=2', 'b_ndebug=true' ])
 
 pkg = import('pkgconfig')
 cpu_family = target_machine.cpu_family()
@@ -10,19 +10,50 @@ cc = meson.get_compiler('c')
 dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
 
 compiler_args = [
-  '-O3', # Optimizes for speed. -Os fails to compile due to compiler bug
-  '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code
-  '-march=x86-64', # SSE2 required
-  '-mtune=x86-64', # Tuning for SSE2 CPUs 
-  '-msse',
-  '-msse2',
-  '-mfpmath=sse',
-  '-fno-semantic-interposition', # Semantic interposition prevents a range of inter-procedural optimizations
-  '-ffunction-sections', # Place each function into its own section, improves locality of reference in the instruction space
-  '-fdata-sections', # Place each data item into its own section, improves locality of reference in the instruction space
-  '-flto=auto', # Enables FullLTO for Clang and GCC
+  '-O3', # Optimizes for speed. -Os fails to compile due to interaction of LTO and -fdeclone-ctor-dtor compiler flag. Use `-O3` as a baseline and add '-Os' compiler flags.
+  '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code.
+  '-march=x86-64', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, and FXSR ISA support - SSE2 CPU required.
+  '-mtune=barcelona', # Tuning for CX16, MMX, SSE, SSE2, SSE3, SSE4A, 3DNow!, enhanced 3DNow!, ABM and 64-bit ISA - better tuning, than 'x86-64/k8', even for Intel CPUs.
+  '-msse', # Required for proper enabling '-mfpmath=sse'.
+  '-msse2', # Required for proper enabling '-mfpmath=sse'.
+  '-mfpmath=sse', # Use SSE FP-blocks, instead of x87.
+
+  '-mstackrealign', # Safeguard - Re-align the stack at the start of every function to guarantee the standard stack alignment.
+  '-fwrapv', # Safeguard - Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior.
+  '-fno-strict-aliasing', # Safeguard - Disables optimizations that rely on the strict aliasing rule (pointers of different types can point to the same memory location).
+
+  '-fno-semantic-interposition', # Perf - Semantic interposition prevents a range of inter-procedural optimizations
+  '-favoid-store-forwarding', # Perf/GCC16 - Restructures code to eliminate pipeline memory stalls, ensuring the CPU doesn't burn idle clock cycles waiting for overlapping memory addresses to clear. 
+  '-flive-range-shrinkage', # Perf - Decrease register pressure through register live range shrinkage.
+
+  '-fira-algorithm=CB', # Perf - Algorithm for the integrated register allocator (IRA). Chaitin-Briggs (CB) generates better code for x86-64 and ARM.
+  '-fira-region=all', # Perf - Use all loops as register allocation regions. Gives the best results for machines with a small register set, such as x86-64.
+  '-fira-hoist-pressure', # Perf/Size - Use IRA to evaluate register pressure in the code hoisting pass for decisions to hoist expressions.
+  '-fira-loop-pressure', # Perf/Size - Use IRA to evaluate register pressure in loops for decisions to move loop invariants.
+
+  '-fipa-pta', # Perf - Interprocedural pointer analysis and interprocedural modification and reference analysis.
+  '-fipa-reorder-for-locality', # Perf/GCC15 - Group call chains in the binary layout to improve code locality and minimize jump distances between frequently called functions.
+
+  '-fsched-pressure', # Perf/Size - Improves the generated code and decreases its size by preventing register pressure increase above the number of available hard registers and subsequent spills in register allocation.
+  '-fsched-spec-load', # Perf - Allow speculative motion of some load instructions.
+
+  '-fgraphite-identity', # Perf - Enables the identity loop transformation within the Graphite loop optimization infrastructure.
+  '-floop-nest-optimize', # Perf - Enables generic loop nest optimizer based on the Pluto optimization algorithms, which calculates a loop structure optimized for data-locality and parallelism.
+  '-ftree-loop-im', # Perf - Perform loop invariant motion on trees.
+  '-ftree-loop-ivcanon', # Perf - Create a canonical counter for number of iterations in loops for which determining number of iterations requires complicated analysis.
+
+  '-fvect-cost-model=cheap', # Perf - Cheap model disables vectorization of loops where doing so would be cost prohibitive.
+
+  '-ftracer', # Perf/Size - Perform tail duplication to enlarge superblock size. This transformation simplifies the control flow of the function allowing other optimizations to do a better job.
+
+  '-flto=auto', # LTO/Perf/Size - Enables FullLTO for Clang and GCC
+  '-ffunction-sections', # LTO/Perf/Size - Place each function into its own section, improves locality of reference in the instruction space
+  '-fdata-sections', # LTO/Perf/Size - Place each data item into its own section, improves locality of reference in the instruction space
+  '-fdevirtualize-at-ltrans', # LTO/Perf/Size - Stream extra information when running LTO - Enables more devirtualization but significantly increases the size of streamed data.
+  '-fext-dce', # LTO/Perf/Size/GCC16 - Perform dead code elimination on zero and sign extensions, with special dataflow analysis.
+
   '-Wimplicit-fallthrough',
-  '-Wno-deprecated', # Silences warnings about use of -mtune=x86-64
+  '-Wno-deprecated', # Silences warnings about use of -mtune=x86-64 and other deprecated flags
   '-Wno-switch', # Silences warnings about an enum value missing in a switch statement; used due to commenting out default sections that are used only for logging.
   # gcc
   '-fuse-linker-plugin', # Enabled by default in newer GCC toolchains
@@ -101,9 +132,11 @@ if platform == 'windows'
         '-Wl,--enable-stdcall-fixup',
         '-Wl,--kill-at',
       ]
-      # Fix stack alignment issues with mingw on 32-bit
+      # Fix stack alignment issues with gcc-mingw on 32-bit
+      # and with llvm-mingw on 32-bit
       compiler_args += [
-        '-mpreferred-stack-boundary=2'
+        '-mpreferred-stack-boundary=2', # GCC-exclusive
+        '-mstack-alignment=4' # Clang-exclusive
       ]
     endif
   else
@@ -118,7 +151,8 @@ if platform == 'windows'
       '/Gw', # Package global data in COMDAT sections for optimization, required for LTCG
       '/Qpar',# Enables automatic parallelization of loops
       '/Qpar-report:1', # Outputs an informational message for loops that are parallelized
-      '/Qvec-report:1' # Outputs an informational message for loops that are vectorized
+      '/Qvec-report:1', # Outputs an informational message for loops that are vectorized
+      '/UndefIntOverflow-' # Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior
     ]
     # MSVC Linker Options
     link_args += [
