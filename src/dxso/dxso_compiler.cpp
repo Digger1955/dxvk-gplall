@@ -203,7 +203,9 @@ namespace dxvk {
       break;
 
     default:
+/*
       Logger::warn(str::format("DxsoCompiler::processInstruction: unhandled opcode: ", opcode));
+*/
       break;
     }
   }
@@ -2302,7 +2304,9 @@ namespace dxvk {
           typeId, emitRegisterLoad(src[0], mask).id);
         break;
       default:
+/*
         Logger::warn(str::format("DxsoCompiler::emitVectorAlu: unimplemented op ", opcode));
+*/
         return;
     }
 
@@ -2357,7 +2361,9 @@ namespace dxvk {
         componentCount = 4;
         break;
       default:
+/*
         Logger::warn(str::format("DxsoCompiler::emitMatrixAlu: unimplemented op ", opcode));
+*/
         return;
     }
 
@@ -3589,7 +3595,9 @@ void DxsoCompiler::emitControlFlowGenericLoop(
 
     // We generated a bad shader, let's not make it even worse.
     if (positionPtr == 0) {
+/*
       Logger::warn("Shader without Position output. Something is likely wrong here.");
+*/
       return;
     }
 
