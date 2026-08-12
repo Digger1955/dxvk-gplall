@@ -69,7 +69,7 @@ jobs:
 
   merge-artifacts:
     runs-on: ubuntu-latest
-    needs: [artifacts-mingw-w64, artifacts-steamrt-sniper]
+    needs: [artifacts-mingw-w64, artifacts-steamrt4]
     steps:
       - name: Get version
         id: get-version
