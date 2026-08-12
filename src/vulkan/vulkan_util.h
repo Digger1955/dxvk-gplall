@@ -163,7 +163,9 @@ namespace dxvk::vk {
       case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
         return 0;
       default:
+/*
         Logger::err(str::format("Unhandled image layout ", layout));
+*/
         return 0;
     }
   }

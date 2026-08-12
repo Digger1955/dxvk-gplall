@@ -33,7 +33,9 @@ namespace dxvk::vk {
         continue;
       }
 
+/*
       Logger::info(str::format("Vulkan: Found vkGetInstanceProcAddr in ", dllName, " @ 0x", std::hex, reinterpret_cast<uintptr_t>(proc)));
+*/
       return std::make_pair(library, reinterpret_cast<PFN_vkGetInstanceProcAddr>(proc));
     }
 
