@@ -48,17 +48,23 @@ namespace dxvk {
   }
 #else
   HANDLE openKmtHandle(HANDLE kmt_handle) {
+/*
     Logger::warn("openKmtHandle: Shared resources not available on this platform.");
+*/
     return INVALID_HANDLE_VALUE;
   }
 
   bool setSharedMetadata(HANDLE handle, void *buf, uint32_t bufSize) {
+/*
     Logger::warn("setSharedMetadata: Shared resources not available on this platform.");
+*/
     return false;
   }
 
   bool getSharedMetadata(HANDLE handle, void *buf, uint32_t bufSize, uint32_t *metadataSize) {
+/*
     Logger::warn("getSharedMetadata: Shared resources not available on this platform.");
+*/
     return false;
   }
 #endif

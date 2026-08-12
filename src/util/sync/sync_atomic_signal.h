@@ -10,7 +10,7 @@
 #include "../log/log.h"
 
 //#define _atomic_signal_debug(x) Logger::debug(x)
-#define _atomic_signal_debug(x) void()
+//#define _atomic_signal_debug(x) void()
 
 namespace dxvk::sync {
 
@@ -29,7 +29,9 @@ namespace dxvk::sync {
     ~AtomicSignal() {}
 
     void wait() {
+/*
       _atomic_signal_debug( std::string("enter wait for ") + m_name );
+*/
 
       while (true) {
 
@@ -45,31 +47,40 @@ namespace dxvk::sync {
           Logger::err(str::format("WaitOnAddress failed. LastError: ", GetLastError()));
 
       }
-
+/*
       _atomic_signal_debug( std::string("finish wait for ") + m_name );
+*/
     }
 
     void signal_one() {
+/*
       _atomic_signal_debug( std::string("enter signal_one for ") + m_name );
-
+*/
       bool _false = 0;
       if (m_flag.compare_exchange_strong(_false, true, std::memory_order_release, std::memory_order_acquire))
         WakeByAddressSingle(&m_flag);
 
+/*
       _atomic_signal_debug( std::string("finish signal_one for ") + m_name );
+*/
     }
 
     void signal_all() {
+/*
       _atomic_signal_debug( std::string("enter signal_all for ") + m_name );
-
+*/
       m_flag.store(true, std::memory_order_release);
       WakeByAddressAll(&m_flag);
 
+/*
       _atomic_signal_debug( std::string("finish signal_all for ") + m_name );
+*/
     }
 
     void clear() {
+/*
       _atomic_signal_debug( std::string("clear flag for ") + m_name );
+*/
       m_flag.store(false, std::memory_order_release);
     }
 
@@ -153,6 +164,7 @@ namespace dxvk::sync {
 
         if (unlikely(s == -1))
           Logger::err("futex-FUTEX_WAKE");
+
       }
 
     }

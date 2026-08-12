@@ -70,7 +70,7 @@ namespace dxvk {
         m_sleepGranularity = TimerDuration(1ms);
 
         if (NtSetTimerResolution && !NtSetTimerResolution(10000, TRUE, &cur)) {
-          Logger::info(str::format("Setting timer interval to ", (double(10000) / 10.0), " us"));
+          Logger::info(str::format("Setting timer interval to 1000 us"));
           m_sleepGranularity = TimerDuration(1ms);
         }
       }
