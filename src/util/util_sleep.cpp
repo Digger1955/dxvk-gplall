@@ -43,6 +43,10 @@ namespace dxvk {
     // to 2ms by default on any CPU/OS
     initializePlatformSpecifics();
 
+    // Use sleepGranularity as sleepThreshold
+    // and set it to 2ms.
+    m_sleepGranularity = TimerDuration(2ms);
+
     m_initialized.store(true, std::memory_order_release);
 }
 
