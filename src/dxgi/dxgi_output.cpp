@@ -686,10 +686,8 @@ namespace dxvk {
 
     if (metadata)
       m_metadata = metadata.value();
-/*
     else
       Logger::err("DXGI: Failed to parse display metadata + colorimetry info, using blank.");
-*/
 
     // Normalize either the display metadata we got back, or our
     // blank one to get something sane here.
