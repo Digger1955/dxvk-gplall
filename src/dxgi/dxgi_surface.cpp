@@ -31,10 +31,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGIVkSurfaceFactory), riid)) {
       Logger::warn("DxgiSurfaceFactory::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -64,8 +66,10 @@ namespace dxvk {
 
       ATOM atom = ::RegisterClassExW(&wndClass);
 
+/*
       if (!atom)
         Logger::warn("DxgiSurfaceFactory: Failed to register dummy window class");
+*/
 
       s_wndClassRegistered.store(!!atom, std::memory_order_release);
     }
@@ -73,8 +77,10 @@ namespace dxvk {
     HWND hWnd = ::CreateWindowW(L"DXVKDUMMYWNDCLASS", L"DXVKDUMMYWINDOW",
       WS_OVERLAPPEDWINDOW, 0, 0, 320, 240, nullptr, nullptr, hInstance, nullptr);
 
+/*
     if (!hWnd)
       Logger::err("DxgiSurfaceFactory: Failed to create dummy window");
+*/
 
     return hWnd;
 #else

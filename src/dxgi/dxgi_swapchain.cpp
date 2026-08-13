@@ -97,10 +97,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGISwapChain), riid)) {
       Logger::warn("DxgiSwapChain::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -180,14 +182,18 @@ namespace dxvk {
   
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::GetBackgroundColor(
           DXGI_RGBA*                pColor) {
+/*
     Logger::err("DxgiSwapChain::GetBackgroundColor: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
   
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::GetRotation(
           DXGI_MODE_ROTATION*       pRotation) {
+/*
     Logger::err("DxgiSwapChain::GetRotation: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -195,8 +201,9 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::GetRestrictToOutput(
           IDXGIOutput**             ppRestrictToOutput) {
     InitReturnPtr(ppRestrictToOutput);
-    
+/*
     Logger::err("DxgiSwapChain::GetRestrictToOutput: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -302,8 +309,9 @@ namespace dxvk {
           REFIID                    refiid,
           void**                    ppUnk) {
     InitReturnPtr(ppUnk);
-    
+/*
     Logger::err("DxgiSwapChain::GetCoreWindow: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -552,7 +560,9 @@ namespace dxvk {
   
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::SetBackgroundColor(
     const DXGI_RGBA*                pColor) {
+/*
     Logger::err("DxgiSwapChain::SetBackgroundColor: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -562,8 +572,9 @@ namespace dxvk {
 
     if (Rotation == DXGI_MODE_ROTATION_IDENTITY)
       return S_OK;
-
+/*
     Logger::err(str::format("DxgiSwapChain::SetRotation(", Rotation,"): Not implemented"));
+*/
     return E_NOTIMPL;
   }
   
@@ -578,8 +589,10 @@ namespace dxvk {
 
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::GetMatrixTransform(
           DXGI_MATRIX_3X2_F*        pMatrix) {
+/*
     // We don't support composition swap chains
     Logger::err("DxgiSwapChain::GetMatrixTransform: Not supported");
+*/
     return DXGI_ERROR_INVALID_CALL;
   }
 
@@ -607,8 +620,10 @@ namespace dxvk {
   
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::SetMatrixTransform(
     const DXGI_MATRIX_3X2_F*        pMatrix) {
+/*
     // We don't support composition swap chains
     Logger::err("DxgiSwapChain::SetMatrixTransform: Not supported");
+*/
     return DXGI_ERROR_INVALID_CALL;
   }
 
