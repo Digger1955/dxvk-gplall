@@ -60,6 +60,10 @@ namespace dxvk {
     using TimerDuration = std::chrono::nanoseconds;
 #endif
 
+    using namespace std::chrono_literals;
+
+    static constexpr TimerDuration m_sleepGranularity = std::chrono::duration_cast<TimerDuration>(2ms);
+
     Sleep();
 
     void initialize();
