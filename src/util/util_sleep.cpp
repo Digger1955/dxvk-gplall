@@ -21,6 +21,10 @@ using namespace std::chrono_literals;
 
 namespace dxvk {
 
+  // Use sleepGranularity as sleepThreshold 
+  // set it to 2ms and make it static constexpr.
+  static constexpr TimerDuration m_sleepGranularity = TimerDuration(2ms);
+
   Sleep Sleep::s_instance;
 
 
