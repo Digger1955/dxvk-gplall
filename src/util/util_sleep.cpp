@@ -40,11 +40,8 @@ namespace dxvk {
       return;
 
     // Set sleepGranularity/SetTimerResolution
-    // to 1ms by default on any CPU/OS
+    // to 2ms by default on any CPU/OS
     initializePlatformSpecifics();
-
-    // Set sleepThreshold to 2ms
-    m_sleepThreshold = 2 * m_sleepGranularity;
 
     m_initialized.store(true, std::memory_order_release);
 }
@@ -67,20 +64,11 @@ namespace dxvk {
       // Wine's implementation of these functions is a stub as of 6.10, which is fine
       // since it uses select() in NtDelayExecution. This is only relevant for Windows.
       if (NtQueryTimerResolution && !NtQueryTimerResolution(&min, &max, &cur)) {
-        m_sleepGranularity = TimerDuration(1ms);
-
-        if (NtSetTimerResolution && !NtSetTimerResolution(10000, TRUE, &cur)) {
-          Logger::info(str::format("Setting timer interval to 1000 us"));
-          m_sleepGranularity = TimerDuration(1ms);
+        if (NtSetTimerResolution && !NtSetTimerResolution(20000, TRUE, &cur)) {
+          Logger::info(str::format("NtSetTimerResolution: Setting timer interval to 2000 us"));
         }
       }
-    } else {
-      // Assume 1ms sleep granularity by default
-      m_sleepGranularity = TimerDuration(1ms);
     }
-#else
-    // Assume 1ms sleep granularity by default
-    m_sleepGranularity = TimerDuration(1ms);
 #endif
   }
 
@@ -93,7 +81,7 @@ namespace dxvk {
     if (!m_initialized.load(std::memory_order_acquire)) 
         initialize();
 
-    TimerDuration sleepThreshold = m_sleepThreshold;
+    TimerDuration sleepThreshold = m_sleepGranularity;
     const TimePoint targetTime = t0 + duration;
 
     TimePoint t1 = t0;
@@ -121,7 +109,7 @@ namespace dxvk {
       CPU_PAUSE();
 
       // Intervals between wake up checks
-      if (++loopCounter >= 256) {
+      if (++loopCounter >= 512) {
         t1 = dxvk::high_resolution_clock::now();
         remaining = std::chrono::duration_cast<TimerDuration>(targetTime - t1);
         loopCounter = 0;

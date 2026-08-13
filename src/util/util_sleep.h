@@ -56,12 +56,13 @@ namespace dxvk {
     using NtDelayExecutionProc = LONG (NTAPI *) (BOOLEAN, LARGE_INTEGER*);
     NtDelayExecutionProc NtDelayExecution = nullptr;
 #else
-    // On other platforms, we use the std library, which calls through to nanosleep -- which is ns.
+    // On other platforms, we use the std library, which calls through to nanosleep - which is ns.
     using TimerDuration = std::chrono::nanoseconds;
 #endif
 
-    TimerDuration m_sleepGranularity = TimerDuration::zero();
-    TimerDuration m_sleepThreshold   = TimerDuration::zero();
+    // Use sleepGranularity as sleepThreshold equal to 2ms
+    // and make it static constexpr.
+    static constexpr TimerDuration m_sleepGranularity = TimerDuration(2ms);
 
     Sleep();
 
