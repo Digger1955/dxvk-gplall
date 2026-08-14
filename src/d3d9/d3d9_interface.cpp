@@ -419,7 +419,7 @@ namespace dxvk {
     auto dxvkAdapter = adapter->GetDXVKAdapter();
 
     try {
-      auto dxvkDevice = dxvkAdapter->createDevice(m_instance, D3D9DeviceEx::GetDeviceFeatures(dxvkAdapter));
+      auto dxvkDevice = dxvkAdapter->createDevice();
 
       auto* device = new D3D9DeviceEx(
         this,
@@ -549,7 +549,7 @@ namespace dxvk {
 #ifdef _WIN32
     for (uint32_t i = 0u; i < OverrideCount; i++) {
       if (pOverrides[i].pD3D12Device) {
-        const auto& vk11 = Adapter->devicePropertiesExt().vk11;
+        const auto& vk11 = Adapter->deviceProperties().vk11;
 
         if (vk11.deviceLUIDValid) {
           Com<ID3D12Device> device = nullptr;

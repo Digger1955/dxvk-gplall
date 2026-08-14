@@ -57,6 +57,7 @@ namespace dxvk {
     VkPhysicalDeviceVulkan12Features                          vk12                            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };;
     VkPhysicalDeviceVulkan13Features                          vk13                            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };;
     VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT   extAttachmentFeedbackLoopLayout = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT };
+    VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT extDynamicRenderingUnusedAttachments = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT };
     VkBool32                                                  extConservativeRasterization    = VK_FALSE;
     VkPhysicalDeviceCustomBorderColorFeaturesEXT              extCustomBorderColor            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT };
     VkPhysicalDeviceBorderColorSwizzleFeaturesEXT              extBorderColorSwizzle            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT };
@@ -118,6 +119,7 @@ namespace dxvk {
    */
   struct DxvkDeviceExtensionInfo {
     VkExtensionProperties extAttachmentFeedbackLoopLayout   = vk::makeExtension(VK_EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME);
+    VkExtensionProperties extDynamicRenderingUnusedAttachments = vk::makeExtension(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
     VkExtensionProperties amdShaderFragmentMask             = vk::makeExtension(VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME);
     VkExtensionProperties extCalibratedTimestamps           = vk::makeExtension(VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
     VkExtensionProperties extConservativeRasterization      = vk::makeExtension(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);

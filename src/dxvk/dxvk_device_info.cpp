@@ -18,7 +18,7 @@ namespace dxvk {
   #define EXTENSIONS_WITH_FEATURES                 \
     HANDLE_EXT(amdShaderFragmentMask);              \
     HANDLE_EXT(extAttachmentFeedbackLoopLayout);   \
-    HANDLE_EXT(extCalibratedTimestamps);           \
+    HANDLE_EXT(extDynamicRenderingUnusedAttachments); \
     HANDLE_EXT(extConservativeRasterization);      \
     HANDLE_EXT(extCustomBorderColor);              \
     HANDLE_EXT(extBorderColorSwizzle);             \
@@ -850,6 +850,7 @@ namespace dxvk {
       ENABLE_EXT(extCalibratedTimestamps, false),
 
       ENABLE_EXT_FEATURE(extAttachmentFeedbackLoopLayout, attachmentFeedbackLoopLayout, false),
+      ENABLE_EXT_FEATURE(extDynamicRenderingUnusedAttachments, dynamicRenderingUnusedAttachments, false),
 
       /* Enables client API features */
       ENABLE_EXT(extConservativeRasterization, false),

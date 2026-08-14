@@ -216,6 +216,10 @@ namespace dxvk {
      */
     Rc<DxvkDevice> createDevice();
     
+    void logAdapterInfo() {
+      m_capabilities.logDeviceInfo();
+    }
+
     /**
      * \brief Imports a foreign device
      * 
