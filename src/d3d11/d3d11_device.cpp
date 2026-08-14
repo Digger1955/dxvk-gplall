@@ -2731,4 +2731,11 @@ namespace dxvk {
     if (FAILED(m_device->CreateSamplerState(pSamplerDesc, ppSamplerState)))
       return false;
 
-    // for our purposes the actual value doesn't matter,
+    // for our purposes the actual value doesn't matter, only its uniqueness
+    static ULONG seqNum = 1;
+    *pDriverHandle = InterlockedIncrement(&seqNum);
+    AddSamplerAndHandleNVX(*ppSamplerState, *pDriverHandle);
+    return true;
+  }
+
+}
