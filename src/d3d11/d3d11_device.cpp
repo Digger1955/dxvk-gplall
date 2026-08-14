@@ -2738,4 +2738,118 @@ namespace dxvk {
     return true;
   }
 
+
+  void D3D11DeviceExt::AddSamplerAndHandleNVX(ID3D11SamplerState* pSampler, uint32_t Handle) {
+    std::lock_guard lock(m_mapLock);
+    m_samplerHandleToPtr[Handle] = pSampler;
+  }
+
+
+  ID3D11SamplerState* D3D11DeviceExt::HandleToSamplerNVX(uint32_t Handle) {
+    std::lock_guard lock(m_mapLock);
+    auto got = m_samplerHandleToPtr.find(Handle);
+
+    if (got == m_samplerHandleToPtr.end())
+      return nullptr;
+
+    return static_cast<ID3D11SamplerState*>(got->second);
+  }
+
+
+  void D3D11DeviceExt::AddSrvAndHandleNVX(ID3D11ShaderResourceView* pSrv, uint32_t Handle) {
+    std::lock_guard lock(m_mapLock);
+    m_srvHandleToPtr[Handle] = pSrv;
+  }
+
+
+  ID3D11ShaderResourceView* D3D11DeviceExt::HandleToSrvNVX(uint32_t Handle) {
+    std::lock_guard lock(m_mapLock);
+    auto got = m_srvHandleToPtr.find(Handle);
+
+    if (got == m_srvHandleToPtr.end())
+      return nullptr;
+
+    return static_cast<ID3D11ShaderResourceView*>(got->second);
+  }
+
+
+  bool D3D11DeviceExt::LockImage(
+    const Rc<DxvkImage>& Image,
+          VkImageUsageFlags Usage) {
+    if (!Image->canRelocate() && (Image->info().usage & Usage))
+      return true;
+
+    return m_device->LockImage(Image, Usage);
+  }
+
+
+  void D3D11DeviceExt::LockBuffer(const Rc<DxvkBuffer>& Buffer) {
+    if (!Buffer->canRelocate())
+      return;
+
+    auto chunk = m_device->AllocCsChunk(DxvkCsChunkFlag::SingleUse);
+    chunk->push([cBuffer = Buffer] (DxvkContext* ctx) {
+      ctx->ensureBufferAddress(cBuffer);
+    });
+    m_device->GetContext()->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(chunk), true);
+  }
+
+
+  void D3D11ReflexDevice::RegisterLatencyTracker(Rc<DxvkLatencyTracker> Tracker) {
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker)
+      return;
+
+    if ((m_tracker = dynamic_cast<DxvkReflexLatencyTrackerNv*>(Tracker.ptr())))
+      m_tracker->setLatencySleepMode(m_enableLowLatency, m_enableBoost, m_minIntervalUs);
+  }
+
+
+  void D3D11ReflexDevice::UnregisterLatencyTracker(Rc<DxvkLatencyTracker> Tracker) {
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker == Tracker)
+      m_tracker = nullptr;
+  }
+
+
+  D3D11DXGIDevice::D3D11DXGIDevice(
+          IDXGIAdapter*       pAdapter,
+          ID3D12Device*       pD3D12Device,
+          ID3D12CommandQueue* pD3D12Queue,
+          Rc<DxvkInstance>    pDxvkInstance,
+          Rc<DxvkAdapter>     pDxvkAdapter,
+          Rc<DxvkDevice>      pDxvkDevice,
+          D3D_FEATURE_LEVEL   FeatureLevel,
+          UINT                FeatureFlags)
+  : m_dxgiAdapter   (pAdapter),
+    m_dxvkInstance  (pDxvkInstance),
+    m_dxvkAdapter   (pDxvkAdapter),
+    m_dxvkDevice    (pDxvkDevice),
+    m_d3d11Device   (this, FeatureLevel, FeatureFlags),
+    m_d3d11DeviceExt(this, &m_d3d11Device),
+    m_d3d11Interop  (this, &m_d3d11Device),
+    m_d3d11Video    (this, &m_d3d11Device),
+    m_d3d11Reflex   (this, &m_d3d11Device),
+    m_d3d11on12     (this, &m_d3d11Device, pD3D12Device, pD3D12Queue),
+    m_metaDevice    (this),
+    m_dxvkFactory   (this, &m_d3d11Device),
+    m_destructionNotifier(this) {
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11DXGIDevice::GetMaximumFrameLatency(UINT* pMaxLatency) {
+    if (!pMaxLatency)
+      return DXGI_ERROR_INVALID_CALL;
+
+    *pMaxLatency = m_frameLatency;
+    return S_OK;
+  }
+
+
+  Rc<DxvkDevice> STDMETHODCALLTYPE D3D11DXGIDevice::GetDXVKDevice() {
+    return m_dxvkDevice;
+  }
+
 }
