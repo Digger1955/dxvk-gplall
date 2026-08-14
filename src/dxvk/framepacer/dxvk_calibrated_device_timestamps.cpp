@@ -6,7 +6,7 @@ namespace dxvk {
 
   CalibratedDeviceTimestamps::CalibratedDeviceTimestamps( DxvkDevice* device )
   : m_device(device),
-    m_timestampPeriod(device->adapter()->deviceProperties().limits.timestampPeriod),
+    m_timestampPeriod(device->adapter()->deviceProperties().core.properties.limits.timestampPeriod),
     m_canEnable( m_device->vki()->vkGetPhysicalDeviceCalibrateableTimeDomainsEXT != nullptr &&
                m_device->vkd()->vkGetCalibratedTimestampsEXT != nullptr ) {
 

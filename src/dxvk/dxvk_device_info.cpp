@@ -16,9 +16,12 @@ namespace dxvk {
     HANDLE_CORE(vk13);                             \
 
   #define EXTENSIONS_WITH_FEATURES                 \
+    HANDLE_EXT(amdShaderFragmentMask);              \
     HANDLE_EXT(extAttachmentFeedbackLoopLayout);   \
+    HANDLE_EXT(extCalibratedTimestamps);           \
     HANDLE_EXT(extConservativeRasterization);      \
     HANDLE_EXT(extCustomBorderColor);              \
+    HANDLE_EXT(extBorderColorSwizzle);             \
     HANDLE_EXT(extDepthClipEnable);                \
     HANDLE_EXT(extDepthBiasControl);               \
     HANDLE_EXT(extDescriptorBuffer);               \
@@ -27,6 +30,7 @@ namespace dxvk {
     HANDLE_EXT(extFullScreenExclusive);            \
     HANDLE_EXT(extGraphicsPipelineLibrary);        \
     HANDLE_EXT(extHdrMetadata);                    \
+    HANDLE_EXT(extSampleLocations);                \
     HANDLE_EXT(extLineRasterization);              \
     HANDLE_EXT(extMemoryBudget);                   \
     HANDLE_EXT(extMemoryPriority);                 \
@@ -42,13 +46,15 @@ namespace dxvk {
     HANDLE_EXT(extVertexAttributeDivisor);         \
     HANDLE_EXT(khrExternalMemoryWin32);            \
     HANDLE_EXT(khrExternalSemaphoreWin32);         \
-    HANDLE_EXT(khrLoadStoreOpNone);                \
+    HANDLE_EXT(extLoadStoreOpNone);                \
     HANDLE_EXT(khrMaintenance5);                   \
     HANDLE_EXT(khrMaintenance6);                   \
     HANDLE_EXT(khrMaintenance7);                   \
     HANDLE_EXT(khrPipelineLibrary);                \
     HANDLE_EXT(khrPresentId);                      \
+    HANDLE_EXT(khrPresentId2);                     \
     HANDLE_EXT(khrPresentWait);                    \
+    HANDLE_EXT(khrPresentWait2);                   \
     HANDLE_EXT(khrSwapchain);                      \
     HANDLE_EXT(khrSwapchainMutableFormat);         \
     HANDLE_EXT(khrWin32KeyedMutex);                \
@@ -431,7 +437,50 @@ namespace dxvk {
       m_featuresSupported.nvxImageViewHandle = VK_FALSE;
     }
 
-    // Maintenance4 may cause performance problems on AMDVLK in some cases.
+    auto disableExtension = [] (VkExtensionProperties& extension, VkBool32& feature) {
+      extension.specVersion = 0u;
+      feature = VK_FALSE;
+    };
+
+    // Keep extension-derived feature state explicit. This mirrors the legacy
+    // device creation path while allowing the capability class to build the
+    // final extension list and feature chain.
+    if (!m_extensionsSupported.amdShaderFragmentMask.specVersion)
+      disableExtension(m_extensionsSupported.amdShaderFragmentMask, m_featuresSupported.amdShaderFragmentMask);
+    if (!m_extensionsSupported.extConservativeRasterization.specVersion)
+      disableExtension(m_extensionsSupported.extConservativeRasterization, m_featuresSupported.extConservativeRasterization);
+    if (!m_extensionsSupported.extFullScreenExclusive.specVersion)
+      disableExtension(m_extensionsSupported.extFullScreenExclusive, m_featuresSupported.extFullScreenExclusive);
+    if (!m_extensionsSupported.extMemoryBudget.specVersion)
+      disableExtension(m_extensionsSupported.extMemoryBudget, m_featuresSupported.extMemoryBudget);
+    if (!m_extensionsSupported.extSampleLocations.specVersion)
+      disableExtension(m_extensionsSupported.extSampleLocations, m_featuresSupported.extSampleLocations);
+    if (!m_extensionsSupported.extShaderStencilExport.specVersion)
+      disableExtension(m_extensionsSupported.extShaderStencilExport, m_featuresSupported.extShaderStencilExport);
+    if (!m_extensionsSupported.extSwapchainColorSpace.specVersion)
+      disableExtension(m_extensionsSupported.extSwapchainColorSpace, m_featuresSupported.extSwapchainColorSpace);
+    if (!m_extensionsSupported.extHdrMetadata.specVersion)
+      disableExtension(m_extensionsSupported.extHdrMetadata, m_featuresSupported.extHdrMetadata);
+    if (!m_extensionsSupported.extCalibratedTimestamps.specVersion)
+      disableExtension(m_extensionsSupported.extCalibratedTimestamps, m_featuresSupported.extCalibratedTimestamps);
+    if (!m_extensionsSupported.khrExternalMemoryWin32.specVersion)
+      disableExtension(m_extensionsSupported.khrExternalMemoryWin32, m_featuresSupported.khrExternalMemoryWin32);
+    if (!m_extensionsSupported.khrExternalSemaphoreWin32.specVersion)
+      disableExtension(m_extensionsSupported.khrExternalSemaphoreWin32, m_featuresSupported.khrExternalSemaphoreWin32);
+    if (!m_extensionsSupported.extLoadStoreOpNone.specVersion)
+      disableExtension(m_extensionsSupported.extLoadStoreOpNone, m_featuresSupported.extLoadStoreOpNone);
+    if (!m_extensionsSupported.khrSwapchainMutableFormat.specVersion)
+      disableExtension(m_extensionsSupported.khrSwapchainMutableFormat, m_featuresSupported.khrSwapchainMutableFormat);
+    if (!m_extensionsSupported.khrWin32KeyedMutex.specVersion)
+      disableExtension(m_extensionsSupported.khrWin32KeyedMutex, m_featuresSupported.khrWin32KeyedMutex);
+    if (!m_extensionsSupported.nvxBinaryImport.specVersion)
+      disableExtension(m_extensionsSupported.nvxBinaryImport, m_featuresSupported.nvxBinaryImport);
+    if (!m_extensionsSupported.nvxImageViewHandle.specVersion)
+      disableExtension(m_extensionsSupported.nvxImageViewHandle, m_featuresSupported.nvxImageViewHandle);
+
+    if (m_extensionsSupported.nvLowLatency2.specVersion < 2u)
+      disableExtension(m_extensionsSupported.nvLowLatency2, m_featuresSupported.nvLowLatency2);
+
     if (m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
      || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
       m_featuresSupported.vk13.maintenance4 = VK_FALSE;
@@ -457,15 +506,13 @@ namespace dxvk {
     }
 
     if (!hasSurfaceCapabilities2)
-      m_extensionsSupported.extFullScreenExclusive.specVersion = 0u;
+      disableExtension(m_extensionsSupported.extFullScreenExclusive, m_featuresSupported.extFullScreenExclusive);
 
     // Descriptor buffers cause perf regressions on some GPUs
     if (m_featuresSupported.extDescriptorBuffer.descriptorBuffer) {
       bool enableDescriptorBuffer = m_properties.vk12.driverID == VK_DRIVER_ID_MESA_RADV
                                  || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
                                  || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY;
-      applyTristate(enableDescriptorBuffer, instance.options().enableDescriptorBuffer);
-
       if (!enableDescriptorBuffer)
         m_featuresSupported.extDescriptorBuffer.descriptorBuffer = VK_FALSE;
     }
@@ -670,8 +717,8 @@ namespace dxvk {
       }
     }
 
-    if (m_properties.core.properties.limits.maxPushConstantsSize < MaxTotalPushDataSize)
-      return str::format("Device does not support ", MaxTotalPushDataSize, " of push data");
+    if (m_properties.core.properties.limits.maxPushConstantsSize < MaxPushConstantSize)
+      return str::format("Device does not support ", MaxPushConstantSize, " of push data");
 
     return std::nullopt;
   }
@@ -799,7 +846,9 @@ namespace dxvk {
       ENABLE_FEATURE(vk13, shaderDemoteToHelperInvocation, true),
       ENABLE_FEATURE(vk13, synchronization2, true),
 
-      /* Allows sampling currently bound render targets for client APIs */
+      ENABLE_EXT(amdShaderFragmentMask, false),
+      ENABLE_EXT(extCalibratedTimestamps, false),
+
       ENABLE_EXT_FEATURE(extAttachmentFeedbackLoopLayout, attachmentFeedbackLoopLayout, false),
 
       /* Enables client API features */
@@ -808,6 +857,7 @@ namespace dxvk {
       /* Legacy feature exposed in client APIs */
       ENABLE_EXT_FEATURE(extCustomBorderColor, customBorderColors, false),
       ENABLE_EXT_FEATURE(extCustomBorderColor, customBorderColorWithoutFormat, false),
+      ENABLE_EXT_FEATURE(extBorderColorSwizzle, borderColorSwizzle, false),
 
       /* Depth clip matches D3D semantics where depth clamp does not */
       ENABLE_EXT_FEATURE(extDepthClipEnable, depthClipEnable, false),
@@ -840,6 +890,7 @@ namespace dxvk {
 
       /* HDR metadata */
       ENABLE_EXT(extHdrMetadata, false),
+      ENABLE_EXT(extSampleLocations, false),
 
       /* Line rasterization features for client APIs */
       ENABLE_EXT_FEATURE(extLineRasterization, rectangularLines,  false),
@@ -889,7 +940,7 @@ namespace dxvk {
       ENABLE_EXT(khrExternalSemaphoreWin32, false),
 
       /* LOAD_OP_NONE for certain tiler optimizations */
-      ENABLE_EXT(khrLoadStoreOpNone, false),
+      ENABLE_EXT(extLoadStoreOpNone, false),
 
       /* Maintenance features, relied on in various parts of the code */
       ENABLE_EXT_FEATURE(khrMaintenance5, maintenance5, true),
@@ -901,7 +952,9 @@ namespace dxvk {
 
       /* Present wait, used for frame pacing and statistics */
       ENABLE_EXT_FEATURE(khrPresentId, presentId, false),
+      ENABLE_EXT_FEATURE(khrPresentId2, presentId2, false),
       ENABLE_EXT_FEATURE(khrPresentWait, presentWait, false),
+      ENABLE_EXT_FEATURE(khrPresentWait2, presentWait2, false),
 
       /* Swapchain, needed for presentation */
       ENABLE_EXT(khrSwapchain, true),

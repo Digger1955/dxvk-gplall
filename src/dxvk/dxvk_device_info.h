@@ -50,6 +50,8 @@ namespace dxvk {
    * extended features will be marked as unsupported.
    */
   struct DxvkDeviceFeatures {
+    VkBool32                                                  amdShaderFragmentMask         = VK_FALSE;
+    VkBool32                                                  extCalibratedTimestamps       = VK_FALSE;
     VkPhysicalDeviceFeatures2                                 core                            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
     VkPhysicalDeviceVulkan11Features                          vk11                            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
     VkPhysicalDeviceVulkan12Features                          vk12                            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };;
@@ -57,6 +59,7 @@ namespace dxvk {
     VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT   extAttachmentFeedbackLoopLayout = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT };
     VkBool32                                                  extConservativeRasterization    = VK_FALSE;
     VkPhysicalDeviceCustomBorderColorFeaturesEXT              extCustomBorderColor            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT };
+    VkPhysicalDeviceBorderColorSwizzleFeaturesEXT              extBorderColorSwizzle            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT };
     VkPhysicalDeviceDepthClipEnableFeaturesEXT                extDepthClipEnable              = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT };
     VkPhysicalDeviceDepthBiasControlFeaturesEXT               extDepthBiasControl             = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT };
     VkPhysicalDeviceDescriptorBufferFeaturesEXT               extDescriptorBuffer             = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT };
@@ -65,6 +68,7 @@ namespace dxvk {
     VkBool32                                                  extFullScreenExclusive          = VK_FALSE;
     VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT        extGraphicsPipelineLibrary      = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT };
     VkBool32                                                  extHdrMetadata                  = VK_FALSE;
+    VkBool32                                                  extSampleLocations              = VK_FALSE;
     VkPhysicalDeviceLineRasterizationFeaturesEXT              extLineRasterization            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT };
     VkBool32                                                  extMemoryBudget                 = VK_FALSE;
     VkPhysicalDeviceMemoryPriorityFeaturesEXT                 extMemoryPriority               = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT };
@@ -75,18 +79,20 @@ namespace dxvk {
     VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT         extShaderModuleIdentifier       = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT };
     VkBool32                                                  extShaderStencilExport          = VK_FALSE;
     VkBool32                                                  extSwapchainColorSpace          = VK_FALSE;
+    VkBool32                                                  extLoadStoreOpNone              = VK_FALSE;
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT          extSwapchainMaintenance1        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT };
     VkPhysicalDeviceTransformFeedbackFeaturesEXT              extTransformFeedback            = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT };
     VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT         extVertexAttributeDivisor       = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES };
     VkBool32                                                  khrExternalMemoryWin32          = VK_FALSE;
     VkBool32                                                  khrExternalSemaphoreWin32       = VK_FALSE;
-    VkBool32                                                  khrLoadStoreOpNone              = VK_FALSE;
     VkPhysicalDeviceMaintenance5FeaturesKHR                   khrMaintenance5                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR };
     VkPhysicalDeviceMaintenance6FeaturesKHR                   khrMaintenance6                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES_KHR };
     VkPhysicalDeviceMaintenance7FeaturesKHR                   khrMaintenance7                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR };
     VkBool32                                                  khrPipelineLibrary              = VK_FALSE;
     VkPhysicalDevicePresentIdFeaturesKHR                      khrPresentId                    = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR };
+    VkPhysicalDevicePresentId2FeaturesKHR                     khrPresentId2                   = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_2_FEATURES_KHR };
     VkPhysicalDevicePresentWaitFeaturesKHR                    khrPresentWait                  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR };
+    VkPhysicalDevicePresentWait2FeaturesKHR                   khrPresentWait2                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES_KHR };
     VkBool32                                                  khrSwapchain                    = VK_FALSE;
     VkBool32                                                  khrSwapchainMutableFormat       = VK_FALSE;
     VkBool32                                                  khrWin32KeyedMutex              = VK_FALSE;
@@ -112,8 +118,11 @@ namespace dxvk {
    */
   struct DxvkDeviceExtensionInfo {
     VkExtensionProperties extAttachmentFeedbackLoopLayout   = vk::makeExtension(VK_EXT_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_EXTENSION_NAME);
+    VkExtensionProperties amdShaderFragmentMask             = vk::makeExtension(VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME);
+    VkExtensionProperties extCalibratedTimestamps           = vk::makeExtension(VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
     VkExtensionProperties extConservativeRasterization      = vk::makeExtension(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
     VkExtensionProperties extCustomBorderColor              = vk::makeExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+    VkExtensionProperties extBorderColorSwizzle             = vk::makeExtension(VK_EXT_BORDER_COLOR_SWIZZLE_EXTENSION_NAME);
     VkExtensionProperties extDepthClipEnable                = vk::makeExtension(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
     VkExtensionProperties extDepthBiasControl               = vk::makeExtension(VK_EXT_DEPTH_BIAS_CONTROL_EXTENSION_NAME);
     VkExtensionProperties extDescriptorBuffer               = vk::makeExtension(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
@@ -122,6 +131,7 @@ namespace dxvk {
     VkExtensionProperties extFullScreenExclusive            = vk::makeExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
     VkExtensionProperties extGraphicsPipelineLibrary        = vk::makeExtension(VK_EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME);
     VkExtensionProperties extHdrMetadata                    = vk::makeExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME);
+    VkExtensionProperties extSampleLocations                = vk::makeExtension(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME);
     VkExtensionProperties extLineRasterization              = vk::makeExtension(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME);
     VkExtensionProperties extMemoryBudget                   = vk::makeExtension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     VkExtensionProperties extMemoryPriority                 = vk::makeExtension(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME);
@@ -137,13 +147,15 @@ namespace dxvk {
     VkExtensionProperties extVertexAttributeDivisor         = vk::makeExtension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     VkExtensionProperties khrExternalMemoryWin32            = vk::makeExtension(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
     VkExtensionProperties khrExternalSemaphoreWin32         = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
-    VkExtensionProperties khrLoadStoreOpNone                = vk::makeExtension(VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+    VkExtensionProperties extLoadStoreOpNone                = vk::makeExtension(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME);
     VkExtensionProperties khrMaintenance5                   = vk::makeExtension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
     VkExtensionProperties khrMaintenance6                   = vk::makeExtension(VK_KHR_MAINTENANCE_6_EXTENSION_NAME);
     VkExtensionProperties khrMaintenance7                   = vk::makeExtension(VK_KHR_MAINTENANCE_7_EXTENSION_NAME);
     VkExtensionProperties khrPipelineLibrary                = vk::makeExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
     VkExtensionProperties khrPresentId                      = vk::makeExtension(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+    VkExtensionProperties khrPresentId2                     = vk::makeExtension(VK_KHR_PRESENT_ID_2_EXTENSION_NAME);
     VkExtensionProperties khrPresentWait                    = vk::makeExtension(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+    VkExtensionProperties khrPresentWait2                   = vk::makeExtension(VK_KHR_PRESENT_WAIT_2_EXTENSION_NAME);
     VkExtensionProperties khrSwapchain                      = vk::makeExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     VkExtensionProperties khrSwapchainMutableFormat         = vk::makeExtension(VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME);
     VkExtensionProperties khrWin32KeyedMutex                = vk::makeExtension(VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME);
