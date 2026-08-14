@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <unordered_set>
 
@@ -159,7 +160,7 @@ namespace dxvk {
     std::vector<char> featureBlob(featureBlobSize);
     m_capabilities.queryDevcieFeatures(&featureBlobSize, featureBlob.data());
 
-    auto features = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(featureBlob.data());
+    auto features = reinterpret_cast<VkPhysicalDeviceFeatures2*>(featureBlob.data());
 
     // Get extension list and add extra extensions
     uint32_t extensionCount = 0u;
@@ -221,8 +222,37 @@ namespace dxvk {
     deviceInfo.ppEnabledExtensionNames = extensionNames.data();
     deviceInfo.pEnabledFeatures = &features->features;
 
+    VkPhysicalDeviceVulkan12Features* vk12Features =
+      reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(vk::scanChain(
+        features->pNext, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES));
+    bool enableCudaInterop = vk12Features && vk12Features->bufferDeviceAddress
+      && std::find_if(extensionNames.begin(), extensionNames.end(), [] (const char* name) {
+        return !std::strcmp(name, VK_NVX_BINARY_IMPORT_EXTENSION_NAME);
+      }) != extensionNames.end()
+      && std::find_if(extensionNames.begin(), extensionNames.end(), [] (const char* name) {
+        return !std::strcmp(name, VK_NVX_IMAGE_VIEW_HANDLE_EXTENSION_NAME);
+      }) != extensionNames.end();
+
     VkDevice device = VK_NULL_HANDLE;
     VkResult vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
+
+    bool cudaInteropDisabled = false;
+    if (vr != VK_SUCCESS && enableCudaInterop) {
+      Logger::err("DxvkAdapter: Failed to create device, retrying without CUDA interop extensions");
+      cudaInteropDisabled = true;
+
+      extensionNames.erase(std::remove_if(extensionNames.begin(), extensionNames.end(), [] (const char* name) {
+        return !std::strcmp(name, VK_NVX_BINARY_IMPORT_EXTENSION_NAME)
+            || !std::strcmp(name, VK_NVX_IMAGE_VIEW_HANDLE_EXTENSION_NAME);
+      }), extensionNames.end());
+
+      if (vk12Features)
+        vk12Features->bufferDeviceAddress = VK_FALSE;
+
+      deviceInfo.enabledExtensionCount = extensionNames.size();
+      deviceInfo.ppEnabledExtensionNames = extensionNames.data();
+      vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
+    }
 
     if (vr)
       throw DxvkError(str::format("Failed to create Vulkan device: ", vr));
@@ -234,7 +264,11 @@ namespace dxvk {
     deviceQueues.transfer = getDeviceQueue(vkd, queueMapping.transfer);
     deviceQueues.sparse   = getDeviceQueue(vkd, queueMapping.sparse);
 
-    return new DxvkDevice(m_instance, this, vkd, m_capabilities.getFeatures(), deviceQueues, DxvkQueueCallback());
+    auto deviceFeatures = m_capabilities.getFeatures();
+    if (cudaInteropDisabled)
+      deviceFeatures.vk12.bufferDeviceAddress = VK_FALSE;
+
+    return new DxvkDevice(m_instance, this, vkd, deviceFeatures, deviceQueues, DxvkQueueCallback());
   }
 
 

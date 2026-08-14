@@ -414,6 +414,51 @@ namespace dxvk {
 
   void DxvkDeviceCapabilities::disableUnusedFeatures(
     const DxvkInstance&               instance) {
+    // CUDA interop is only enabled for 64-bit Wine Vulkan where both
+    // extensions are available. It also requires buffer device address.
+    bool enableCudaInterop = env::isWineVulkan()
+      && !env::is32BitHostPlatform()
+      && m_extensionsSupported.nvxBinaryImport.specVersion
+      && m_extensionsSupported.nvxImageViewHandle.specVersion
+      && m_featuresSupported.vk12.bufferDeviceAddress;
+
+    m_enableCudaInterop = enableCudaInterop;
+
+    if (!enableCudaInterop) {
+      m_extensionsSupported.nvxBinaryImport.specVersion = 0u;
+      m_extensionsSupported.nvxImageViewHandle.specVersion = 0u;
+      m_featuresSupported.nvxBinaryImport = VK_FALSE;
+      m_featuresSupported.nvxImageViewHandle = VK_FALSE;
+    }
+
+    // Maintenance4 may cause performance problems on AMDVLK in some cases.
+    if (m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
+     || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+      m_featuresSupported.vk13.maintenance4 = VK_FALSE;
+
+    // Unless we're on an Nvidia driver where these extensions are known to be broken.
+    if (m_properties.vk12.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY
+     && m_properties.driverVersion < Version(535, 0, 0)) {
+      m_featuresSupported.khrPresentId.presentId = VK_FALSE;
+      m_featuresSupported.khrPresentWait.presentWait = VK_FALSE;
+    }
+
+    // NV_low_latency2 revision 2 is required by the DXVK integration.
+    if (m_extensionsSupported.nvLowLatency2.specVersion < 2u)
+      m_extensionsSupported.nvLowLatency2.specVersion = 0u;
+
+    // Full-screen exclusive requires the instance-side surface capabilities extension.
+    bool hasSurfaceCapabilities2 = false;
+    for (const auto& extension : instance.getExtensionList()) {
+      if (!std::strcmp(extension.extensionName, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)) {
+        hasSurfaceCapabilities2 = true;
+        break;
+      }
+    }
+
+    if (!hasSurfaceCapabilities2)
+      m_extensionsSupported.extFullScreenExclusive.specVersion = 0u;
+
     // Descriptor buffers cause perf regressions on some GPUs
     if (m_featuresSupported.extDescriptorBuffer.descriptorBuffer) {
       bool enableDescriptorBuffer = m_properties.vk12.driverID == VK_DRIVER_ID_MESA_RADV
@@ -512,6 +557,9 @@ namespace dxvk {
         }
       }
     }
+
+    if (!m_enableCudaInterop)
+      m_featuresEnabled.vk12.bufferDeviceAddress = VK_FALSE;
 
     // Make sure we have a full pNext chain to pass to the device
     chainFeatures(m_extensionsEnabled, m_featuresEnabled);
@@ -727,7 +775,7 @@ namespace dxvk {
       ENABLE_FEATURE(vk11, shaderDrawParameters, true),
       ENABLE_FEATURE(vk11, storagePushConstant16, false),
 
-      ENABLE_FEATURE(vk12, bufferDeviceAddress, true),
+      ENABLE_FEATURE(vk12, bufferDeviceAddress, false),
       ENABLE_FEATURE(vk12, descriptorIndexing, true),
       ENABLE_FEATURE(vk12, descriptorBindingSampledImageUpdateAfterBind, true),
       ENABLE_FEATURE(vk12, descriptorBindingUpdateUnusedWhilePending, true),
@@ -745,7 +793,7 @@ namespace dxvk {
       ENABLE_FEATURE(vk12, vulkanMemoryModel, true),
 
       ENABLE_FEATURE(vk13, dynamicRendering, true),
-      ENABLE_FEATURE(vk13, maintenance4, true),
+      ENABLE_FEATURE(vk13, maintenance4, false),
       ENABLE_FEATURE(vk13, robustImageAccess, false),
       ENABLE_FEATURE(vk13, pipelineCreationCacheControl, false),
       ENABLE_FEATURE(vk13, shaderDemoteToHelperInvocation, true),
