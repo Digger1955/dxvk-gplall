@@ -44,7 +44,6 @@ namespace dxvk {
     m_ordinal         (Ordinal),
     m_displayIndex    (DisplayIndex),
     m_modeCacheFormat (D3D9Format::Unknown) {
-    m_adapter->logAdapterInfo();
     CacheIdentifierInfo();
     // D3D9VkFormatTable needs to be constructed after we've cached the
     // identifier info and determined the proper vendorID to be used.
