@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cmath>
-#include <cstddef>
-#include <type_traits>
 
 #if defined(__SSE2__)
   #include <emmintrin.h>
@@ -23,20 +21,17 @@ namespace dxvk {
 
   template<typename T, typename U = T>
   constexpr T align(T what, U to) {
-    static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                  "align(): T and U must be integral types");
-
-    return static_cast<T>(((what + static_cast<T>(to) - 1) / static_cast<T>(to)) * static_cast<T>(to));
+    return (what + to - 1) & ~(to - 1);
   }
-
 
   template<typename T, typename U = T>
   constexpr T alignDown(T what, U to) {
-    static_assert(std::is_integral_v<T> && std::is_integral_v<U>,
-                  "alignDown(): T and U must be integral types");
-    return static_cast<T>((what / static_cast<T>(to)) * static_cast<T>(to));
+    return (what / to) * to;
   }
 
+  // Equivalent of std::clamp for use with floating point numbers
+  // Handles (-){INFINITY,NAN} cases.
+  // Will return min in cases of NAN, etc.
   [[nodiscard]] inline float fclamp(float value, float min, float max) {
   #if defined(__SSE2__)
 
@@ -58,7 +53,6 @@ namespace dxvk {
 
   template<typename T>
   inline T divCeil(T dividend, T divisor) {
-    static_assert(std::is_integral_v<T>, "divCeil(): T must be an integral type");
     return (dividend + divisor - 1) / divisor;
   }
   
