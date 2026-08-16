@@ -293,13 +293,6 @@ namespace dxvk {
     return tryInverse(m).value_or(m);
   }
 
-  Matrix4 hadamardProduct(const Matrix4& a, const Matrix4& b) {
-    Matrix4 result;
-    for (uint32_t i = 0; i < 4; i++)
-      result[i] = a[i] * b[i];
-    return result;
-  }
-
   std::ostream& operator<<(std::ostream& os, const Matrix4& m) {
     os << "Matrix4(";
     for (uint32_t i = 0; i < 4; i++) {
