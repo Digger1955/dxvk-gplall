@@ -4,11 +4,11 @@
 #include <cmath>
 #include <cstddef>
 
+#if defined(__SSE4_1__) || defined(__SSE2__)
+  #include <emmintrin.h>
+#endif
 #if defined(__SSE4_1__)
-  #include <emmintrin.h>
-  #include <smmintrin.h>
-#elif defined(__SSE2__)
-  #include <emmintrin.h>
+  #include <smmintrin.h> // _mm_dp_ps
 #endif
 
 #include "util_bit.h"
@@ -17,7 +17,7 @@
 namespace dxvk {
 
   // ==========================================
-  // GENERAL BASE TEMPLATE (Fallback for Int, etc.)
+  // PRIMARY TEMPLATE (must appear before specializations)
   // ==========================================
   template <typename T>
   struct alignas(16) Vector4Base {
@@ -83,42 +83,26 @@ namespace dxvk {
     }
 
     Vector4Base& operator+=(const Vector4Base<T>& other) {
-      x += other.x;
-      y += other.y;
-      z += other.z;
-      w += other.w;
-      return *this;
+      x += other.x; y += other.y; z += other.z; w += other.w; return *this;
     }
-
     Vector4Base& operator-=(const Vector4Base<T>& other) {
-      x -= other.x;
-      y -= other.y;
-      z -= other.z;
-      w -= other.w;
-      return *this;
+      x -= other.x; y -= other.y; z -= other.z; w -= other.w; return *this;
     }
-
     Vector4Base& operator*=(T scalar) {
-      x *= scalar;
-      y *= scalar;
-      z *= scalar;
-      w *= scalar;
-      return *this;
+      x *= scalar; y *= scalar; z *= scalar; w *= scalar; return *this;
     }
-
     Vector4Base& operator/=(T scalar) {
-      x /= scalar;
-      y /= scalar;
-      z /= scalar;
-      w /= scalar;
-      return *this;
+      x /= scalar; y /= scalar; z /= scalar; w /= scalar; return *this;
     }
   };
 
   // ==========================================
-  // FULLY OPTIMIZED FLOAT SPECIALIZATION
+  // FLOAT SPECIALIZATION (SSE path or scalar path)
+  // Provide one complete specialization depending on available SIMD.
+  // This centralizes SIMD vs scalar choice and avoids per-method #ifs.
   // ==========================================
 #if defined(__SSE2__) || defined(__SSE4_1__)
+  // SIMD-enabled float specialization (uses aligned loads/stores)
   template <>
   struct alignas(16) Vector4Base<float> {
     union {
@@ -139,76 +123,48 @@ namespace dxvk {
     inline const float& operator[](size_t index) const { return data[index]; }
 
     bool operator==(const Vector4Base<float>& other) const {
-#if defined(__SSE2__)
-      __m128 a = _mm_load_ps(data);         // aligned loads (Vector4Base is alignas(16))
+      __m128 a = _mm_load_ps(data);
       __m128 b = _mm_load_ps(other.data);
       __m128 cmp = _mm_cmpeq_ps(a, b);
       return _mm_movemask_ps(cmp) == 0xF;
-#else
-      return (x == other.x && y == other.y && z == other.z && w == other.w);
-#endif
     }
     bool operator!=(const Vector4Base<float>& other) const { return !operator==(other); }
 
     Vector4Base operator-() const {
-#if defined(__SSE2__)
       Vector4Base result;
       _mm_store_ps(result.data, _mm_sub_ps(_mm_setzero_ps(), _mm_load_ps(data)));
       return result;
-#else
-      return {-x, -y, -z, -w};
-#endif
     }
 
     Vector4Base operator+(const Vector4Base<float>& o) const {
-#if defined(__SSE2__)
       Vector4Base result;
       _mm_store_ps(result.data, _mm_add_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return result;
-#else
-      return { x + o.x, y + o.y, z + o.z, w + o.w };
-#endif
     }
 
     Vector4Base operator-(const Vector4Base<float>& o) const {
-#if defined(__SSE2__)
       Vector4Base result;
       _mm_store_ps(result.data, _mm_sub_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return result;
-#else
-      return { x - o.x, y - o.y, z - o.z, w - o.w };
-#endif
     }
 
     Vector4Base operator*(float scalar) const {
-#if defined(__SSE2__)
       Vector4Base result;
       __m128 s = _mm_set1_ps(scalar);
       _mm_store_ps(result.data, _mm_mul_ps(_mm_load_ps(data), s));
       return result;
-#else
-      return { x * scalar, y * scalar, z * scalar, w * scalar };
-#endif
     }
 
     Vector4Base operator*(const Vector4Base<float>& o) const {
-#if defined(__SSE2__)
       Vector4Base result;
       _mm_store_ps(result.data, _mm_mul_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return result;
-#else
-      return { x * o.x, y * o.y, z * o.z, w * o.w };
-#endif
     }
 
     Vector4Base operator/(const Vector4Base<float>& o) const {
-#if defined(__SSE2__)
       Vector4Base result;
       _mm_store_ps(result.data, _mm_div_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return result;
-#else
-      return { x / o.x, y / o.y, z / o.z, w / o.w };
-#endif
     }
 
     Vector4Base operator/(float scalar) const {
@@ -216,31 +172,19 @@ namespace dxvk {
     }
 
     Vector4Base& operator+=(const Vector4Base<float>& o) {
-#if defined(__SSE2__)
       _mm_store_ps(data, _mm_add_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return *this;
-#else
-      x += o.x; y += o.y; z += o.z; w += o.w; return *this;
-#endif
     }
 
     Vector4Base& operator-=(const Vector4Base<float>& o) {
-#if defined(__SSE2__)
       _mm_store_ps(data, _mm_sub_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
       return *this;
-#else
-      x -= o.x; y -= o.y; z -= o.z; w -= o.w; return *this;
-#endif
     }
 
     Vector4Base& operator*=(float scalar) {
-#if defined(__SSE2__)
       __m128 s = _mm_set1_ps(scalar);
       _mm_store_ps(data, _mm_mul_ps(_mm_load_ps(data), s));
       return *this;
-#else
-      x *= scalar; y *= scalar; z *= scalar; w *= scalar; return *this;
-#endif
     }
 
     Vector4Base& operator/=(float scalar) {
@@ -248,7 +192,7 @@ namespace dxvk {
     }
   };
 #else
-
+  // Scalar float specialization (no SIMD)
   template <>
   struct alignas(16) Vector4Base<float> {
     union {
@@ -289,13 +233,14 @@ namespace dxvk {
 #endif
 
   // ==========================================
-  // UTILITY NON-MEMBER MATH FUNCTIONS
+  // NON-MEMBER FUNCTIONS (centralized)
   // ==========================================
   template <typename T>
   inline Vector4Base<T> operator*(T scalar, const Vector4Base<T>& vector) {
     return vector * scalar;
   }
 
+  // Optimized dot product for float: prefer SSE4.1 dp, else SSE2 reduction, else scalar.
 #if defined(__SSE4_1__)
   inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
     __m128 res = _mm_dp_ps(_mm_load_ps(a.data), _mm_load_ps(b.data), 0xF1);
@@ -304,16 +249,14 @@ namespace dxvk {
     return out;
   }
 #elif defined(__SSE2__)
-
   inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
     __m128 mul = _mm_mul_ps(_mm_load_ps(a.data), _mm_load_ps(b.data));
-
     __m128 shuf = _mm_shuffle_ps(mul, mul, _MM_SHUFFLE(1, 0, 3, 2));
     __m128 sums = _mm_add_ps(mul, shuf);
     shuf = _mm_shuffle_ps(sums, sums, _MM_SHUFFLE(2, 3, 0, 1));
     __m128 total = _mm_add_ps(sums, shuf);
     float out;
-    _mm_store_ss(&out, total); // store lowest float
+    _mm_store_ss(&out, total);
     return out;
   }
 #else
@@ -344,6 +287,7 @@ namespace dxvk {
   static_assert(sizeof(Vector4i) == sizeof(int)   * 4);
   static_assert(alignof(Vector4) == 16, "Vector4 must be 16-byte aligned");
 
+  // replaceNaN: SIMD path (SSE2) or scalar fallback
 #if defined(__SSE2__) || defined(__SSE4_1__)
   inline Vector4 replaceNaN(Vector4 a) {
     Vector4 result;
