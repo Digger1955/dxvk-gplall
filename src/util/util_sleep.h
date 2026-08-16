@@ -60,8 +60,6 @@ namespace dxvk {
     using TimerDuration = std::chrono::nanoseconds;
 #endif
 
-    TimerDuration m_sleepGranularity = TimerDuration::zero();
-
     Sleep();
 
     void initialize();

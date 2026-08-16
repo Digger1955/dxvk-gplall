@@ -39,13 +39,8 @@ namespace dxvk {
     if (m_initialized.load())
       return;
 
-    // Set sleepGranularity/SetTimerResolution
-    // to 2ms by default on any CPU/OS
+    // SetTimerResolution to 2ms by default
     initializePlatformSpecifics();
-
-    // Use sleepGranularity as sleepThreshold
-    // and set it to 2ms.
-    m_sleepGranularity = TimerDuration(2ms);
 
     m_initialized.store(true, std::memory_order_release);
 }
@@ -85,17 +80,17 @@ namespace dxvk {
     if (!m_initialized.load(std::memory_order_acquire)) 
         initialize();
 
-    TimerDuration sleepThreshold = m_sleepGranularity;
+    constexpr TimerDuration sleepGranularity = TimerDuration(2ms);
     const TimePoint targetTime = t0 + duration;
 
     TimePoint t1 = t0;
     TimerDuration remaining = duration;
 
-    while (remaining > sleepThreshold) {
-      TimerDuration sleepDuration = remaining - sleepThreshold;
+    while (remaining > sleepGranularity) {
+      TimerDuration sleepDuration = remaining - sleepGranularity;
 
       // Try long sleep, only if sleepDuration is
-      // longer than sleepThreshold, which equals to 2 ms
+      // longer than sleepGranularity, which equals to 2 ms
       if (sleepDuration > 2ms)
         systemSleep(sleepDuration);
 
