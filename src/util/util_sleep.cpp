@@ -7,7 +7,7 @@
 
 // x86-specific pause macros to save energy during busy-waiting
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-#include <immintrin.h>
+#include <emmintrin.h>
 #define CPU_PAUSE() _mm_pause()
 // ARM-specific pause macros to save energy during busy-waiting
 #elif defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) || defined(_M_ARM64)
