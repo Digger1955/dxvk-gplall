@@ -7,7 +7,7 @@
 
 // x86-specific pause macros to save energy during busy-waiting
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-#include <immintrin.h>
+#include <emmintrin.h>
 #define CPU_PAUSE() _mm_pause()
 // ARM-specific pause macros to save energy during busy-waiting
 #elif defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) || defined(_M_ARM64)
@@ -39,13 +39,8 @@ namespace dxvk {
     if (m_initialized.load())
       return;
 
-    // Set sleepGranularity/SetTimerResolution
-    // to 2ms by default on any CPU/OS
+    // SetTimerResolution to 2ms by default
     initializePlatformSpecifics();
-
-    // Use sleepGranularity as sleepThreshold
-    // and set it to 2ms.
-    m_sleepGranularity = TimerDuration(2ms);
 
     m_initialized.store(true, std::memory_order_release);
 }
@@ -85,17 +80,17 @@ namespace dxvk {
     if (!m_initialized.load(std::memory_order_acquire)) 
         initialize();
 
-    TimerDuration sleepThreshold = m_sleepGranularity;
+    constexpr TimerDuration sleepGranularity = TimerDuration(2ms);
     const TimePoint targetTime = t0 + duration;
 
     TimePoint t1 = t0;
     TimerDuration remaining = duration;
 
-    while (remaining > sleepThreshold) {
-      TimerDuration sleepDuration = remaining - sleepThreshold;
+    while (remaining > sleepGranularity) {
+      TimerDuration sleepDuration = remaining - sleepGranularity;
 
       // Try long sleep, only if sleepDuration is
-      // longer than sleepThreshold, which equals to 2 ms
+      // longer than sleepGranularity, which equals to 2 ms
       if (sleepDuration > 2ms)
         systemSleep(sleepDuration);
 
@@ -104,7 +99,7 @@ namespace dxvk {
       t0 = t1;
     }
 
-    uint32_t loopCounter = 0;
+    uint16_t loopCounter = 0;
 
     // Busy-wait until we have slept long enough
     while (remaining > TimerDuration::zero()) {
@@ -113,7 +108,7 @@ namespace dxvk {
       CPU_PAUSE();
 
       // Intervals between wake up checks
-      if (++loopCounter >= 512) {
+      if (++loopCounter >= 1000) {
         t1 = dxvk::high_resolution_clock::now();
         remaining = std::chrono::duration_cast<TimerDuration>(targetTime - t1);
         loopCounter = 0;
