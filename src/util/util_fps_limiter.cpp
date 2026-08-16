@@ -39,7 +39,7 @@ namespace dxvk {
       if (isEnabled() && !m_initialized)
         initialize();
 
-        m_maxLatency = maxLatency;
+      m_maxLatency = maxLatency;
     }
   }
 
@@ -52,35 +52,48 @@ namespace dxvk {
 
     m_isActive.store(false);
 
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
+    TimerDuration targetInterval;
+    TimerDuration deviation;
+    TimePoint lastFrameSnapshot;
+    bool enabled;
 
-    if (!isEnabled())
-      return;
+    {
+      std::lock_guard<dxvk::mutex> lock(m_mutex);
+      enabled = isEnabled();
+      if (!enabled)
+        return;
 
-    auto t0 = m_lastFrame;
-    auto t1 = dxvk::high_resolution_clock::now();
-
-    auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-
-    if (frameTime * 100 > m_targetInterval * 103 - m_deviation * 100) {
-      // If we have a slow frame, reset the deviation since we
-      // do not want to compensate for low performance later on
-      m_deviation = TimerDuration::zero();
-    } else {
-      // Don't call sleep if the amount of time to sleep is shorter
-      // than the time the function calls are likely going to take
-      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
-      t1 = Sleep::sleepFor(t1, sleepDuration);
-
-      // Compensate for any sleep inaccuracies in the next frame, and
-      // limit cumulative deviation in order to avoid stutter in case we
-      // have a number of slow frames immediately followed by a fast one.
-      frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-      m_deviation += frameTime - m_targetInterval;
-      m_deviation = std::min(m_deviation, m_targetInterval / 16);
+      targetInterval = m_targetInterval;
+      deviation = m_deviation;
+      lastFrameSnapshot = m_lastFrame;
     }
 
-    m_lastFrame = t1;
+    auto t0 = lastFrameSnapshot;
+    auto t1 = dxvk::high_resolution_clock::now();
+    auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
+
+    if (frameTime * 100 > targetInterval * 103 - deviation * 100) {
+      std::lock_guard<dxvk::mutex> lock(m_mutex);
+      m_deviation = TimerDuration::zero();
+      m_lastFrame = t1;
+      return;
+    }
+
+    TimerDuration sleepDuration = targetInterval - deviation - frameTime;
+
+    t1 = Sleep::sleepFor(t1, sleepDuration);
+
+    frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
+
+    {
+      std::lock_guard<dxvk::mutex> lock(m_mutex);
+
+      m_deviation += frameTime - targetInterval;
+
+      m_deviation = std::min(m_deviation, m_targetInterval / 16);
+
+      m_lastFrame = t1;
+    }
   }
 
 
@@ -104,4 +117,4 @@ namespace dxvk {
     return std::nullopt;
   }
 
-}
+} 
