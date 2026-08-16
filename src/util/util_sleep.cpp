@@ -104,7 +104,7 @@ namespace dxvk {
       t0 = t1;
     }
 
-    uint32_t loopCounter = 0;
+    uint16_t loopCounter = 0;
 
     // Busy-wait until we have slept long enough
     while (remaining > TimerDuration::zero()) {
@@ -113,7 +113,7 @@ namespace dxvk {
       CPU_PAUSE();
 
       // Intervals between wake up checks
-      if (++loopCounter >= 512) {
+      if (++loopCounter >= 1000) {
         t1 = dxvk::high_resolution_clock::now();
         remaining = std::chrono::duration_cast<TimerDuration>(targetTime - t1);
         loopCounter = 0;
