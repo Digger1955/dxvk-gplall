@@ -508,15 +508,6 @@ namespace dxvk {
     if (!hasSurfaceCapabilities2)
       disableExtension(m_extensionsSupported.extFullScreenExclusive, m_featuresSupported.extFullScreenExclusive);
 
-    // Descriptor buffers cause perf regressions on some GPUs
-    if (m_featuresSupported.extDescriptorBuffer.descriptorBuffer) {
-      bool enableDescriptorBuffer = m_properties.vk12.driverID == VK_DRIVER_ID_MESA_RADV
-                                 || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
-                                 || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY;
-      if (!enableDescriptorBuffer)
-        m_featuresSupported.extDescriptorBuffer.descriptorBuffer = VK_FALSE;
-    }
-
     if (env::is32BitHostPlatform()) {
       // CUDA interop is unnecessary on 32-bit, no games use it
       m_featuresSupported.nvxBinaryImport = VK_FALSE;
