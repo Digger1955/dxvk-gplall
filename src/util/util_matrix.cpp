@@ -22,26 +22,12 @@ namespace dxvk {
   const Vector4& Matrix4::operator[](size_t index) const { return data[index]; }
 
   bool Matrix4::operator==(const Matrix4& m2) const {
-  #if defined(__SSE4_1__)
-    __m128i r0 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[0].x), _mm_loadu_ps(&m2.data[0].x)));
-    __m128i r1 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[1].x), _mm_loadu_ps(&m2.data[1].x)));
-    __m128i r2 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[2].x), _mm_loadu_ps(&m2.data[2].x)));
-    __m128i r3 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[3].x), _mm_loadu_ps(&m2.data[3].x)));
-
-    __m128i and01 = _mm_and_si128(r0, r1);
-    __m128i and23 = _mm_and_si128(r2, r3);
-    __m128i final_mask = _mm_and_si128(and01, and23);
-
-    return _mm_movemask_ps(_mm_castsi128_ps(final_mask)) == 0xF;
-  #else
+    const Matrix4& m1 = *this;
     for (uint32_t i = 0; i < 4; i++) {
-      __m128 r1 = _mm_loadu_ps(&data[i].x);
-      __m128 r2 = _mm_loadu_ps(&m2.data[i].x);
-      if (_mm_movemask_ps(_mm_cmpeq_ps(r1, r2)) != 0xF)
+      if (m1[i] != m2[i])
         return false;
     }
     return true;
-  #endif
   }
 
   bool Matrix4::operator!=(const Matrix4& m2) const { return !operator==(m2); }
