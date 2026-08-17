@@ -63,23 +63,33 @@ namespace dxvk {
   }
 
   Matrix4 Matrix4::operator*(const Matrix4& m2) const {
-    const Matrix4& m1 = *this;
-
-    const Vector4 srcA0 = { m1[0] };
-    const Vector4 srcA1 = { m1[1] };
-    const Vector4 srcA2 = { m1[2] };
-    const Vector4 srcA3 = { m1[3] };
-
-    const Vector4 srcB0 = { m2[0] };
-    const Vector4 srcB1 = { m2[1] };
-    const Vector4 srcB2 = { m2[2] };
-    const Vector4 srcB3 = { m2[3] };
-
     Matrix4 result;
-    result[0] = srcA0 * srcB0[0] + srcA1 * srcB0[1] + srcA2 * srcB0[2] + srcA3 * srcB0[3];
-    result[1] = srcA0 * srcB1[0] + srcA1 * srcB1[1] + srcA2 * srcB1[2] + srcA3 * srcB1[3];
-    result[2] = srcA0 * srcB2[0] + srcA1 * srcB2[1] + srcA2 * srcB2[2] + srcA3 * srcB2[3];
-    result[3] = srcA0 * srcB3[0] + srcA1 * srcB3[1] + srcA2 * srcB3[2] + srcA3 * srcB3[3];
+
+    __m128 colA0 = _mm_loadu_ps(&data[0].x);
+    __m128 colA1 = _mm_loadu_ps(&data[1].x);
+    __m128 colA2 = _mm_loadu_ps(&data[2].x);
+    __m128 colA3 = _mm_loadu_ps(&data[3].x);
+
+    for (uint32_t i = 0; i < 4; i++) {
+      __m128 colB = _mm_loadu_ps(&m2.data[i].x);
+
+      __m128 b0 = _mm_shuffle_ps(colB, colB, _MM_SHUFFLE(0, 0, 0, 0));
+      __m128 b1 = _mm_shuffle_ps(colB, colB, _MM_SHUFFLE(1, 1, 1, 1));
+      __m128 b2 = _mm_shuffle_ps(colB, colB, _MM_SHUFFLE(2, 2, 2, 2));
+      __m128 b3 = _mm_shuffle_ps(colB, colB, _MM_SHUFFLE(3, 3, 3, 3));
+
+      __m128 v0 = _mm_mul_ps(colA0, b0);
+      __m128 v1 = _mm_mul_ps(colA1, b1);
+      __m128 v2 = _mm_mul_ps(colA2, b2);
+      __m128 v3 = _mm_mul_ps(colA3, b3);
+
+      __m128 sum01 = _mm_add_ps(v0, v1);
+      __m128 sum23 = _mm_add_ps(v2, v3);
+      __m128 sum = _mm_add_ps(sum01, sum23);
+
+      _mm_storeu_ps(&result.data[i].x, sum);
+    }
+
     return result;
   }
 
@@ -224,8 +234,6 @@ namespace dxvk {
   }
 
   std::optional<Matrix4> tryInverse(const Matrix4& m) {
-    // Same algorithm as scalar fallback but using Vector4 helpers for building the adjugate.
-    // Compute cofactors using scalar ops on elements (keeps numerical consistency with scalar path).
     float coef00    = m[2][2] * m[3][3] - m[3][2] * m[2][3];
     float coef02    = m[1][2] * m[3][3] - m[3][2] * m[1][3];
     float coef03    = m[1][2] * m[2][3] - m[2][2] * m[1][3];
