@@ -84,17 +84,43 @@ namespace dxvk {
   }
 
   Vector4 Matrix4::operator*(const Vector4& v) const {
-    const Matrix4& m = *this;
+    Vector4 result;
+    __m128 vec = _mm_loadu_ps(&v.x);
 
-    const Vector4 mul0 = { m[0] * v[0] };
-    const Vector4 mul1 = { m[1] * v[1] };
-    const Vector4 mul2 = { m[2] * v[2] };
-    const Vector4 mul3 = { m[3] * v[3] };
+  #if defined(__SSE4_1__)
+    __m128 row0 = _mm_loadu_ps(&data[0].x);
+    __m128 row1 = _mm_loadu_ps(&data[1].x);
+    __m128 row2 = _mm_loadu_ps(&data[2].x);
+    __m128 row3 = _mm_loadu_ps(&data[3].x);
 
-    const Vector4 add0 = { mul0 + mul1 };
-    const Vector4 add1 = { mul2 + mul3 };
+    float x = _mm_cvtss_f32(_mm_dp_ps(row0, vec, 0xF1));
+    float y = _mm_cvtss_f32(_mm_dp_ps(row1, vec, 0xF1));
+    float z = _mm_cvtss_f32(_mm_dp_ps(row2, vec, 0xF1));
+    float w = _mm_cvtss_f32(_mm_dp_ps(row3, vec, 0xF1));
 
-    return add0 + add1;
+    result.x = x; result.y = y; result.z = z; result.w = w;
+  #else
+    __m128 e0 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(0, 0, 0, 0));
+    __m128 e1 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(1, 1, 1, 1));
+    __m128 e2 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(2, 2, 2, 2));
+    __m128 e3 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(3, 3, 3, 3));
+
+    __m128 row0 = _mm_loadu_ps(&data[0].x);
+    __m128 row1 = _mm_loadu_ps(&data[1].x);
+    __m128 row2 = _mm_loadu_ps(&data[2].x);
+    __m128 row3 = _mm_loadu_ps(&data[3].x);
+
+    __m128 v0 = _mm_mul_ps(e0, row0);
+    __m128 v1 = _mm_mul_ps(e1, row1);
+    __m128 v2 = _mm_mul_ps(e2, row2);
+    __m128 v3 = _mm_mul_ps(e3, row3);
+
+    __m128 sum01 = _mm_add_ps(v0, v1);
+    __m128 sum23 = _mm_add_ps(v2, v3);
+    _mm_storeu_ps(&result.x, _mm_add_ps(sum01, sum23));
+  #endif
+
+    return result;
   }
 
   Matrix4 Matrix4::operator*(float scalar) const {
