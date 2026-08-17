@@ -277,14 +277,7 @@ namespace dxvk {
     Vector4 dot0    = { m[0] * row0 };
     float dot1      = (dot0.x + dot0.y) + (dot0.z + dot0.w);
 
-    float maxAbs = 0.0f;
-    for (uint32_t i = 0; i < 4; ++i) {
-      const float* row = &m.data[i].x;
-      for (uint32_t j = 0; j < 4; ++j)
-        maxAbs = std::max(maxAbs, std::abs(row[j]));
-    }
-
-    if (std::abs(dot1) < 1e-9f || std::abs(dot1) < 1e-6f * std::max(1.0f, maxAbs))
+    if (unlikely(std::abs(dot1) <= std::numeric_limits<float>::min() * 10))
       return std::nullopt;
 
     return std::make_optional(inverse * (1.0f / dot1));
@@ -459,14 +452,7 @@ namespace dxvk {
     Vector4 dot0    = { m[0] * row0 };
     float dot1      = (dot0.x + dot0.y) + (dot0.z + dot0.w);
 
-    float maxAbs = 0.0f;
-    for (uint32_t i = 0; i < 4; ++i) {
-      const float* row = &m.data[i].x;
-      for (uint32_t j = 0; j < 4; ++j)
-        maxAbs = std::max(maxAbs, std::abs(row[j]));
-    }
-
-    if (std::abs(dot1) < 1e-9f || std::abs(dot1) < 1e-6f * std::max(1.0f, maxAbs))
+    if (unlikely(std::abs(dot1) <= std::numeric_limits<float>::min() * 10))
       return std::nullopt;
 
     return std::make_optional(inverse * (1.0f / dot1));
