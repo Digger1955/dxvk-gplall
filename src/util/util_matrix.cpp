@@ -49,70 +49,38 @@ namespace dxvk {
   }
 
   Matrix4 Matrix4::operator*(const Matrix4& m2) const {
+    const Matrix4& m1 = *this;
+
+    const Vector4 srcA0 = { m1[0] };
+    const Vector4 srcA1 = { m1[1] };
+    const Vector4 srcA2 = { m1[2] };
+    const Vector4 srcA3 = { m1[3] };
+
+    const Vector4 srcB0 = { m2[0] };
+    const Vector4 srcB1 = { m2[1] };
+    const Vector4 srcB2 = { m2[2] };
+    const Vector4 srcB3 = { m2[3] };
+
     Matrix4 result;
-    __m128 rowB0 = _mm_loadu_ps(&m2.data[0].x);
-    __m128 rowB1 = _mm_loadu_ps(&m2.data[1].x);
-    __m128 rowB2 = _mm_loadu_ps(&m2.data[2].x);
-    __m128 rowB3 = _mm_loadu_ps(&m2.data[3].x);
-
-    for (uint32_t i = 0; i < 4; i++) {
-      __m128 rowA = _mm_loadu_ps(&data[i].x);
-
-      __m128 e0 = _mm_shuffle_ps(rowA, rowA, _MM_SHUFFLE(0, 0, 0, 0));
-      __m128 e1 = _mm_shuffle_ps(rowA, rowA, _MM_SHUFFLE(1, 1, 1, 1));
-      __m128 e2 = _mm_shuffle_ps(rowA, rowA, _MM_SHUFFLE(2, 2, 2, 2));
-      __m128 e3 = _mm_shuffle_ps(rowA, rowA, _MM_SHUFFLE(3, 3, 3, 3));
-
-      __m128 v0 = _mm_mul_ps(e0, rowB0);
-      __m128 v1 = _mm_mul_ps(e1, rowB1);
-      __m128 v2 = _mm_mul_ps(e2, rowB2);
-      __m128 v3 = _mm_mul_ps(e3, rowB3);
-
-      __m128 sum01 = _mm_add_ps(v0, v1);
-      __m128 sum23 = _mm_add_ps(v2, v3);
-      _mm_storeu_ps(&result.data[i].x, _mm_add_ps(sum01, sum23));
-    }
+    result[0] = srcA0 * srcB0[0] + srcA1 * srcB0[1] + srcA2 * srcB0[2] + srcA3 * srcB0[3];
+    result[1] = srcA0 * srcB1[0] + srcA1 * srcB1[1] + srcA2 * srcB1[2] + srcA3 * srcB1[3];
+    result[2] = srcA0 * srcB2[0] + srcA1 * srcB2[1] + srcA2 * srcB2[2] + srcA3 * srcB2[3];
+    result[3] = srcA0 * srcB3[0] + srcA1 * srcB3[1] + srcA2 * srcB3[2] + srcA3 * srcB3[3];
     return result;
   }
 
   Vector4 Matrix4::operator*(const Vector4& v) const {
-    Vector4 result;
-    __m128 vec = _mm_loadu_ps(&v.x);
+    const Matrix4& m = *this;
 
-  #if defined(__SSE4_1__)
-    __m128 row0 = _mm_loadu_ps(&data[0].x);
-    __m128 row1 = _mm_loadu_ps(&data[1].x);
-    __m128 row2 = _mm_loadu_ps(&data[2].x);
-    __m128 row3 = _mm_loadu_ps(&data[3].x);
+    const Vector4 mul0 = { m[0] * v[0] };
+    const Vector4 mul1 = { m[1] * v[1] };
+    const Vector4 mul2 = { m[2] * v[2] };
+    const Vector4 mul3 = { m[3] * v[3] };
 
-    float x = _mm_cvtss_f32(_mm_dp_ps(row0, vec, 0xF1));
-    float y = _mm_cvtss_f32(_mm_dp_ps(row1, vec, 0xF1));
-    float z = _mm_cvtss_f32(_mm_dp_ps(row2, vec, 0xF1));
-    float w = _mm_cvtss_f32(_mm_dp_ps(row3, vec, 0xF1));
+    const Vector4 add0 = { mul0 + mul1 };
+    const Vector4 add1 = { mul2 + mul3 };
 
-    result.x = x; result.y = y; result.z = z; result.w = w;
-  #else
-    __m128 e0 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(0, 0, 0, 0));
-    __m128 e1 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(1, 1, 1, 1));
-    __m128 e2 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(2, 2, 2, 2));
-    __m128 e3 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(3, 3, 3, 3));
-
-    __m128 row0 = _mm_loadu_ps(&data[0].x);
-    __m128 row1 = _mm_loadu_ps(&data[1].x);
-    __m128 row2 = _mm_loadu_ps(&data[2].x);
-    __m128 row3 = _mm_loadu_ps(&data[3].x);
-
-    __m128 v0 = _mm_mul_ps(e0, row0);
-    __m128 v1 = _mm_mul_ps(e1, row1);
-    __m128 v2 = _mm_mul_ps(e2, row2);
-    __m128 v3 = _mm_mul_ps(e3, row3);
-
-    __m128 sum01 = _mm_add_ps(v0, v1);
-    __m128 sum23 = _mm_add_ps(v2, v3);
-    _mm_storeu_ps(&result.x, _mm_add_ps(sum01, sum23));
-  #endif
-
-    return result;
+    return add0 + add1;
   }
 
   Matrix4 Matrix4::operator*(float scalar) const {
@@ -157,21 +125,11 @@ namespace dxvk {
 
   Matrix4 transpose(const Matrix4& m) {
     Matrix4 result;
-    __m128 r0 = _mm_loadu_ps(&m.data[0].x);
-    __m128 r1 = _mm_loadu_ps(&m.data[1].x);
-    __m128 r2 = _mm_loadu_ps(&m.data[2].x);
-    __m128 r3 = _mm_loadu_ps(&m.data[3].x);
 
-    __m128 t0 = _mm_unpacklo_ps(r0, r1);
-    __m128 t1 = _mm_unpackhi_ps(r0, r1);
-    __m128 t2 = _mm_unpacklo_ps(r2, r3);
-    __m128 t3 = _mm_unpackhi_ps(r2, r3);
-
-    _mm_storeu_ps(&result.data[0].x, _mm_movelh_ps(t0, t2));
-    _mm_storeu_ps(&result.data[1].x, _mm_movehl_ps(t2, t0));
-    _mm_storeu_ps(&result.data[2].x, _mm_movelh_ps(t1, t3));
-    _mm_storeu_ps(&result.data[3].x, _mm_movehl_ps(t3, t1));
-
+    for (uint32_t i = 0; i < 4; i++) {
+      for (uint32_t j = 0; j < 4; j++)
+        result[i][j] = m.data[j][i];
+    }
     return result;
   }
 
