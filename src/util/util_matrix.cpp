@@ -139,11 +139,21 @@ namespace dxvk {
 
   Matrix4 transpose(const Matrix4& m) {
     Matrix4 result;
+    __m128 r0 = _mm_loadu_ps(&m.data[0].x);
+    __m128 r1 = _mm_loadu_ps(&m.data[1].x);
+    __m128 r2 = _mm_loadu_ps(&m.data[2].x);
+    __m128 r3 = _mm_loadu_ps(&m.data[3].x);
 
-    for (uint32_t i = 0; i < 4; i++) {
-      for (uint32_t j = 0; j < 4; j++)
-        result[i][j] = m.data[j][i];
-    }
+    __m128 t0 = _mm_unpacklo_ps(r0, r1);
+    __m128 t1 = _mm_unpackhi_ps(r0, r1);
+    __m128 t2 = _mm_unpacklo_ps(r2, r3);
+    __m128 t3 = _mm_unpackhi_ps(r2, r3);
+
+    _mm_storeu_ps(&result.data[0].x, _mm_movelh_ps(t0, t2));
+    _mm_storeu_ps(&result.data[1].x, _mm_movehl_ps(t2, t0));
+    _mm_storeu_ps(&result.data[2].x, _mm_movelh_ps(t1, t3));
+    _mm_storeu_ps(&result.data[3].x, _mm_movehl_ps(t3, t1));
+
     return result;
   }
 
