@@ -102,7 +102,7 @@ namespace dxvk {
   // This centralizes SIMD vs scalar choice and avoids per-method #ifs.
   // ==========================================
 #if defined(__SSE2__) || defined(__SSE4_1__)
-  // SIMD-enabled float specialization (uses aligned loads/stores)
+  // SIMD-enabled float specialization (uses unaligned loads/stores for safety)
   template <>
   struct alignas(16) Vector4Base<float> {
     union {
@@ -123,8 +123,8 @@ namespace dxvk {
     inline const float& operator[](size_t index) const { return data[index]; }
 
     bool operator==(const Vector4Base<float>& other) const {
-      __m128 a = _mm_load_ps(data);
-      __m128 b = _mm_load_ps(other.data);
+      __m128 a = _mm_loadu_ps(data);
+      __m128 b = _mm_loadu_ps(other.data);
       __m128 cmp = _mm_cmpeq_ps(a, b);
       return _mm_movemask_ps(cmp) == 0xF;
     }
@@ -132,38 +132,38 @@ namespace dxvk {
 
     Vector4Base operator-() const {
       Vector4Base result;
-      _mm_store_ps(result.data, _mm_sub_ps(_mm_setzero_ps(), _mm_load_ps(data)));
+      _mm_storeu_ps(result.data, _mm_sub_ps(_mm_setzero_ps(), _mm_loadu_ps(data)));
       return result;
     }
 
     Vector4Base operator+(const Vector4Base<float>& o) const {
       Vector4Base result;
-      _mm_store_ps(result.data, _mm_add_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(result.data, _mm_add_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return result;
     }
 
     Vector4Base operator-(const Vector4Base<float>& o) const {
       Vector4Base result;
-      _mm_store_ps(result.data, _mm_sub_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(result.data, _mm_sub_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return result;
     }
 
     Vector4Base operator*(float scalar) const {
       Vector4Base result;
       __m128 s = _mm_set1_ps(scalar);
-      _mm_store_ps(result.data, _mm_mul_ps(_mm_load_ps(data), s));
+      _mm_storeu_ps(result.data, _mm_mul_ps(_mm_loadu_ps(data), s));
       return result;
     }
 
     Vector4Base operator*(const Vector4Base<float>& o) const {
       Vector4Base result;
-      _mm_store_ps(result.data, _mm_mul_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(result.data, _mm_mul_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return result;
     }
 
     Vector4Base operator/(const Vector4Base<float>& o) const {
       Vector4Base result;
-      _mm_store_ps(result.data, _mm_div_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(result.data, _mm_div_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return result;
     }
 
@@ -172,18 +172,18 @@ namespace dxvk {
     }
 
     Vector4Base& operator+=(const Vector4Base<float>& o) {
-      _mm_store_ps(data, _mm_add_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(data, _mm_add_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return *this;
     }
 
     Vector4Base& operator-=(const Vector4Base<float>& o) {
-      _mm_store_ps(data, _mm_sub_ps(_mm_load_ps(data), _mm_load_ps(o.data)));
+      _mm_storeu_ps(data, _mm_sub_ps(_mm_loadu_ps(data), _mm_loadu_ps(o.data)));
       return *this;
     }
 
     Vector4Base& operator*=(float scalar) {
       __m128 s = _mm_set1_ps(scalar);
-      _mm_store_ps(data, _mm_mul_ps(_mm_load_ps(data), s));
+      _mm_storeu_ps(data, _mm_mul_ps(_mm_loadu_ps(data), s));
       return *this;
     }
 
@@ -243,14 +243,14 @@ namespace dxvk {
   // Optimized dot product for float: prefer SSE4.1 dp, else SSE2 reduction, else scalar.
 #if defined(__SSE4_1__)
   inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
-    __m128 res = _mm_dp_ps(_mm_load_ps(a.data), _mm_load_ps(b.data), 0xF1);
+    __m128 res = _mm_dp_ps(_mm_loadu_ps(a.data), _mm_loadu_ps(b.data), 0xF1);
     float out;
     _mm_store_ss(&out, res);
     return out;
   }
 #elif defined(__SSE2__)
   inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
-    __m128 mul = _mm_mul_ps(_mm_load_ps(a.data), _mm_load_ps(b.data));
+    __m128 mul = _mm_mul_ps(_mm_loadu_ps(a.data), _mm_loadu_ps(b.data));
     __m128 shuf = _mm_shuffle_ps(mul, mul, _MM_SHUFFLE(1, 0, 3, 2));
     __m128 sums = _mm_add_ps(mul, shuf);
     shuf = _mm_shuffle_ps(sums, sums, _MM_SHUFFLE(2, 3, 0, 1));
@@ -291,10 +291,10 @@ namespace dxvk {
 #if defined(__SSE2__) || defined(__SSE4_1__)
   inline Vector4 replaceNaN(Vector4 a) {
     Vector4 result;
-    __m128 value = _mm_load_ps(a.data);
+    __m128 value = _mm_loadu_ps(a.data);
     __m128 mask  = _mm_cmpeq_ps(value, value); // NaN != NaN -> mask zero
     value = _mm_and_ps(value, mask);           // zero-out NaNs
-    _mm_store_ps(result.data, value);
+    _mm_storeu_ps(result.data, value);
     return result;
   }
 #else
