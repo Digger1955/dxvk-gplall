@@ -16,11 +16,21 @@
 
 namespace dxvk {
 
+  /*
+  IMPORTANT: 
+  1. Use unaligned loads/stores (_mm_loadu_ps/_mm_storeu_ps) for safety,
+  because Matrix4/Vector4 may be placed in memory without guaranteed
+  16-byte alignment in all places (mapped buffers, packed structs, etc).
+  2. DO NOT USE alignas(16), because with a Windows target platform, 
+  GCC will just not align rsp at all and silently generate code that can explode at any time.
+  Info: https://github.com/doitsujin/dxvk/pull/4448
+  */
+
   // ==========================================
   // PRIMARY TEMPLATE (must appear before specializations)
   // ==========================================
   template <typename T>
-  struct alignas(16) Vector4Base {
+  struct Vector4Base {
     union {
       T data[4];
       struct { T x, y, z, w; };
@@ -104,7 +114,7 @@ namespace dxvk {
 #if defined(__SSE2__) || defined(__SSE4_1__)
   // SIMD-enabled float specialization (uses unaligned loads/stores for safety)
   template <>
-  struct alignas(16) Vector4Base<float> {
+  struct Vector4Base<float> {
     union {
       float data[4];
       struct { float x, y, z, w; };
@@ -194,7 +204,7 @@ namespace dxvk {
 #else
   // Scalar float specialization (no SIMD)
   template <>
-  struct alignas(16) Vector4Base<float> {
+  struct Vector4Base<float> {
     union {
       float data[4];
       struct { float x, y, z, w; };
@@ -233,7 +243,7 @@ namespace dxvk {
 #endif
 
   // ==========================================
-  // NON-MEMBER FUNCTIONS (centralized)
+  // NON-MEMBER FUNCTIONS
   // ==========================================
   template <typename T>
   inline Vector4Base<T> operator*(T scalar, const Vector4Base<T>& vector) {
@@ -285,7 +295,6 @@ namespace dxvk {
 
   static_assert(sizeof(Vector4)  == sizeof(float) * 4);
   static_assert(sizeof(Vector4i) == sizeof(int)   * 4);
-  static_assert(alignof(Vector4) == 16, "Vector4 must be 16-byte aligned");
 
   // replaceNaN: SIMD path (SSE2) or scalar fallback
 #if defined(__SSE2__) || defined(__SSE4_1__)
@@ -293,7 +302,7 @@ namespace dxvk {
     Vector4 result;
     __m128 value = _mm_loadu_ps(a.data);
     __m128 mask  = _mm_cmpeq_ps(value, value); // NaN != NaN -> mask zero
-    value = _mm_and_ps(value, mask);           // zero-out NaNs
+           value = _mm_and_ps(value, mask);    // zero-out NaNs
     _mm_storeu_ps(result.data, value);
     return result;
   }

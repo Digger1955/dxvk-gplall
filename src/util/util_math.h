@@ -8,6 +8,16 @@
 
 namespace dxvk {
 
+  /*
+  IMPORTANT: 
+  1. Use unaligned loads/stores (_mm_loadu_ps/_mm_storeu_ps) for safety,
+  because Matrix4/Vector4 may be placed in memory without guaranteed
+  16-byte alignment in all places (mapped buffers, packed structs, etc).
+  2. DO NOT USE alignas(16), because with a Windows target platform, 
+  GCC will just not align rsp at all and silently generate code that can explode at any time.
+  Info: https://github.com/doitsujin/dxvk/pull/4448
+  */
+
   constexpr size_t CACHE_LINE_SIZE = 64;
 
   constexpr double pi = 3.14159265359;
