@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <optional>
 
 #include "dxvk_device.h"

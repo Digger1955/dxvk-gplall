@@ -24,7 +24,6 @@ namespace dxvk {
     HANDLE_EXT(extBorderColorSwizzle);             \
     HANDLE_EXT(extDepthClipEnable);                \
     HANDLE_EXT(extDepthBiasControl);               \
-    HANDLE_EXT(extDescriptorBuffer);               \
     HANDLE_EXT(extExtendedDynamicState3);          \
     HANDLE_EXT(extFragmentShaderInterlock);        \
     HANDLE_EXT(extFullScreenExclusive);            \
@@ -67,7 +66,6 @@ namespace dxvk {
   #define EXTENSIONS_WITH_PROPERTIES               \
     HANDLE_EXT(extConservativeRasterization);      \
     HANDLE_EXT(extCustomBorderColor);              \
-    HANDLE_EXT(extDescriptorBuffer);               \
     HANDLE_EXT(extExtendedDynamicState3);          \
     HANDLE_EXT(extGraphicsPipelineLibrary);        \
     HANDLE_EXT(extLineRasterization);              \
@@ -545,9 +543,6 @@ namespace dxvk {
     if (m_featuresSupported.extRobustness2.robustImageAccess2)
       m_featuresSupported.vk13.robustImageAccess = VK_FALSE;
 
-    // If descriptor buffers are used, disable legacy descriptor model extensions
-    if (m_featuresSupported.extDescriptorBuffer.descriptorBuffer)
-      m_featuresSupported.nvDescriptorPoolOverallocation.descriptorPoolOverallocation = VK_FALSE;
 
     // Vertex attribute divisor is unusable before spec version 3
     if (m_extensionsSupported.extVertexAttributeDivisor.specVersion < 3u) {
@@ -860,8 +855,6 @@ namespace dxvk {
       ENABLE_EXT_FEATURE(extDepthBiasControl, floatRepresentation, false),
       ENABLE_EXT_FEATURE(extDepthBiasControl, depthBiasExact, false),
 
-      /* Descriptor buffers for a more efficient binding model */
-      ENABLE_EXT_FEATURE(extDescriptorBuffer, descriptorBuffer, false),
 
       /* Dynamic state to further improve the graphics_pipeline_library experience */
       ENABLE_EXT_FEATURE(extExtendedDynamicState3, extendedDynamicState3AlphaToCoverageEnable, false),
