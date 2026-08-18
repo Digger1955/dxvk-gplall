@@ -196,7 +196,7 @@ namespace dxvk {
         presentId.pNext = const_cast<void*>(std::exchange(info.pNext, &presentId));
     }
 
-    if (m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1) {
+    if (m_device->features().extSwapchainMaintenance1.swapchainMaintenance1) {
       modeInfo.pNext = const_cast<void*>(std::exchange(info.pNext, &modeInfo));
       fenceInfo.pNext = const_cast<void*>(std::exchange(info.pNext, &fenceInfo));
     }
@@ -211,7 +211,7 @@ namespace dxvk {
     // recreate the swapchain. Spec says that 'queue' operations, i.e. the
     // semaphore and fence signals, still happen if present fails with
     // normal swapchain errors, such as OUT_OF_DATE or SURFACE_LOST.
-    if (m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1) {
+    if (m_device->features().extSwapchainMaintenance1.swapchainMaintenance1) {
       currSync.fenceSignaled = status != VK_ERROR_OUT_OF_DEVICE_MEMORY
                             && status != VK_ERROR_OUT_OF_HOST_MEMORY
                             && status != VK_ERROR_DEVICE_LOST;
@@ -628,7 +628,7 @@ namespace dxvk {
     uint32_t minImageCount = caps.surfaceCapabilities.minImageCount;
     uint32_t maxImageCount = caps.surfaceCapabilities.maxImageCount;
 
-    if (m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1) {
+    if (m_device->features().extSwapchainMaintenance1.swapchainMaintenance1) {
       VkSurfacePresentModeCompatibilityKHR compatibleModeInfo = { VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_KHR };
 
       VkSurfacePresentModeKHR presentModeInfo = { VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR };
@@ -738,7 +738,7 @@ namespace dxvk {
     if (m_device->features().extFullScreenExclusive)
       fullScreenInfo.pNext = const_cast<void*>(std::exchange(swapInfo.pNext, &fullScreenInfo));
 
-    if (m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1)
+    if (m_device->features().extSwapchainMaintenance1.swapchainMaintenance1)
       modeInfo.pNext = std::exchange(swapInfo.pNext, &modeInfo);
 
     if (m_device->features().nvLowLatency2)
@@ -799,7 +799,7 @@ namespace dxvk {
     // that we use to ensure that semaphores are safe to access.
     uint32_t semaphoreCount = images.size();
 
-    if (!m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1) {
+    if (!m_device->features().extSwapchainMaintenance1.swapchainMaintenance1) {
       // Without support for present fences, just give up and allocate extra
       // semaphores. We have no real guarantees when they are safe to access.
       semaphoreCount *= 2u;
@@ -1185,7 +1185,7 @@ namespace dxvk {
     // Without present fence support, waiting for the queue or device to go idle
     // is the only way to properly synchronize swapchain teardown. Care must be
     // taken not to call this method while the submission queue is locked.
-    if (!m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1)
+    if (!m_device->features().extSwapchainMaintenance1.swapchainMaintenance1)
       m_device->waitForIdle();
 
     // Wait for the presentWait worker to finish using

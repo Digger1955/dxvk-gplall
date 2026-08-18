@@ -139,7 +139,7 @@ namespace dxvk::hud {
 
 
   HudDeviceInfoItem::HudDeviceInfoItem(const Rc<DxvkDevice>& device) {
-    VkPhysicalDeviceProperties props = device->adapter()->deviceProperties();
+    VkPhysicalDeviceProperties props = device->adapter()->deviceProperties().core.properties;
 
     m_deviceName = props.deviceName;
     m_vulkanVer = str::format("VLK: ",

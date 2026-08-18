@@ -1833,7 +1833,7 @@ namespace dxvk {
 
     // Update depth bias if necessary
     if (ds != nullptr && m_depthBiasRepresentation.depthBiasRepresentation != VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT) {
-      const int32_t vendorId = m_dxvkDevice->adapter()->deviceProperties().vendorID;
+      const int32_t vendorId = m_dxvkDevice->adapter()->deviceProperties().core.properties.vendorID;
       const bool exact = m_depthBiasRepresentation.depthBiasExact;
       const bool forceUnorm = m_depthBiasRepresentation.depthBiasRepresentation == VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT;
       const float rValue = GetDepthBufferRValue(ds->GetCommonTexture()->GetFormatMapping().FormatColor, vendorId, exact, forceUnorm);
@@ -4749,86 +4749,6 @@ namespace dxvk {
 
   HWND D3D9DeviceEx::GetWindow() {
     return m_window;
-  }
-
-
-  DxvkDeviceFeatures D3D9DeviceEx::GetDeviceFeatures(const Rc<DxvkAdapter>& adapter) {
-    DxvkDeviceFeatures supported = adapter->features();
-    DxvkDeviceFeatures enabled = {};
-
-    // Geometry shaders are used for some meta ops
-    enabled.core.features.geometryShader = VK_TRUE;
-    enabled.core.features.robustBufferAccess = VK_TRUE;
-
-    enabled.vk12.samplerMirrorClampToEdge = VK_TRUE;
-
-    enabled.vk13.shaderDemoteToHelperInvocation = VK_TRUE;
-
-    enabled.extMemoryPriority.memoryPriority = supported.extMemoryPriority.memoryPriority;
-
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor;
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor;
-
-    // ProcessVertices
-    enabled.core.features.vertexPipelineStoresAndAtomics = supported.core.features.vertexPipelineStoresAndAtomics;
-    enabled.vk12.shaderInt8 = supported.vk12.shaderInt8;
-
-    // DXVK Meta
-    enabled.core.features.imageCubeArray = VK_TRUE;
-
-    // SM1 level hardware
-    enabled.core.features.depthClamp = VK_TRUE;
-    enabled.core.features.depthBiasClamp = VK_TRUE;
-    enabled.core.features.fillModeNonSolid = VK_TRUE;
-    enabled.core.features.pipelineStatisticsQuery = supported.core.features.pipelineStatisticsQuery;
-    enabled.core.features.sampleRateShading = VK_TRUE;
-    enabled.core.features.samplerAnisotropy = supported.core.features.samplerAnisotropy;
-    enabled.core.features.shaderClipDistance = VK_TRUE;
-    enabled.core.features.shaderCullDistance = VK_TRUE;
-
-    // Ensure we support real BC formats and unofficial vendor ones.
-    enabled.core.features.textureCompressionBC = VK_TRUE;
-
-    // SM2 level hardware
-    enabled.core.features.occlusionQueryPrecise = VK_TRUE;
-
-    // SM3 level hardware
-    enabled.core.features.multiViewport = VK_TRUE;
-    enabled.core.features.independentBlend = VK_TRUE;
-
-    // D3D10 level hardware supports this in D3D9 native.
-    enabled.core.features.fullDrawIndexUint32 = VK_TRUE;
-
-    // Enable depth bounds test if we support it.
-    enabled.core.features.depthBounds = supported.core.features.depthBounds;
-
-    // VK_EXT_border_color_swizzle - enable its features, if respective feature is supported
-    enabled.extBorderColorSwizzle.borderColorSwizzle             = supported.extBorderColorSwizzle.borderColorSwizzle;
-    enabled.extBorderColorSwizzle.borderColorSwizzleFromImage    = supported.extBorderColorSwizzle.borderColorSwizzleFromImage;
-
-    // VK_EXT_custom_border_color - enable its features unconditionally, if customBorderColorWithoutFormat feature is supported
-    if (supported.extCustomBorderColor.customBorderColorWithoutFormat) {
-      enabled.extCustomBorderColor.customBorderColors             = VK_TRUE;
-      enabled.extCustomBorderColor.customBorderColorWithoutFormat = VK_TRUE;
-    }
-
-    // VK_EXT_attachment_feedback_loop_layout - enable its feature unconditionally, if attachmentFeedbackLoopLayout feature is supported
-    if (supported.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
-      enabled.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout = VK_TRUE;
-
-    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
-    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
-
-    enabled.extNonSeamlessCubeMap.nonSeamlessCubeMap = supported.extNonSeamlessCubeMap.nonSeamlessCubeMap;
-
-    enabled.extDepthBiasControl.depthBiasControl = supported.extDepthBiasControl.depthBiasControl;
-    enabled.extDepthBiasControl.depthBiasExact = supported.extDepthBiasControl.depthBiasExact;
-    if (supported.extDepthBiasControl.floatRepresentation)
-      enabled.extDepthBiasControl.floatRepresentation = VK_TRUE;
-    else if (supported.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation)
-      enabled.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation = VK_TRUE;
-
-    return enabled;
   }
 
 
@@ -8780,7 +8700,7 @@ namespace dxvk {
     rs[D3DRS_CLIPPLANEENABLE] = 0;
     m_dirty.set(D3D9DeviceDirtyFlag::ClipPlanes);
 
-    const VkPhysicalDeviceLimits& limits = m_dxvkDevice->adapter()->deviceProperties().limits;
+    const auto& limits = m_dxvkDevice->adapter()->deviceProperties().core.properties.limits;
 
     rs[D3DRS_POINTSPRITEENABLE]          = FALSE;
     rs[D3DRS_POINTSCALEENABLE]           = FALSE;
