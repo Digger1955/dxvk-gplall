@@ -27,7 +27,9 @@ inline HANDLE CreateSemaphoreA(
         LONG                  lInitialCount,
         LONG                  lMaximumCount,
         LPCSTR                lpName) {
+/*
   dxvk::Logger::warn("CreateSemaphoreA not implemented.");
+*/
   return nullptr;
 }
 #define CreateSemaphore CreateSemaphoreA
@@ -36,12 +38,16 @@ inline BOOL ReleaseSemaphore(
         HANDLE hSemaphore,
         LONG   lReleaseCount,
         LONG*  lpPreviousCount) {
+/*
   dxvk::Logger::warn("ReleaseSemaphore not implemented.");
+*/
   return FALSE;
 }
 
 inline BOOL SetEvent(HANDLE hEvent) {
+/*
   dxvk::Logger::warn("SetEvent not implemented.");
+*/
   return FALSE;
 }
 
@@ -53,22 +59,30 @@ inline BOOL DuplicateHandle(
         DWORD dwDesiredAccess,
         BOOL bInheritHandle,
         DWORD dwOptions) {
+/*
   dxvk::Logger::warn("DuplicateHandle not implemented.");
+*/
   return FALSE;
 }
 
 inline BOOL CloseHandle(HANDLE hObject) {
+/*
   dxvk::Logger::warn("CloseHandle not implemented.");
+*/
   return FALSE;
 }
 
 inline HANDLE GetCurrentProcess() {
+/*
   dxvk::Logger::warn("GetCurrentProcess not implemented.");
+*/
   return nullptr;
 }
 
 inline HDC CreateCompatibleDC(HDC hdc) {
+/*
   dxvk::Logger::warn("CreateCompatibleDC not implemented.");
+*/
   return nullptr;
 }
 

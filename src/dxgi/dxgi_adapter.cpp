@@ -110,10 +110,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGIAdapter), riid)) {
       Logger::warn("DxgiAdapter::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -338,7 +340,9 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiAdapter::RegisterHardwareContentProtectionTeardownStatusEvent(
           HANDLE                        hEvent,
           DWORD*                        pdwCookie) {
+/*
     Logger::err("DxgiAdapter::RegisterHardwareContentProtectionTeardownStatusEvent: Not implemented");
+*/
     return E_NOTIMPL;
   }
 
@@ -368,7 +372,9 @@ namespace dxvk {
 
   void STDMETHODCALLTYPE DxgiAdapter::UnregisterHardwareContentProtectionTeardownStatus(
           DWORD                         dwCookie) {
+/*
     Logger::err("DxgiAdapter::UnregisterHardwareContentProtectionTeardownStatus: Not implemented");
+*/
   }
 
 

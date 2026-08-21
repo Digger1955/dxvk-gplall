@@ -62,10 +62,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGIOutput), riid)) {
       Logger::warn("DxgiOutput::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -186,6 +188,7 @@ namespace dxvk {
 
     *pClosestMatch = modes[0];
 
+/*
     Logger::debug(str::format(
       "DXGI: For mode ",
         modeToMatch.Width, "x", modeToMatch.Height, "@",
@@ -193,6 +196,7 @@ namespace dxvk {
       " found closest mode ",
         pClosestMatch->Width, "x", pClosestMatch->Height, "@",
         pClosestMatch->RefreshRate.Denominator ? (pClosestMatch->RefreshRate.Numerator / pClosestMatch->RefreshRate.Denominator) : 0));
+*/
 
     return S_OK;
   }
@@ -364,7 +368,9 @@ namespace dxvk {
 
 
   HRESULT STDMETHODCALLTYPE DxgiOutput::GetDisplaySurfaceData(IDXGISurface* pDestination) {
+/*
     Logger::err("DxgiOutput::GetDisplaySurfaceData: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -409,30 +415,36 @@ namespace dxvk {
     pGammaCaps->MaxConvertedValue       = 1.0f;
     pGammaCaps->MinConvertedValue       = 0.0f;
     pGammaCaps->NumGammaControlPoints   = DXGI_VK_GAMMA_CP_COUNT;
-    
+
     for (uint32_t i = 0; i < pGammaCaps->NumGammaControlPoints; i++)
       pGammaCaps->ControlPointPositions[i] = GammaControlPointLocation(i);
     return S_OK;
   }
-  
-  
+
+
   void STDMETHODCALLTYPE DxgiOutput::ReleaseOwnership() {
+/*
     Logger::warn("DxgiOutput::ReleaseOwnership: Stub");
+*/
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE DxgiOutput::SetDisplaySurface(IDXGISurface* pScanoutSurface) {
+/*
     Logger::err("DxgiOutput::SetDisplaySurface: Not implemented");
+*/
     return E_NOTIMPL;
   }
 
 
   HRESULT STDMETHODCALLTYPE DxgiOutput::GetDisplaySurfaceData1(IDXGIResource* pDestination) {
+/*
     Logger::err("DxgiOutput::SetDisplaySurface1: Not implemented");
+*/
     return E_NOTIMPL;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE DxgiOutput::SetGammaControl(const DXGI_GAMMA_CONTROL* pArray) {
     DXGI_VK_MONITOR_DATA* monitorInfo = nullptr;
     HRESULT hr = m_monitorInfo->AcquireMonitorData(m_monitor, &monitorInfo);
@@ -455,11 +467,13 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiOutput::TakeOwnership(
           IUnknown *pDevice,
           BOOL     Exclusive) {
+/*
     Logger::warn("DxgiOutput::TakeOwnership: Stub");
+*/
     return S_OK;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE DxgiOutput::WaitForVBlank() {
     static bool s_errorShown = false;
 
@@ -530,7 +544,9 @@ namespace dxvk {
           DXGI_FORMAT EnumFormat,
           IUnknown*   pConcernedDevice,
           UINT*       pFlags) {
+/*
     Logger::warn("DxgiOutput: CheckOverlaySupport: Stub");
+*/
     return DXGI_ERROR_UNSUPPORTED;
   }
 
@@ -540,14 +556,18 @@ namespace dxvk {
           DXGI_COLOR_SPACE_TYPE ColorSpace,
           IUnknown*             pConcernedDevice,
           UINT*                 pFlags) {
+/*
     Logger::warn("DxgiOutput: CheckOverlayColorSpaceSupport: Stub");
+*/
     return DXGI_ERROR_UNSUPPORTED;
   }
   
 
   HRESULT STDMETHODCALLTYPE DxgiOutput::CheckHardwareCompositionSupport(
           UINT*                 pFlags) {
+/*
     Logger::warn("DxgiOutput: CheckHardwareCompositionSupport: Stub");
+*/
 
     *pFlags = 0;
     return S_OK;

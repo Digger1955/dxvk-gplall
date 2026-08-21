@@ -1351,8 +1351,10 @@ namespace dxvk {
 
     auto shader = static_cast<D3D11VertexShader*>(pVertexShader);
 
+/*
     if (NumClassInstances)
       Logger::err("D3D11: Class instances not supported");
+*/
 
     if (m_state.vs != shader) {
       m_state.vs = shader;

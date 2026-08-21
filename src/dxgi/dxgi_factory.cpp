@@ -131,14 +131,14 @@ namespace dxvk {
     if ((m_monitorFallback = !monitors.empty()))
       Logger::warn("DXGI: Found monitors not associated with any adapter, using fallback");
   }
-  
-  
+
+
   DxgiFactory::~DxgiFactory() {
     g_dxgiOptions.release();
     g_dxvkInstance.release();
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE DxgiFactory::QueryInterface(REFIID riid, void** ppvObject) {
     if (ppvObject == nullptr)
       return E_POINTER;
@@ -175,10 +175,12 @@ namespace dxvk {
       return S_OK;
     }
 
+/*
     if (logQueryInterfaceError(__uuidof(IDXGIFactory), riid)) {
       Logger::warn("DxgiFactory::QueryInterface: Unknown interface query");
       Logger::warn(str::format(riid));
     }
+*/
 
     return E_NOINTERFACE;
   }
@@ -186,8 +188,9 @@ namespace dxvk {
   
   HRESULT STDMETHODCALLTYPE DxgiFactory::GetParent(REFIID riid, void** ppParent) {
     InitReturnPtr(ppParent);
-    
+/*
     Logger::warn("DxgiFactory::GetParent: Unknown interface query");
+*/
     return E_NOINTERFACE;
   }
   
@@ -272,8 +275,9 @@ namespace dxvk {
           IDXGIOutput*          pRestrictToOutput,
           IDXGISwapChain1**     ppSwapChain) {
     InitReturnPtr(ppSwapChain);
-    
+/*
     Logger::err("DxgiFactory::CreateSwapChainForCoreWindow: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -417,13 +421,17 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiFactory::GetSharedResourceAdapterLuid(
           HANDLE                hResource,
           LUID*                 pLuid) {
+/*
     Logger::err("DxgiFactory::GetSharedResourceAdapterLuid: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
   
   HRESULT STDMETHODCALLTYPE DxgiFactory::MakeWindowAssociation(HWND WindowHandle, UINT Flags) {
+/*
     Logger::warn("DXGI: MakeWindowAssociation: Ignoring flags");
+*/
     return S_OK;
   }
   
@@ -437,7 +445,9 @@ namespace dxvk {
           HWND                  WindowHandle,
           UINT                  wMsg,
           DWORD*                pdwCookie) {
+/*
     Logger::err("DxgiFactory::RegisterOcclusionStatusWindow: Not implemented");
+*/
     return E_NOTIMPL;
   }
   
@@ -445,37 +455,47 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiFactory::RegisterStereoStatusEvent(
           HANDLE                hEvent,
           DWORD*                pdwCookie) {
+/*
     Logger::err("DxgiFactory::RegisterStereoStatusEvent: Not implemented");
+*/
     return E_NOTIMPL;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE DxgiFactory::RegisterStereoStatusWindow(
           HWND                  WindowHandle,
           UINT                  wMsg,
           DWORD*                pdwCookie) {
+/*
     Logger::err("DxgiFactory::RegisterStereoStatusWindow: Not implemented");
+*/
     return E_NOTIMPL;
   }
-  
+
 
   HRESULT STDMETHODCALLTYPE DxgiFactory::RegisterOcclusionStatusEvent(
           HANDLE                hEvent,
           DWORD*                pdwCookie) {
+/*
     Logger::err("DxgiFactory::RegisterOcclusionStatusEvent: Not implemented");
+*/
     return E_NOTIMPL;
   }
-  
+
 
   void STDMETHODCALLTYPE DxgiFactory::UnregisterStereoStatus(
           DWORD                 dwCookie) {
+/*
     Logger::err("DxgiFactory::UnregisterStereoStatus: Not implemented");
+*/
   }
-  
-  
+
+
   void STDMETHODCALLTYPE DxgiFactory::UnregisterOcclusionStatus(
           DWORD                 dwCookie) {
+/*
     Logger::err("DxgiFactory::UnregisterOcclusionStatus: Not implemented");
+*/
   }
 
 
@@ -499,7 +519,9 @@ namespace dxvk {
       } return S_OK;
 
       default:
+/*
         Logger::err(str::format("DxgiFactory: CheckFeatureSupport: Unknown feature: ", uint32_t(Feature)));
+*/
         return E_INVALIDARG;
     }
   }
@@ -508,14 +530,18 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiFactory::RegisterAdaptersChangedEvent(
           HANDLE                hEvent,
           DWORD*                pdwCookie) {
+/*
     Logger::err("DxgiFactory: RegisterAdaptersChangedEvent: Stub");
+*/
     return E_NOTIMPL;
   }
 
 
   HRESULT STDMETHODCALLTYPE DxgiFactory::UnregisterAdaptersChangedEvent(
           DWORD                 Cookie) {
+/*
     Logger::err("DxgiFactory: UnregisterAdaptersChangedEvent: Stub");
+*/
     return E_NOTIMPL;
   }
 

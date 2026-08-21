@@ -864,7 +864,9 @@ namespace dxvk {
     if (!CheckImageFormatSupport(device, VK_FORMAT_D24_UNORM_S8_UINT,
           VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT |
           VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT)) {
+/*
       Logger::info("DXGI: VK_FORMAT_D24_UNORM_S8_UINT -> VK_FORMAT_D32_SFLOAT_S8_UINT");
+*/
       RemapDepthFormat(DXGI_FORMAT_R24G8_TYPELESS,        VK_FORMAT_D32_SFLOAT_S8_UINT);
       RemapDepthFormat(DXGI_FORMAT_R24_UNORM_X8_TYPELESS, VK_FORMAT_D32_SFLOAT_S8_UINT);
       RemapDepthFormat(DXGI_FORMAT_X24_TYPELESS_G8_UINT,  VK_FORMAT_D32_SFLOAT_S8_UINT);
@@ -875,7 +877,9 @@ namespace dxvk {
           VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
           VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT |
           VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
+/*
       Logger::info("DXGI: VK_FORMAT_A8_UNORM_KHR -> VK_FORMAT_R8_UNORM");
+*/
       RemapColorFormat(DXGI_FORMAT_A8_UNORM, VK_FORMAT_R8_UNORM, {
           VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO,
           VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_R });
@@ -936,8 +940,9 @@ namespace dxvk {
       case DXGI_VK_FORMAT_MODE_RAW:
         return { pMapping->FormatRaw, pMapping->AspectColor };
     }
-    
+/*
     Logger::err("DXGI: GetFormatInfoFromMapping: Internal error");
+*/
     return DXGI_VK_FORMAT_INFO();
   }
 
