@@ -57,8 +57,6 @@ namespace dxvk {
     if (!isEnabled())
       return;
 
-    constexpr TimerDuration wakeOffset = 100us;
-
     auto t0 = m_lastFrame;
     auto t1 = dxvk::high_resolution_clock::now();
 
@@ -69,7 +67,7 @@ namespace dxvk {
     if (frameTime * 100 > m_targetInterval * thresholdPercent - m_deviation * 100) {
       m_deviation = TimerDuration::zero();
     } else {
-      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime - wakeOffset;
+      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
       t1 = Sleep::sleepFor(t1, sleepDuration);
 
       auto actualFrameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
