@@ -57,27 +57,28 @@ namespace dxvk {
     if (!isEnabled())
       return;
 
+    constexpr TimerDuration wakeOffset = 100us;
+
     auto t0 = m_lastFrame;
     auto t1 = dxvk::high_resolution_clock::now();
 
     auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
 
-    if (frameTime * 100 > m_targetInterval * 103 - m_deviation * 100) {
-      // If we have a slow frame, reset the deviation since we
-      // do not want to compensate for low performance later on
+    int thresholdPercent = (m_targetInterval < 4ms) ? 103 : 101;
+
+    if (frameTime * 100 > m_targetInterval * thresholdPercent - m_deviation * 100) {
       m_deviation = TimerDuration::zero();
     } else {
-      // Don't call sleep if the amount of time to sleep is shorter
-      // than the time the function calls are likely going to take
-      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
+      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime - wakeOffset;
       t1 = Sleep::sleepFor(t1, sleepDuration);
 
-      // Compensate for any sleep inaccuracies in the next frame, and
-      // limit cumulative deviation in order to avoid stutter in case we
-      // have a number of slow frames immediately followed by a fast one.
-      frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-      m_deviation += frameTime - m_targetInterval;
-      m_deviation = std::min(m_deviation, m_targetInterval / 16);
+      auto actualFrameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
+      TimerDuration currentError = actualFrameTime - m_targetInterval;
+
+      m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.65) + (currentError * 0.35));
+      
+      TimerDuration maxCap = m_targetInterval / 4;
+      m_deviation = std::max(-maxCap, std::min(m_deviation, maxCap));
     }
 
     m_lastFrame = t1;
