@@ -81,7 +81,7 @@ namespace dxvk {
       TimerDuration currentError = frameTime - m_targetInterval;
 
       // EWMA-based deviation calculation
-      m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.65) + (currentError * 0.35));
+      m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.95) + (currentError * 0.05));
       
       // Total correction window - 10% of target interval.
       TimerDuration maxCap = m_targetInterval / 10;
