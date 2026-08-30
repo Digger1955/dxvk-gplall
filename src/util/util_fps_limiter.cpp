@@ -66,8 +66,8 @@ namespace dxvk {
     // m_targetInterval - a frame time to lock to - FPS Limit
     // thresholdPercent -  how far a frame time can slip, before resetting deviation
     // if m_targetInterval is Less than 83.3FPS - thresholdPercent=101; 
-    // if m_targetInterval is More than 83.3FPS - thresholdPercent=103;
-    int thresholdPercent = (m_targetInterval < 12ms) ? 103 : 101;
+    // if m_targetInterval is More than 83.3FPS - thresholdPercent=104;
+    int thresholdPercent = (m_targetInterval < 12ms) ? 104 : 101;
 
     if (frameTime * 100 > m_targetInterval * thresholdPercent - m_deviation * 100) {
       // If we have a slow frame, reset the deviation since we
@@ -87,12 +87,12 @@ namespace dxvk {
       // 0.05/0.95 - prefer smoothness and jitter suppression, instead of adjustment speed
       m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.95) + (currentError * 0.05));
 
-     int correctionWindow = (m_targetInterval < 12ms) ? 16 : 32;
+     int correctionWindow = (m_targetInterval < 12ms) ? 8 : 32;
 
       // Total correction window - percentage of target interval.
       // Percentage depends on m_targetInterval
       // if m_targetInterval is Less than 83.3FPS - correctionWindow=32 - 3.125%; 
-      // if m_targetInterval is More than 83.3FPS - correctionWindow=16 - 6.25%;
+      // if m_targetInterval is More than 83.3FPS - correctionWindow=8 - 12.5%;
       TimerDuration maxCap = m_targetInterval / correctionWindow;
       m_deviation = std::max(-maxCap, std::min(m_deviation, maxCap));
     }
