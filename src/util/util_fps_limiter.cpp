@@ -62,20 +62,29 @@ namespace dxvk {
 
     auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
 
+    // FPS-dependent slow frame threshold
+    // >= 240FPS - 103; < 240FPS - 101
     int thresholdPercent = (m_targetInterval < 4ms) ? 103 : 101;
 
     if (frameTime * 100 > m_targetInterval * thresholdPercent - m_deviation * 100) {
+      // If we have a slow frame, reset the deviation since we
+      // do not want to compensate for low performance later on
       m_deviation = TimerDuration::zero();
     } else {
+      // Don't call sleep if the amount of time to sleep is shorter
+      // than the time the function calls are likely going to take
       TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
       t1 = Sleep::sleepFor(t1, sleepDuration);
 
-      auto actualFrameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-      TimerDuration currentError = actualFrameTime - m_targetInterval;
+      // Recalculate interval to figure out exact delivery error
+      frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
+      TimerDuration currentError = frameTime - m_targetInterval;
 
+      // EWMA-based deviation calculation
       m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.65) + (currentError * 0.35));
       
-      TimerDuration maxCap = m_targetInterval / 4;
+      // Total correction window - 10% of target interval.
+      TimerDuration maxCap = m_targetInterval / 10;
       m_deviation = std::max(-maxCap, std::min(m_deviation, maxCap));
     }
 
