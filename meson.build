@@ -13,7 +13,7 @@ compiler_args = [
   '-O3', # Optimizes for speed. -Os fails to compile due to interaction of LTO and -fdeclone-ctor-dtor compiler flag. Use `-O3` as a baseline and add '-Os' compiler flags.
   '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code.
   '-march=x86-64', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, and FXSR ISA support - SSE2 CPU required.
-  '-mtune=barcelona', # Tuning for CX16, MMX, SSE, SSE2, SSE3, SSE4A, 3DNow!, enhanced 3DNow!, ABM and 64-bit ISA - better tuning, than 'x86-64/k8', even for Intel CPUs.
+  '-mtune=amdfam10', # Tuning for CX16, MMX, SSE, SSE2, SSE3, SSE4A, 3DNow!, enhanced 3DNow!, ABM and 64-bit ISA - better tuning, than 'x86-64/k8', even for Intel CPUs.
   '-msse', # Required for proper enabling '-mfpmath=sse'.
   '-msse2', # Required for proper enabling '-mfpmath=sse'.
   '-mfpmath=sse', # Use SSE FP-blocks, instead of x87.
