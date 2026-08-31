@@ -43,10 +43,10 @@ namespace dxvk {
 
   private:
 
-    static Sleep s_instance;
+    // Global static flag to handle safe execution once across all threads
+    static std::once_flag s_initFlag;
 
-    dxvk::mutex       m_mutex;
-    std::atomic<bool> m_initialized = { false };
+    static Sleep s_instance;
 
 #ifdef _WIN32
     // On Windows, we use NtDelayExecution which has units of 100ns.
@@ -54,7 +54,8 @@ namespace dxvk {
     using NtQueryTimerResolutionProc = LONG (NTAPI *) (ULONG*, ULONG*, ULONG*);
     using NtSetTimerResolutionProc = LONG (NTAPI *) (ULONG, BOOLEAN, ULONG*);
     using NtDelayExecutionProc = LONG (NTAPI *) (BOOLEAN, LARGE_INTEGER*);
-    NtDelayExecutionProc NtDelayExecution = nullptr;
+    // Make the function pointer atomic because we load it across threads.
+    std::atomic<NtDelayExecutionProc> NtDelayExecution;
 #else
     // On other platforms, we use the std library, which calls through to nanosleep - which is ns.
     using TimerDuration = std::chrono::nanoseconds;

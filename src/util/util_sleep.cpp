@@ -21,6 +21,7 @@ using namespace std::chrono_literals;
 
 namespace dxvk {
 
+  std::once_flag Sleep::s_initFlag;
   Sleep Sleep::s_instance;
 
 
@@ -34,15 +35,10 @@ namespace dxvk {
   }
 
   void Sleep::initialize() {
-    std::lock_guard lock(m_mutex);
-
-    if (m_initialized.load())
-      return;
-
-    // NtSetTimerResolution to 2ms by default
-    initializePlatformSpecifics();
-
-    m_initialized.store(true, std::memory_order_release);
+    // Thread-safe platform initialization guaranteed by the runtime library
+    std::call_once(s_initFlag, [this]() {
+        this->initializePlatformSpecifics(); // NtSetTimerResolution to 1ms by default
+    });
 }
 
 
@@ -63,8 +59,8 @@ namespace dxvk {
       // Wine's implementation of these functions is a stub as of 6.10, which is fine
       // since it uses select() in NtDelayExecution. This is only relevant for Windows.
       if (NtQueryTimerResolution && !NtQueryTimerResolution(&min, &max, &cur)) {
-        if (NtSetTimerResolution && !NtSetTimerResolution(20000, TRUE, &cur)) {
-          Logger::info(str::format("NtSetTimerResolution: Setting timer interval to 2000 us"));
+        if (NtSetTimerResolution && !NtSetTimerResolution(10000, TRUE, &cur)) {
+          Logger::info(str::format("NtSetTimerResolution: Setting timer interval to 1000 us (1 ms, 1000 Hz)"));
         }
       }
     }
@@ -76,29 +72,27 @@ namespace dxvk {
     if (duration <= TimerDuration::zero())
       return t0;
 
-    // if necessary, initialize function pointers and some values
-    if (!m_initialized.load(std::memory_order_acquire)) 
-        initialize();
+    initialize();
 
-    // Compile-time constant sleepGranularity = 2 ms
+    // Compile-time constant sleepGranularity = 1 ms
     // Optimal precision and energy efficiency for most systems.
-    constexpr TimerDuration sleepGranularity = TimerDuration(2ms);
-    const TimePoint targetTime = t0 + duration;
+    constexpr TimerDuration sleepGranularity = TimerDuration(1ms);
 
-    TimePoint t1 = t0;
+    // Compile-time constant sleepThreshold = 2 ms
+    // Optimal precision and energy efficiency for most systems.
+    constexpr TimerDuration sleepThreshold = TimerDuration(2ms);
+
     TimerDuration remaining = duration;
+    TimePoint t1 = t0;
 
-    // Use sleepGranularity as a sleepThreshold
-    while (remaining > sleepGranularity) {
+    // Use 2 * sleepGranularity as a sleepThreshold
+    while (remaining > sleepThreshold) {
       TimerDuration sleepDuration = remaining - sleepGranularity;
 
-      // For high precision, try long sleep, only if sleepDuration is
-      // longer than sleepGranularity, which equals to 2 ms
-      if (sleepDuration > 2ms)
-        systemSleep(sleepDuration);
+      systemSleep(sleepDuration);
 
       t1 = dxvk::high_resolution_clock::now();
-      remaining = std::chrono::duration_cast<TimerDuration>(targetTime - t1);
+      remaining -= std::chrono::duration_cast<TimerDuration>(t1 - t0);
       t0 = t1;
     }
 
@@ -107,8 +101,10 @@ namespace dxvk {
 
     // Busy-wait until we have slept long enough
     while (remaining > TimerDuration::zero()) {
-      // CPU arch-specific pause macros 
-      // to save energy during busy-waiting
+      // CPU arch-specific pause macros, which
+      // saves energy during busy-waiting.
+      // Windows Task Manager will show CPU Load, 
+      // but CPU is actually doing less/nothing.
       CPU_PAUSE();
 
       // Intervals between wake up checks, i.e.
@@ -116,21 +112,24 @@ namespace dxvk {
       // Before checking if we need to wake up.
       if (++loopCounter >= 1000) {
         t1 = dxvk::high_resolution_clock::now();
-        remaining = std::chrono::duration_cast<TimerDuration>(targetTime - t1);
+        remaining -= std::chrono::duration_cast<TimerDuration>(t1 - t0);
+        t0 = t1;
         loopCounter = 0;
       }
     }
 
-    return dxvk::high_resolution_clock::now();
+    return t1;
 }
 
   void Sleep::systemSleep(TimerDuration duration) {
 #ifdef _WIN32
-    if (NtDelayExecution) {
+    // Protection from thread loading anomalies
+    auto proc = NtDelayExecution.load(std::memory_order_acquire);
+    if (proc) {
       LARGE_INTEGER ticks;
       ticks.QuadPart = -duration.count();
 
-      NtDelayExecution(FALSE, &ticks);
+      proc(FALSE, &ticks);
     } else {
       std::this_thread::sleep_for(duration);
     }
