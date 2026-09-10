@@ -272,6 +272,9 @@ namespace dxvk {
     deviceInfo.pEnabledFeatures = &features->features;
 
 /*
+    if (caps.amdMemoryOverallocationBehaviour)
+      overallocInfo.pNext = std::exchange(deviceInfo.pNext, &overallocInfo);
+*/
 
     // Check if the AMD overallocation extension is in the enabled extensions list
     auto hasAmdMemoryOverallocation = std::find_if(extensions.begin(), extensions.end(), 
@@ -280,11 +283,6 @@ namespace dxvk {
       }) != extensions.end();
 
     if (hasAmdMemoryOverallocation)
-      overallocInfo.pNext = std::exchange(deviceInfo.pNext, &overallocInfo);
-
-*/
-
-    if (caps.amdMemoryOverallocationBehaviour)
       overallocInfo.pNext = std::exchange(deviceInfo.pNext, &overallocInfo);
 
     VkDevice device = VK_NULL_HANDLE;
