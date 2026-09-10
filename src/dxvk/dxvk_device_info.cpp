@@ -691,8 +691,9 @@ namespace dxvk {
 
       m_featuresSupported.amdBufferMarker = VK_FALSE;
       m_featuresSupported.nvDeviceDiagnosticCheckpoints = VK_FALSE;
-*/
     }
+*/
+
   }
 
 
