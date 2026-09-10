@@ -149,21 +149,19 @@ namespace dxvk::vk {
     VULKAN_FN(vkCreateWaylandSurfaceKHR);
     VULKAN_FN(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
     #endif
-    
+
     #ifdef VK_USE_PLATFORM_WIN32_KHR
     VULKAN_FN(vkCreateWin32SurfaceKHR);
     VULKAN_FN(vkGetPhysicalDeviceWin32PresentationSupportKHR);
     #endif
-    
+
     VULKAN_FN(vkDestroySurfaceKHR);
-    
+
     VULKAN_FN(vkGetPhysicalDeviceSurfaceSupportKHR);
     VULKAN_FN(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     VULKAN_FN(vkGetPhysicalDeviceSurfaceFormatsKHR);
     VULKAN_FN(vkGetPhysicalDeviceSurfacePresentModesKHR);
     #endif
-
-/*
 
     #ifdef VK_EXT_debug_utils
     VULKAN_FN(vkCmdBeginDebugUtilsLabelEXT);
@@ -173,6 +171,8 @@ namespace dxvk::vk {
     VULKAN_FN(vkDestroyDebugUtilsMessengerEXT);
     VULKAN_FN(vkSubmitDebugUtilsMessageEXT);
     #endif
+
+/*
 
     #ifdef VK_EXT_descriptor_heap
     VULKAN_FN(vkGetPhysicalDeviceDescriptorSizeEXT);
@@ -414,6 +414,8 @@ namespace dxvk::vk {
     VULKAN_FN(vkUnregisterCustomBorderColorEXT);
     #endif
 
+*/
+
     #ifdef VK_EXT_debug_utils
     VULKAN_FN(vkQueueBeginDebugUtilsLabelEXT);
     VULKAN_FN(vkQueueEndDebugUtilsLabelEXT);
@@ -421,8 +423,6 @@ namespace dxvk::vk {
     VULKAN_FN(vkSetDebugUtilsObjectNameEXT);
     VULKAN_FN(vkSetDebugUtilsObjectTagEXT);
     #endif
-
-*/
 
     #ifdef VK_EXT_extended_dynamic_state3
     VULKAN_FN(vkCmdSetTessellationDomainOriginEXT);
