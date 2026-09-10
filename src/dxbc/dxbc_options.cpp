@@ -10,10 +10,8 @@ namespace dxvk {
 
 
   DxbcOptions::DxbcOptions(const Rc<DxvkDevice>& device, const D3D11Options& options) {
-    const Rc<DxvkAdapter> adapter = device->adapter();
-
     const DxvkDeviceFeatures& devFeatures = device->features();
-    const DxvkDeviceInfo& devInfo = adapter->devicePropertiesExt();
+    const DxvkDeviceInfo& devInfo = device->properties();
 
     useDepthClipWorkaround
       = !devFeatures.extDepthClipEnable.depthClipEnable;
@@ -44,14 +42,14 @@ namespace dxvk {
     // Qcom just breaks for no reason if we export point size,
     // even in an environment where doing so is required.
     needsPointSizeExport = !device->features().khrMaintenance5.maintenance5
-                        && !device->adapter()->matchesDriver(VK_DRIVER_ID_QUALCOMM_PROPRIETARY);
+                        && !device->matchesDriver(VK_DRIVER_ID_QUALCOMM_PROPRIETARY);
 
     // ANV up to mesa 25.0.2 breaks when we *don't* explicitly write point size
-    needsPointSizeExport |= device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA, Version(), Version(25, 0, 3));
+    needsPointSizeExport |= device->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA, Version(), Version(25, 0, 3));
 
     // Intel's hardware sin/cos is so inaccurate that it causes rendering issues in some games
-    sincosEmulation = device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA)
-                   || device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS);
+    sincosEmulation = device->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA)
+                   || device->matchesDriver(VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS);
     applyTristate(sincosEmulation, options.sincosEmulation);
 
     // Figure out float control flags to match D3D11 rules

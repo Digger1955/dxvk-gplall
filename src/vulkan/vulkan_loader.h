@@ -28,7 +28,6 @@ namespace dxvk::vk {
     PFN_vkVoidFunction sym(VkInstance instance, const char* name) const;
     PFN_vkVoidFunction sym(const char* name) const;
     PFN_vkGetInstanceProcAddr getLoaderProc() const { return m_getInstanceProcAddr; }
-    bool               valid() const;
   protected:
     HMODULE                   m_library             = nullptr;
     PFN_vkGetInstanceProcAddr m_getInstanceProcAddr = nullptr;
@@ -118,6 +117,18 @@ namespace dxvk::vk {
     VULKAN_FN(vkGetPhysicalDeviceSparseImageFormatProperties);
     VULKAN_FN(vkGetPhysicalDeviceSparseImageFormatProperties2);
 
+/*
+
+    #ifdef VK_KHR_calibrated_timestamps
+    VULKAN_FN(vkGetPhysicalDeviceCalibrateableTimeDomainsKHR);
+    #endif
+
+*/
+
+    #ifdef VK_EXT_calibrated_timestamps
+    VULKAN_FN(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
+    #endif
+
     #ifdef VK_KHR_get_surface_capabilities2
     VULKAN_FN(vkGetPhysicalDeviceSurfaceCapabilities2KHR);
     VULKAN_FN(vkGetPhysicalDeviceSurfaceFormats2KHR);
@@ -151,7 +162,9 @@ namespace dxvk::vk {
     VULKAN_FN(vkGetPhysicalDeviceSurfaceFormatsKHR);
     VULKAN_FN(vkGetPhysicalDeviceSurfacePresentModesKHR);
     #endif
-    
+
+/*
+
     #ifdef VK_EXT_debug_utils
     VULKAN_FN(vkCmdBeginDebugUtilsLabelEXT);
     VULKAN_FN(vkCmdEndDebugUtilsLabelEXT);
@@ -161,9 +174,11 @@ namespace dxvk::vk {
     VULKAN_FN(vkSubmitDebugUtilsMessageEXT);
     #endif
 
-    #ifdef VK_EXT_calibrated_timestamps
-    VULKAN_FN(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
+    #ifdef VK_EXT_descriptor_heap
+    VULKAN_FN(vkGetPhysicalDeviceDescriptorSizeEXT);
     #endif
+
+*/
 
     #ifdef VK_EXT_full_screen_exclusive
     VULKAN_FN(vkGetPhysicalDeviceSurfacePresentModes2EXT);
@@ -372,6 +387,33 @@ namespace dxvk::vk {
     VULKAN_FN(vkCmdEndConditionalRenderingEXT);
     #endif
 
+/*
+
+    #ifdef VK_EXT_descriptor_buffer
+    VULKAN_FN(vkGetDescriptorSetLayoutSizeEXT);
+    VULKAN_FN(vkGetDescriptorSetLayoutBindingOffsetEXT);
+    VULKAN_FN(vkGetDescriptorEXT);
+    VULKAN_FN(vkCmdBindDescriptorBuffersEXT);
+    VULKAN_FN(vkCmdSetDescriptorBufferOffsetsEXT);
+    VULKAN_FN(vkCmdBindDescriptorBufferEmbeddedSamplersEXT);
+    VULKAN_FN(vkGetBufferOpaqueCaptureDescriptorDataEXT);
+    VULKAN_FN(vkGetImageOpaqueCaptureDescriptorDataEXT);
+    VULKAN_FN(vkGetImageViewOpaqueCaptureDescriptorDataEXT);
+    VULKAN_FN(vkGetSamplerOpaqueCaptureDescriptorDataEXT);
+    VULKAN_FN(vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT);
+    #endif
+
+    #ifdef VK_EXT_descriptor_heap
+    VULKAN_FN(vkWriteSamplerDescriptorsEXT);
+    VULKAN_FN(vkWriteResourceDescriptorsEXT);
+    VULKAN_FN(vkCmdBindSamplerHeapEXT);
+    VULKAN_FN(vkCmdBindResourceHeapEXT);
+    VULKAN_FN(vkCmdPushDataEXT);
+    VULKAN_FN(vkGetImageOpaqueCaptureDataEXT);
+    VULKAN_FN(vkRegisterCustomBorderColorEXT);
+    VULKAN_FN(vkUnregisterCustomBorderColorEXT);
+    #endif
+
     #ifdef VK_EXT_debug_utils
     VULKAN_FN(vkQueueBeginDebugUtilsLabelEXT);
     VULKAN_FN(vkQueueEndDebugUtilsLabelEXT);
@@ -379,6 +421,8 @@ namespace dxvk::vk {
     VULKAN_FN(vkSetDebugUtilsObjectNameEXT);
     VULKAN_FN(vkSetDebugUtilsObjectTagEXT);
     #endif
+
+*/
 
     #ifdef VK_EXT_extended_dynamic_state3
     VULKAN_FN(vkCmdSetTessellationDomainOriginEXT);
@@ -419,6 +463,13 @@ namespace dxvk::vk {
     VULKAN_FN(vkCmdDrawMultiIndexedEXT);
     #endif
 
+    #ifdef VK_EXT_present_timing
+    VULKAN_FN(vkSetSwapchainPresentTimingQueueSizeEXT);
+    VULKAN_FN(vkGetSwapchainTimingPropertiesEXT);
+    VULKAN_FN(vkGetSwapchainTimeDomainPropertiesEXT);
+    VULKAN_FN(vkGetPastPresentationTimingEXT);
+    #endif
+
     #ifdef VK_EXT_sample_locations
     VULKAN_FN(vkCmdSetSampleLocationsEXT);
     VULKAN_FN(vkGetPhysicalDeviceMultisamplePropertiesEXT);
@@ -451,6 +502,18 @@ namespace dxvk::vk {
     VULKAN_FN(vkCmdCuLaunchKernelNVX);
     #endif
 
+/*
+
+    #ifdef VK_KHR_calibrated_timestamps
+    VULKAN_FN(vkGetCalibratedTimestampsKHR);
+    #endif
+
+*/
+
+    #ifdef VK_EXT_calibrated_timestamps
+    VULKAN_FN(vkGetCalibratedTimestampsEXT);
+    #endif
+
     #ifdef VK_KHR_external_memory_win32
     VULKAN_FN(vkGetMemoryWin32HandleKHR);
     VULKAN_FN(vkGetMemoryWin32HandlePropertiesKHR);
@@ -468,6 +531,15 @@ namespace dxvk::vk {
     VULKAN_FN(vkGetImageSubresourceLayout2KHR);
     #endif
 
+    #ifdef VK_KHR_maintenance6
+    VULKAN_FN(vkCmdBindDescriptorSets2KHR);
+    VULKAN_FN(vkCmdPushConstants2KHR);
+    VULKAN_FN(vkCmdPushDescriptorSet2KHR);
+    VULKAN_FN(vkCmdPushDescriptorSetWithTemplate2KHR);
+    VULKAN_FN(vkCmdSetDescriptorBufferOffsets2EXT);
+    VULKAN_FN(vkCmdBindDescriptorBufferEmbeddedSamplers2EXT);
+    #endif
+
     #ifdef VK_KHR_present_wait
     VULKAN_FN(vkWaitForPresentKHR);
     #endif
@@ -476,15 +548,31 @@ namespace dxvk::vk {
     VULKAN_FN(vkWaitForPresent2KHR);
     #endif
 
-    #ifdef VK_EXT_calibrated_timestamps
-    VULKAN_FN(vkGetCalibratedTimestampsEXT);
-    #endif
-
     #ifdef VK_KHR_win32_keyed_mutex
     // Wine additions to actually use this extension.
     VULKAN_FN(wine_vkAcquireKeyedMutex);
     VULKAN_FN(wine_vkReleaseKeyedMutex);
     #endif
+
+/*
+
+    #ifdef VK_KHR_device_fault
+    VULKAN_FN(vkGetDeviceFaultReportsKHR);
+    VULKAN_FN(vkGetDeviceFaultDebugInfoKHR);
+    #endif
+
+    #ifdef VK_AMD_buffer_marker
+    VULKAN_FN(vkCmdWriteBufferMarkerAMD);
+    VULKAN_FN(vkCmdWriteBufferMarker2AMD);
+    #endif
+
+    #ifdef VK_NV_device_diagnostic_checkpoints
+    VULKAN_FN(vkCmdSetCheckpointNV);
+    VULKAN_FN(vkGetQueueCheckpointDataNV);
+    VULKAN_FN(vkGetQueueCheckpointData2NV);
+    #endif
+
+*/
 
     #ifdef VK_NV_low_latency2
     VULKAN_FN(vkSetLatencySleepModeNV);

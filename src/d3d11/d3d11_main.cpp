@@ -63,34 +63,34 @@ extern "C" {
       pFeatureLevels = defaultFeatureLevels.data();
       FeatureLevels  = defaultFeatureLevels.size();
     }
-    
-    // Find the highest feature level supported by the device.
-    // This works because the feature level array is ordered.
-    D3D_FEATURE_LEVEL maxFeatureLevel = D3D11Device::GetMaxFeatureLevel(dxvkInstance, dxvkAdapter);
-    D3D_FEATURE_LEVEL minFeatureLevel = D3D_FEATURE_LEVEL();
-    D3D_FEATURE_LEVEL devFeatureLevel = D3D_FEATURE_LEVEL();
-
-    Logger::info(str::format("D3D11InternalCreateDevice: Maximum supported feature level: ", maxFeatureLevel));
-
-    for (uint32_t flId = 0 ; flId < FeatureLevels; flId++) {
-      minFeatureLevel = pFeatureLevels[flId];
-
-      if (minFeatureLevel <= maxFeatureLevel) {
-        devFeatureLevel = minFeatureLevel;
-        break;
-      }
-    }
-
-    if (!devFeatureLevel) {
-      Logger::err(str::format("D3D11InternalCreateDevice: Minimum required feature level ", minFeatureLevel, " not supported"));
-      return E_INVALIDARG;
-    }
 
     try {
-      Logger::info(str::format("D3D11InternalCreateDevice: Using feature level ", devFeatureLevel));
+      // Create Vulkan device so we have up-to-date features / properties
+      Rc<DxvkDevice> dxvkDevice = dxvkAdapter->createDevice();
 
-      DxvkDeviceFeatures deviceFeatures = D3D11Device::GetDeviceFeatures(dxvkAdapter);
-      Rc<DxvkDevice> dxvkDevice = dxvkAdapter->createDevice(dxvkInstance, deviceFeatures);
+      // Find the highest feature level supported by the device.
+      // This works because the feature level array is ordered.
+      D3D_FEATURE_LEVEL maxFeatureLevel = D3D11Device::GetMaxFeatureLevel(*dxvkDevice);
+      D3D_FEATURE_LEVEL minFeatureLevel = D3D_FEATURE_LEVEL();
+      D3D_FEATURE_LEVEL devFeatureLevel = D3D_FEATURE_LEVEL();
+
+      Logger::info(str::format("D3D11InternalCreateDevice: Maximum supported feature level: ", maxFeatureLevel));
+
+      for (uint32_t flId = 0 ; flId < FeatureLevels; flId++) {
+        minFeatureLevel = pFeatureLevels[flId];
+
+        if (minFeatureLevel <= maxFeatureLevel) {
+          devFeatureLevel = minFeatureLevel;
+          break;
+        }
+      }
+
+      if (!devFeatureLevel) {
+        Logger::err(str::format("D3D11InternalCreateDevice: Minimum required feature level ", minFeatureLevel, " not supported"));
+        return E_INVALIDARG;
+      }
+
+      Logger::info(str::format("D3D11InternalCreateDevice: Using feature level ", devFeatureLevel));
 
       Com<D3D11DXGIDevice> device = new D3D11DXGIDevice(
         pAdapter, nullptr, nullptr,
@@ -101,12 +101,12 @@ extern "C" {
         __uuidof(ID3D11Device),
         reinterpret_cast<void**>(ppDevice));
     } catch (const DxvkError& e) {
-      Logger::err("D3D11InternalCreateDevice: Failed to create D3D11 device");
+      Logger::err(str::format("D3D11InternalCreateDevice: Failed to create D3D11 device: ", e.message()));
       return E_FAIL;
     }
   }
-  
-  
+
+
   static HRESULT D3D11InternalCreateDeviceAndSwapChain(
           IDXGIAdapter*         pAdapter,
           D3D_DRIVER_TYPE       DriverType,
@@ -425,7 +425,7 @@ extern "C" {
           Logger::err(str::format("Failed to lock vkd3d-proton device queue: ", hr));
       };
 
-      Rc<DxvkDevice> dxvkDevice = dxvkAdapter->importDevice(dxvkInstance, deviceInfo);
+      Rc<DxvkDevice> dxvkDevice = dxvkAdapter->importDevice(deviceInfo);
 
       // Create and return the actual D3D11 device
       Com<D3D11DXGIDevice> device = new D3D11DXGIDevice(

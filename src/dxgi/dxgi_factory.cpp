@@ -103,17 +103,18 @@ namespace dxvk {
 
     for (uint32_t i = 0; m_instance->enumAdapters(i) != nullptr; i++) {
       auto adapter = m_instance->enumAdapters(i);
-      adapter->logAdapterInfo();
 
       // Remove all monitors that are associated
       // with the current adapter from the list.
-      const auto& vk11 = adapter->devicePropertiesExt().vk11;
+      auto info = adapter->info();
 
-      if (vk11.deviceLUIDValid) {
-        auto luid = reinterpret_cast<const LUID*>(&vk11.deviceLUID);
+      if (info.luidIsValid) {
+        LUID luid = {};
+        std::memcpy(&luid, &info.deviceLuid[0u], sizeof(luid));
 
         for (uint32_t j = 0; ; j++) {
-          HMONITOR hmon = wsi::enumMonitors(&luid, 1, j);
+          const LUID* pLuid = &luid;
+          HMONITOR hmon = wsi::enumMonitors(&pLuid, 1, j);
 
           if (!hmon)
             break;
