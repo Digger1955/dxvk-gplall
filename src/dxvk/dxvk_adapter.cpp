@@ -17,6 +17,8 @@ namespace dxvk {
       vkd->vkGetDeviceQueue(vkd->device(), queue.family, queue.index, &result.queueHandle);
     }
 
+    return result;
+  }
 
   DxvkAdapter::DxvkAdapter(
           DxvkInstance&       instance,
