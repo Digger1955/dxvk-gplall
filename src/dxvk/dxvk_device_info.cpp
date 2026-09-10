@@ -23,10 +23,6 @@ namespace dxvk {
     HANDLE_EXT(extCustomBorderColor);              \
     HANDLE_EXT(extDepthClipEnable);                \
     HANDLE_EXT(extDepthBiasControl);               \
-/*
-    HANDLE_EXT(extDescriptorBuffer);               \
-    HANDLE_EXT(extDescriptorHeap);                 \
-*/
     HANDLE_EXT(extDynamicRenderingUnusedAttachments); \
     HANDLE_EXT(extExtendedDynamicState3);          \
     HANDLE_EXT(extFragmentShaderInterlock);        \
@@ -47,12 +43,6 @@ namespace dxvk {
     HANDLE_EXT(extSwapchainMaintenance1);          \
     HANDLE_EXT(extTransformFeedback);              \
     HANDLE_EXT(extVertexAttributeDivisor);         \
-/*
-    HANDLE_EXT(khrCalibratedTimestamps);           \
-*/
-/*
-    HANDLE_EXT(khrDeviceFault);                    \
-*/
     HANDLE_EXT(khrDynamicRenderingLocalRead);      \
     HANDLE_EXT(khrExternalMemoryWin32);            \
     HANDLE_EXT(khrExternalSemaphoreWin32);         \
@@ -64,10 +54,6 @@ namespace dxvk {
     HANDLE_EXT(khrMaintenance8);                   \
     HANDLE_EXT(khrMaintenance9);                   \
     HANDLE_EXT(khrMaintenance10);                  \
-/*
-    Requires Vulkan 1.4.350
-    HANDLE_EXT(khrMaintenance11);                  \
-*/
     HANDLE_EXT(khrPipelineLibrary);                \
     HANDLE_EXT(khrPresentId);                      \
     HANDLE_EXT(khrPresentId2);                     \
@@ -81,15 +67,9 @@ namespace dxvk {
     HANDLE_EXT(khrSwapchainMutableFormat);         \
     HANDLE_EXT(khrUnifiedImageLayouts);            \
     HANDLE_EXT(khrWin32KeyedMutex);                \
-/*
-    HANDLE_EXT(amdBufferMarker);                   \
-*/
     HANDLE_EXT(amdMemoryOverallocationBehaviour);  \
     HANDLE_EXT(amdShaderFragmentMask);             \
     HANDLE_EXT(nvDescriptorPoolOverallocation);    \
-/*
-    HANDLE_EXT(nvDeviceDiagnosticCheckpoints);     \
-*/
     HANDLE_EXT(nvLowLatency2);                     \
     HANDLE_EXT(nvRawAccessChains);                 \
     HANDLE_EXT(nvxBinaryImport);                   \
@@ -98,10 +78,6 @@ namespace dxvk {
   #define EXTENSIONS_WITH_PROPERTIES               \
     HANDLE_EXT(extConservativeRasterization);      \
     HANDLE_EXT(extCustomBorderColor);              \
-/*
-    HANDLE_EXT(extDescriptorBuffer);               \
-    HANDLE_EXT(extDescriptorHeap);                 \
-*/
     HANDLE_EXT(extExtendedDynamicState3);          \
     HANDLE_EXT(extGraphicsPipelineLibrary);        \
     HANDLE_EXT(extLineRasterization);              \
@@ -110,9 +86,6 @@ namespace dxvk {
     HANDLE_EXT(extSampleLocations);                \
     HANDLE_EXT(extTransformFeedback);              \
     HANDLE_EXT(extVertexAttributeDivisor);         \
-/*
-    HANDLE_EXT(khrDeviceFault);                    \
-*/
     HANDLE_EXT(khrMaintenance5);                   \
     HANDLE_EXT(khrMaintenance6);                   \
     HANDLE_EXT(khrMaintenance7);                   \
@@ -586,8 +559,8 @@ namespace dxvk {
 */
 
     // Maintenance4 may cause performance problems on amdvlk in some cases
-    if (m_deviceInfo.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
-     && m_deviceInfo.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+    if (m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
+     && m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
       m_featuresSupported.vk13.maintenance4 = VK_FALSE;
 
     // Disable VK_AMD_memory_overallocation_behavior, if VK_EXT_pageable_device_local_memory is supported
@@ -831,7 +804,7 @@ namespace dxvk {
       }
     }
 
-    if (!m_featuresEnabled.extDescriptorHeap.descriptorHeap && m_properties.core.properties.limits.maxPushConstantsSize < MaxPushConstantSize)
+    if (m_properties.core.properties.limits.maxPushConstantsSize < MaxPushConstantSize)
       return str::format("Device does not support ", MaxPushConstantSize, " of push data");
 
     return std::nullopt;
