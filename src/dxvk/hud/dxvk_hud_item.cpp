@@ -141,14 +141,15 @@ namespace dxvk::hud {
   HudDeviceInfoItem::HudDeviceInfoItem(const Rc<DxvkDevice>& device) {
     const auto& props = device->properties();
 
-    std::string driverInfo = props.vk12.driverInfo;
-
-    if (driverInfo.empty())
-      driverInfo = props.driverVersion.toString();
-
     m_deviceName = props.core.properties.deviceName;
-    m_driverName = str::format("DRV:  ", props.vk12.driverName);
-    m_driverVer = str::format("VER: ", driverInfo);
+    m_vulkanVer = str::format("VLK: ",
+      VK_VERSION_MAJOR(props.core.properties.apiVersion), ".",
+      VK_VERSION_MINOR(props.core.properties.apiVersion), ".",
+      VK_VERSION_PATCH(props.core.properties.apiVersion));
+    m_driverVer = str::format("VLK Drv: ",
+      VK_VERSION_MAJOR(props.core.properties.driverVersion), ".",
+      VK_VERSION_MINOR(props.core.properties.driverVersion), ".",
+      VK_VERSION_PATCH(props.core.properties.driverVersion));
   }
 
   HudDeviceInfoItem::~HudDeviceInfoItem() {
@@ -166,7 +167,7 @@ namespace dxvk::hud {
     renderer.drawText(16, position, 0xffffffffu, m_deviceName);
     
     position.y += 24;
-    renderer.drawText(16, position, 0xffffffffu, m_driverName);
+    renderer.drawText(16, position, 0xffffffffu, m_vulkanVer);
     
     position.y += 20;
     renderer.drawText(16, position, 0xffffffffu, m_driverVer);
