@@ -28,6 +28,12 @@ namespace dxvk {
     /// Enable graphics pipeline library
     Tristate enableGraphicsPipelineLibrary = Tristate::False;
 
+    /// Enable unified image layout path
+    bool enableUnifiedImageLayout = true;
+
+    /// Enables NV_raw_access_chains extension on Nvidia
+    bool enableNvRawAccessChains = true;
+
     /// Enables pipeline lifetime tracking
     Tristate trackPipelineLifetime = Tristate::Auto;
 
