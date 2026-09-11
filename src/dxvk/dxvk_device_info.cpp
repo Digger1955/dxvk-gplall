@@ -560,7 +560,7 @@ namespace dxvk {
 
     // Maintenance4 may cause performance problems on amdvlk in some cases
     if (m_properties.vk12.driverID == VK_DRIVER_ID_AMD_OPEN_SOURCE
-     && m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+     || m_properties.vk12.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
       m_featuresSupported.vk13.maintenance4 = VK_FALSE;
 
     // Disable VK_AMD_memory_overallocation_behavior, if VK_EXT_pageable_device_local_memory is supported
