@@ -208,10 +208,8 @@ namespace dxvk {
       adapterLUIDs.clear();
 
     // Fix for SteamRT4
-    using std::begin;
-    using std::end;
-    for (const auto& luid : adapterLUIDs)
-      luidPointers.push_back(&luid);
+    for (size_t i = 0; i < adapterLUIDs.size(); ++i)
+      luidPointers.push_back(&adapterLUIDs[i]);
 
     HMONITOR monitor = wsi::enumMonitors(luidPointers.data(), luidPointers.size(), Output);
 
