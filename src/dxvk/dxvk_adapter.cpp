@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <unordered_set>
 
@@ -276,7 +277,6 @@ namespace dxvk {
       overallocInfo.pNext = std::exchange(deviceInfo.pNext, &overallocInfo);
 */
 
-/*
     // Check if the VK_AMD_memory_overallocation_behavior extension is in the enabled extensions list
     auto hasAmdMemoryOverallocation = std::find_if(extensions.begin(), extensions.end(), 
       [](const VkExtensionProperties& ext) {
@@ -285,7 +285,6 @@ namespace dxvk {
 
     if (hasAmdMemoryOverallocation)
       overallocInfo.pNext = std::exchange(deviceInfo.pNext, &overallocInfo);
-*/
 
     VkDevice device = VK_NULL_HANDLE;
     VkResult vr = vk->vkCreateDevice(m_handle, &deviceInfo, nullptr, &device);
