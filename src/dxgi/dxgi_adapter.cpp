@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 #include <d3d10_1.h>
 
