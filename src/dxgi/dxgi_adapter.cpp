@@ -1,5 +1,7 @@
 #include <cstdlib>
 #include <cstring>
+
+// Fix for SteamRT4
 #include <iterator>
 
 #include <d3d10_1.h>
@@ -205,6 +207,9 @@ namespace dxvk {
     if (m_factory->UseMonitorFallback())
       adapterLUIDs.clear();
 
+    // Fix for SteamRT4
+    using std::begin;
+    using std::end;
     for (const auto& luid : adapterLUIDs)
       luidPointers.push_back(&luid);
 
