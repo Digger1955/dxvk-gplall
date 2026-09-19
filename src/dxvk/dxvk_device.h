@@ -5,7 +5,6 @@
 #include "dxvk_compute.h"
 #include "dxvk_constant_state.h"
 #include "dxvk_context.h"
-#include "dxvk_extensions.h"
 #include "dxvk_fence.h"
 #include "dxvk_framebuffer.h"
 #include "dxvk_image.h"
@@ -52,9 +51,11 @@ namespace dxvk {
    * queue family that it belongs to.
    */
   struct DxvkDeviceQueue {
-    VkQueue   queueHandle = VK_NULL_HANDLE;
-    uint32_t  queueFamily = 0;
-    uint32_t  queueIndex  = 0;
+    VkQueue       queueHandle = VK_NULL_HANDLE;
+    uint32_t      queueFamily = 0u;
+    uint32_t      queueIndex  = 0u;
+
+    DxvkDeviceQueueInfo properties = { };
   };
 
   /**
@@ -84,7 +85,7 @@ namespace dxvk {
       const Rc<DxvkInstance>&         instance,
       const Rc<DxvkAdapter>&          adapter,
       const Rc<vk::DeviceFn>&         vkd,
-      const DxvkDeviceFeatures&       features,
+      const DxvkDeviceCapabilities&   caps,
       const DxvkDeviceQueueSet&       queues,
       const DxvkQueueCallback&        queueCallback);
       

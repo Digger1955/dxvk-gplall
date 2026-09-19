@@ -139,17 +139,17 @@ namespace dxvk::hud {
 
 
   HudDeviceInfoItem::HudDeviceInfoItem(const Rc<DxvkDevice>& device) {
-    VkPhysicalDeviceProperties props = device->adapter()->deviceProperties();
+    const auto& props = device->properties();
 
-    m_deviceName = props.deviceName;
+    m_deviceName = props.core.properties.deviceName;
     m_vulkanVer = str::format("VLK: ",
-      VK_VERSION_MAJOR(props.apiVersion), ".",
-      VK_VERSION_MINOR(props.apiVersion), ".",
-      VK_VERSION_PATCH(props.apiVersion));
+      VK_VERSION_MAJOR(props.core.properties.apiVersion), ".",
+      VK_VERSION_MINOR(props.core.properties.apiVersion), ".",
+      VK_VERSION_PATCH(props.core.properties.apiVersion));
     m_driverVer = str::format("VLK Drv: ",
-      VK_VERSION_MAJOR(props.driverVersion), ".",
-      VK_VERSION_MINOR(props.driverVersion), ".",
-      VK_VERSION_PATCH(props.driverVersion));
+      VK_VERSION_MAJOR(props.core.properties.driverVersion), ".",
+      VK_VERSION_MINOR(props.core.properties.driverVersion), ".",
+      VK_VERSION_PATCH(props.core.properties.driverVersion));
   }
 
   HudDeviceInfoItem::~HudDeviceInfoItem() {

@@ -296,6 +296,8 @@ namespace dxvk {
     bool                        m_hasPresentId = false;
     bool                        m_hasPresentWait = false;
 
+    bool                        m_hasSwapchainMaintenance1 = false;
+
     VkPresentModeKHR            m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     uint32_t                    m_imageIndex = 0;

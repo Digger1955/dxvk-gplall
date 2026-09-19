@@ -798,8 +798,6 @@ namespace dxvk {
       return m_dxvkDevice->getShaderPipelineStages();
     }
 
-    static DxvkDeviceFeatures GetDeviceFeatures(const Rc<DxvkAdapter>& adapter);
-
     /**
      * \brief Returns whether the Vulkan device supports the required features for ProcessVertices
      */
@@ -1276,6 +1274,10 @@ namespace dxvk {
 
     bool Is9On12Device() const {
       return m_d3d9On12Args.Enable9On12;
+    }
+
+    D3D9Adapter* GetAdapter() const {
+      return m_adapter;
     }
 
   private:

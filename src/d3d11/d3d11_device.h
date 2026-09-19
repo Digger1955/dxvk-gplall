@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <mutex>
 #include <vector>
 
@@ -475,12 +476,7 @@ namespace dxvk {
       const Rc<DxvkImage>&            Image,
             VkImageUsageFlags         Usage);
 
-    static D3D_FEATURE_LEVEL GetMaxFeatureLevel(
-      const Rc<DxvkInstance>& Instance,
-      const Rc<DxvkAdapter>&  Adapter);
-    
-    static DxvkDeviceFeatures GetDeviceFeatures(
-      const Rc<DxvkAdapter>&  Adapter);
+    static D3D_FEATURE_LEVEL GetMaxFeatureLevel(const DxvkDevice& Device);
 
     DxvkBarrierControlFlags GetOptionsBarrierControlFlags() {
       DxvkBarrierControlFlags barrierControl = 0u;

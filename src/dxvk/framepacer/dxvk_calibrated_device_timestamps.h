@@ -45,6 +45,7 @@ namespace dxvk {
     bool        m_enabled = false;
 
     const float    m_timestampPeriod;
+    const uint32_t m_timestampValidBits;
     const bool     m_canEnable;
 
   };

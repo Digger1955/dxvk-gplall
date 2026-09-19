@@ -36,15 +36,16 @@ namespace dxvk {
   D3D9Adapter::D3D9Adapter(
           D3D9InterfaceEx* pParent,
     const D3D9ON12_ARGS*   p9On12Args,
+          Rc<DxvkInstance> Instance,
           Rc<DxvkAdapter>  Adapter,
           UINT             Ordinal,
           UINT             DisplayIndex)
   : m_parent          (pParent),
     m_adapter         (Adapter),
+    m_caps            (*Instance, Adapter->handle(), nullptr),
     m_ordinal         (Ordinal),
     m_displayIndex    (DisplayIndex),
     m_modeCacheFormat (D3D9Format::Unknown) {
-    m_adapter->logAdapterInfo();
     CacheIdentifierInfo();
     // D3D9VkFormatTable needs to be constructed after we've cached the
     // identifier info and determined the proper vendorID to be used.
@@ -185,8 +186,7 @@ namespace dxvk {
     // Nvidia specific depth bounds test hack
     // (supported ever since the GeForce 6 series)
     if (unlikely(CheckFormat == D3D9Format::NVDB && surface))
-      return (!isD3D8Compatible &&
-              m_adapter->features().core.features.depthBounds && isNvidia)
+      return (!isD3D8Compatible && m_caps.getFeatures().core.features.depthBounds && isNvidia)
         ? D3D_OK
         : D3DERR_NOTAVAILABLE;
 
@@ -277,10 +277,51 @@ namespace dxvk {
       return D3DERR_NOTAVAILABLE;
 
     // Therefore...
+    const auto& properties = m_caps.getProperties();
+    const auto& features = m_caps.getFeatures();
+
     VkSampleCountFlags sampleFlags = VkSampleCountFlags(sampleCount);
 
-    auto availableFlags = m_adapter->deviceProperties().limits.framebufferColorSampleCounts
-                        & m_adapter->deviceProperties().limits.framebufferDepthSampleCounts;
+    VkSampleCountFlags availableFlags;
+    if (dst.FormatColor == VK_FORMAT_UNDEFINED)
+      availableFlags = properties.core.properties.limits.framebufferDepthSampleCounts
+                     & properties.core.properties.limits.framebufferColorSampleCounts;
+    else if (IsDepthStencilFormat(SurfaceFormat))
+      availableFlags = properties.core.properties.limits.framebufferDepthSampleCounts;
+    else
+      availableFlags = properties.core.properties.limits.framebufferColorSampleCounts;
+
+    if (!(availableFlags & sampleFlags) && dst.FormatColor != VK_FORMAT_UNDEFINED) {
+      // Adreno 7XX GPUs cannot report general support for 8x MSAA because they do not support it for 128 bit formats.
+      // So take the format into consideration when checking whether the sample count is supported.
+
+      DxvkFormatQuery query = { };
+      query.format = dst.FormatColor;
+      query.type   = VK_IMAGE_TYPE_2D; // D3D9 only allows using MSAA with 2D textures
+      query.tiling = VK_IMAGE_TILING_OPTIMAL;
+      query.usage  = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+      if (!IsDepthStencilFormat(SurfaceFormat)) {
+        query.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        if (dst.FormatSrgb != VK_FORMAT_UNDEFINED)
+          query.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+      } else {
+        query.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+      }
+
+      if (dst.ConversionFormatInfo.FormatType != D3D9ConversionFormat_None)
+        query.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+
+      if (features.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
+        query.usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+
+      auto limits = m_adapter->getFormatLimits(query);
+      if (!limits.has_value())
+        return D3DERR_NOTAVAILABLE;
+
+      availableFlags = limits->sampleCounts;
+    }
 
     if (!(availableFlags & sampleFlags))
       return D3DERR_NOTAVAILABLE;
@@ -365,7 +406,7 @@ namespace dxvk {
 
     const uint32_t maxShaderModel = m_parent->IsD3DCompatibile(D3DCompatibility::D3D8) ? std::min(1u, options.shaderModel)
                                                                                        : options.shaderModel;
-    const VkPhysicalDeviceLimits& limits = m_adapter->deviceProperties().limits;
+    const auto& limits = m_caps.getProperties().core.properties.limits;
 
     // TODO: Actually care about what the adapter supports here.
     // ^ For Intel and older cards most likely here.
@@ -822,7 +863,7 @@ namespace dxvk {
     if (pLUID == nullptr)
       return D3DERR_INVALIDCALL;
 
-    auto& vk11 = m_adapter->devicePropertiesExt().vk11;
+    auto& vk11 = m_caps.getProperties().vk11;
 
     if (vk11.deviceLUIDValid)
       *pLUID = bit::cast<LUID>(vk11.deviceLUID);
@@ -996,12 +1037,12 @@ namespace dxvk {
   void D3D9Adapter::CacheIdentifierInfo() {
     auto& options = m_parent->GetOptions();
 
-    const auto& props = m_adapter->deviceProperties();
+    const auto& props = m_caps.getProperties();
 
-    m_deviceGuid   = bit::cast<GUID>(m_adapter->devicePropertiesExt().vk11.deviceUUID);
-    m_vendorId     = props.vendorID;
-    m_deviceId     = props.deviceID;
-    m_deviceDesc   = props.deviceName;
+    m_deviceGuid   = bit::cast<GUID>(props.vk11.deviceUUID);
+    m_vendorId     = props.core.properties.vendorID;
+    m_deviceId     = props.core.properties.deviceID;
+    m_deviceDesc   = props.core.properties.deviceName;
 
     // Custom Vendor ID / Device ID / Device Description
     if (options.customVendorId >= 0)
@@ -1037,7 +1078,7 @@ namespace dxvk {
         fallbackDesc   = "NVIDIA GeForce RTX 3060";
       }
 
-      bool hideNvidiaGpu = m_adapter->devicePropertiesExt().vk12.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY
+      bool hideNvidiaGpu = props.vk12.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY
         ? options.hideNvidiaGpu : options.hideNvkGpu;
 
       bool hideGpu = (m_vendorId == uint32_t(DxvkGpuVendor::Nvidia) && hideNvidiaGpu)
