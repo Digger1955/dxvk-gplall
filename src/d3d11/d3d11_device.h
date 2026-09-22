@@ -562,10 +562,16 @@ namespace dxvk {
             D3D11CommonTexture*         pTexture,
             UINT                        Subresource,
       const D3D11_BOX*                  pBox);
-    
+
+    static bool ConvertRuntimeDescriptor(
+      UINT                       size,
+      const union d3dkmt_desc&   d3dkmt,
+      D3D11_COMMON_TEXTURE_DESC* desc);
+
   };
-  
-  
+
+
+
   /**
    * \brief Extended D3D11 device
    */

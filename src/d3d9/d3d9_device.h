@@ -1574,6 +1574,15 @@ namespace dxvk {
 
     GpuFlushType GetMaxFlushType() const;
 
+    bool ValidateSharedTexture(
+      HANDLE                          handle,
+      D3DRESOURCETYPE                 type,
+      const D3D9_COMMON_TEXTURE_DESC& textureDesc) const;
+
+    bool ValidateSharedBuffer(
+      HANDLE                        handle,
+      const dxvk::D3D9_BUFFER_DESC& bufferDesc) const;
+
     bool HasFormatsUnlocked() const { return m_unlockAdditionalFormats; }
 
     Com<D3D9InterfaceEx>            m_parent;
