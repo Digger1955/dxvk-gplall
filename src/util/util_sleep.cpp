@@ -37,7 +37,7 @@ namespace dxvk {
   void Sleep::initialize() {
     // Thread-safe platform initialization guaranteed by the runtime library
     std::call_once(s_initFlag, [this]() {
-        this->initializePlatformSpecifics(); // NtSetTimerResolution to 1ms by default
+        this->initializePlatformSpecifics(); // NtSetTimerResolution to 0.5ms (500us) by default
     });
 }
 
@@ -59,8 +59,8 @@ namespace dxvk {
       // Wine's implementation of these functions is a stub as of 6.10, which is fine
       // since it uses select() in NtDelayExecution. This is only relevant for Windows.
       if (NtQueryTimerResolution && !NtQueryTimerResolution(&min, &max, &cur)) {
-        if (NtSetTimerResolution && !NtSetTimerResolution(10000, TRUE, &cur)) {
-          Logger::info(str::format("NtSetTimerResolution: Setting timer interval to 1000 us (1 ms, 1000 Hz)"));
+        if (NtSetTimerResolution && !NtSetTimerResolution(5000, TRUE, &cur)) {
+          Logger::info(str::format("NtSetTimerResolution: Setting timer interval to 500 us (0.5 ms, 2000 Hz)"));
         }
       }
     }
@@ -74,13 +74,13 @@ namespace dxvk {
 
     initialize();
 
-    // Compile-time constant sleepGranularity = 1 ms
+    // Compile-time constant sleepGranularity = 500 us (0.5 ms)
     // Optimal precision and energy efficiency for most systems.
-    constexpr TimerDuration sleepGranularity = TimerDuration(1ms);
+    constexpr TimerDuration sleepGranularity = TimerDuration(500us);
 
-    // Compile-time constant sleepThreshold = 2 ms
+    // Compile-time constant sleepThreshold = 1 ms
     // Optimal precision and energy efficiency for most systems.
-    constexpr TimerDuration sleepThreshold = TimerDuration(2ms);
+    constexpr TimerDuration sleepThreshold = TimerDuration(1ms);
 
     TimerDuration remaining = duration;
     TimePoint t1 = t0;
