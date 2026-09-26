@@ -142,8 +142,7 @@ namespace dxvk::hud {
         m_gpuP99 = str::format(p99);
       }
 
-      if (framePacer->getFramePacerMode()->getPresentMode() == VK_PRESENT_MODE_FIFO_KHR
-        && (framePacer->getMode()) {
+      if (framePacer->getFramePacerMode()->getPresentMode() == VK_PRESENT_MODE_FIFO_KHR && framePacer->getMode()) {
         const LatencyStats* presentStats = framePacer->getPresentStats();
         if (presentStats) {
           int32_t p50 = presentStats->getPercentile(0.5);
