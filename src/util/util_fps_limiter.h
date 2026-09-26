@@ -31,7 +31,7 @@ namespace dxvk {
      * \brief Sets target frame rate
      * \param [in] frameRate Target frame rate
      */
-    void setTargetFrameRate(double frameRate, uint32_t maxLatency);
+    void setTargetFrameRate(double frameRate);
 
     /**
      * \brief Stalls calling thread as necessary
@@ -48,10 +48,6 @@ namespace dxvk {
      */
     static std::optional<double> getEnvironmentOverride();
 
-    inline static std::atomic<bool> m_isActive = { false };
-    inline static std::atomic<high_resolution_clock::time_point>
-      m_lastActive = { high_resolution_clock::now() };
-
   private:
 
     using TimePoint = dxvk::high_resolution_clock::time_point;
@@ -61,7 +57,6 @@ namespace dxvk {
 
     TimerDuration   m_targetInterval  = TimerDuration::zero();
     TimePoint       m_nextFrame       = TimePoint();
-    uint32_t        m_maxLatency      = 0;
 
     bool            m_envOverride     = false;
 

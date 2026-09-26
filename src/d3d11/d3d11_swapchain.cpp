@@ -365,7 +365,7 @@ namespace dxvk {
     m_targetFrameRate = FrameRate;
 
     if (m_presenter != nullptr)
-      m_presenter->setFrameRateLimit(m_targetFrameRate, GetActualFrameLatency());
+      m_presenter->setFrameRateLimit(m_targetFrameRate);
 
     FramePacer* framePacer = dynamic_cast<FramePacer*>(m_latency.ptr());
     if (framePacer != nullptr)
@@ -530,7 +530,7 @@ namespace dxvk {
 
     m_presenter->setSurfaceFormat(GetSurfaceFormat(m_desc.Format));
     m_presenter->setSurfaceExtent({ m_desc.Width, m_desc.Height });
-    m_presenter->setFrameRateLimit(m_targetFrameRate, GetActualFrameLatency());
+    m_presenter->setFrameRateLimit(m_targetFrameRate);
 
     m_latency = m_device->createLatencyTracker(m_presenter);
     m_presenter->registerLatencyTracker(m_latency);

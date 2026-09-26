@@ -1156,7 +1156,7 @@ namespace dxvk {
         frameRate = -m_displayRefreshRate / double(SyncInterval);
     }
 
-    m_wctx->presenter->setFrameRateLimit(frameRate, GetActualFrameLatency());
+    m_wctx->presenter->setFrameRateLimit(frameRate);
     FramePacer* framePacer = dynamic_cast<FramePacer*>(m_latencyTracker.ptr());
     if (framePacer != nullptr)
       framePacer->setTargetFrameRate(frameRate);

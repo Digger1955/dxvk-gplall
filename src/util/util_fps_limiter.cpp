@@ -28,7 +28,7 @@ namespace dxvk {
   }
 
 
-  void FpsLimiter::setTargetFrameRate(double frameRate, uint32_t maxLatency) {
+  void FpsLimiter::setTargetFrameRate(double frameRate) {
     std::lock_guard<dxvk::mutex> lock(m_mutex);
 
     if (!m_envOverride) {
@@ -53,7 +53,6 @@ namespace dxvk {
     auto interval = m_targetInterval;
 
     if (interval == TimerDuration::zero()) {
-      m_isActive.store(false, std::memory_order_release);
       m_nextFrame = TimePoint(); // Reset back to uninitialized epoch
       return;
     }
@@ -76,19 +75,9 @@ namespace dxvk {
 
     // 4. Decide whether to sleep based on the calculated timeline
     if (t1 < sleepTarget) {
-      m_isActive.store(true, std::memory_order_release);
-
       // Safe to unlock: m_nextFrame has already been pushed forward for concurrent threads
       lock.unlock();
       Sleep::sleepUntil(t1, sleepTarget);
-      
-      // Update activity timestamp post-wake for precise profiling/telemetry
-      TimePoint wakeTime = dxvk::high_resolution_clock::now();
-      m_lastActive.store(wakeTime, std::memory_order_relaxed);
-      m_isActive.store(false, std::memory_order_release);
-    } else {
-      m_isActive.store(false, std::memory_order_release);
-    }
   }
 
 

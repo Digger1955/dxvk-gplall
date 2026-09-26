@@ -159,7 +159,7 @@ namespace dxvk {
      * \param [in] frameRate Target frame rate. Set
      *    to 0 in order to disable the limiter.
      */
-    void setFrameRateLimit(double frameRate, uint32_t maxLatency);
+    void setFrameRateLimit(double frameRate);
 
     /**
      * \brief Sets preferred color space and format
