@@ -38,7 +38,6 @@ namespace dxvk {
 
       if (m_targetInterval != interval) {
         m_targetInterval = interval;
-        m_maxLatency = maxLatency;
       }
     }
   }
@@ -50,37 +49,48 @@ namespace dxvk {
       return;
     }
 
-    m_isActive.store(false);
-
     std::unique_lock<dxvk::mutex> lock(m_mutex);
     auto interval = m_targetInterval;
-    auto latency = m_maxLatency;
 
     if (interval == TimerDuration::zero()) {
-      m_nextFrame = TimePoint();
+      m_isActive.store(false, std::memory_order_release);
+      m_nextFrame = TimePoint(); // Reset back to uninitialized epoch
       return;
     }
 
     auto t1 = dxvk::high_resolution_clock::now();
 
-    if (interval < TimerDuration::zero()) {
-      interval = -interval;
+    // 1. Check for massive long-term engine stall / drop
+    if (t1 > m_nextFrame + (interval * 2)) {
+      m_nextFrame = t1;
     }
 
-    // Subsequent code must not access any class members
-    // that can be written by setTargetFrameRate
-    lock.unlock();
+    // 2. Capture current sleep target safely under the lock
+    TimePoint sleepTarget = m_nextFrame;
 
-    if (t1 < m_nextFrame) {
-      m_isActive.store(true);
-      m_lastActive.store(high_resolution_clock::now());
-      Sleep::sleepUntil(t1, m_nextFrame);
-    }
-
-    m_nextFrame = (t1 < m_nextFrame + interval)
-      ? m_nextFrame + interval
+    // 3. Increment the baseline. If t1 is early, advance by exactly one interval.
+    // If t1 is already late, advance the baseline relative to t1 to prevent pipeline stall cascades.
+    m_nextFrame = (t1 < sleepTarget + interval)
+      ? sleepTarget + interval
       : t1 + interval;
+
+    // 4. Decide whether to sleep based on the calculated timeline
+    if (t1 < sleepTarget) {
+      m_isActive.store(true, std::memory_order_release);
+
+      // Safe to unlock: m_nextFrame has already been pushed forward for concurrent threads
+      lock.unlock();
+      Sleep::sleepUntil(t1, sleepTarget);
+      
+      // Update activity timestamp post-wake for precise profiling/telemetry
+      TimePoint wakeTime = dxvk::high_resolution_clock::now();
+      m_lastActive.store(wakeTime, std::memory_order_relaxed);
+      m_isActive.store(false, std::memory_order_release);
+    } else {
+      m_isActive.store(false, std::memory_order_release);
+    }
   }
+
 
 
   std::optional<double> FpsLimiter::getEnvironmentOverride() {
