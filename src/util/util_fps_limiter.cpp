@@ -17,7 +17,7 @@ namespace dxvk {
     auto override = getEnvironmentOverride();
 
     if (override) {
-      setTargetFrameRate(*override, 0);
+      setTargetFrameRate(*override);
       m_envOverride = true;
     }
   }
