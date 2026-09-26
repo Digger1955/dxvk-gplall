@@ -69,6 +69,9 @@ namespace dxvk {
 
     TimerDuration   m_targetInterval  = TimerDuration::zero();
     TimerDuration   m_deviation       = TimerDuration::zero();
+
+    double          m_deviationNs_History = 0.0;
+
     TimePoint       m_lastFrame;
 
     bool            m_initialized     = false;
