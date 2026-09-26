@@ -78,8 +78,8 @@ namespace dxvk {
       // Safe to unlock: m_nextFrame has already been pushed forward for concurrent threads
       lock.unlock();
       Sleep::sleepUntil(t1, sleepTarget);
+    }
   }
-
 
 
   std::optional<double> FpsLimiter::getEnvironmentOverride() {
