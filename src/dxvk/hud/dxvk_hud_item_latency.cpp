@@ -143,8 +143,7 @@ namespace dxvk::hud {
       }
 
       if (framePacer->getFramePacerMode()->getPresentMode() == VK_PRESENT_MODE_FIFO_KHR
-        && (framePacer->getMode() || std::chrono::duration_cast<std::chrono::milliseconds>(
-          high_resolution_clock::now() - FpsLimiter::m_lastActive.load()).count() > 3000) ) {
+        && (framePacer->getMode()) {
         const LatencyStats* presentStats = framePacer->getPresentStats();
         if (presentStats) {
           int32_t p50 = presentStats->getPercentile(0.5);
