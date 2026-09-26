@@ -32,14 +32,14 @@ namespace dxvk {
     std::lock_guard<dxvk::mutex> lock(m_mutex);
 
     if (!m_envOverride) {
-      m_targetInterval = frameRate != 0.0
+      TimerDuration interval = frameRate != 0.0
         ? TimerDuration(int64_t(double(TimerDuration::period::den) / frameRate))
         : TimerDuration::zero();
 
-      if (isEnabled() && !m_initialized)
-        initialize();
-
+      if (m_targetInterval != interval) {
+        m_targetInterval = interval;
         m_maxLatency = maxLatency;
+      }
     }
   }
 
@@ -52,41 +52,34 @@ namespace dxvk {
 
     m_isActive.store(false);
 
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
+    std::unique_lock<dxvk::mutex> lock(m_mutex);
+    auto interval = m_targetInterval;
+    auto latency = m_maxLatency;
 
-    if (!isEnabled())
+    if (interval == TimerDuration::zero()) {
+      m_nextFrame = TimePoint();
       return;
-
-    auto t0 = m_lastFrame;
-    auto t1 = dxvk::high_resolution_clock::now();
-
-    auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-
-    if (frameTime * 100 > m_targetInterval * 103 - m_deviation * 100) {
-      // If we have a slow frame, reset the deviation since we
-      // do not want to compensate for low performance later on
-      m_deviation = TimerDuration::zero();
-    } else {
-      // Don't call sleep if the amount of time to sleep is shorter
-      // than the time the function calls are likely going to take
-      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
-      t1 = Sleep::sleepFor(t1, sleepDuration);
-
-      // Compensate for any sleep inaccuracies in the next frame, and
-      // limit cumulative deviation in order to avoid stutter in case we
-      // have a number of slow frames immediately followed by a fast one.
-      frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-      m_deviation += frameTime - m_targetInterval;
-      m_deviation = std::min(m_deviation, m_targetInterval / 16);
     }
 
-    m_lastFrame = t1;
-  }
+    auto t1 = dxvk::high_resolution_clock::now();
 
+    if (interval < TimerDuration::zero()) {
+      interval = -interval;
+    }
 
-  void FpsLimiter::initialize() {
-    m_lastFrame = dxvk::high_resolution_clock::now();
-    m_initialized = true;
+    // Subsequent code must not access any class members
+    // that can be written by setTargetFrameRate
+    lock.unlock();
+
+    if (t1 < m_nextFrame) {
+      m_isActive.store(true);
+      m_lastActive.store(high_resolution_clock::now());
+      Sleep::sleepUntil(t1, m_nextFrame);
+    }
+
+    m_nextFrame = (t1 < m_nextFrame + interval)
+      ? m_nextFrame + interval
+      : t1 + interval;
   }
 
 

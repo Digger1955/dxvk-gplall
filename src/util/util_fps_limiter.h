@@ -43,22 +43,12 @@ namespace dxvk {
     void delay(const Rc<DxvkLatencyTracker>& tracker);
 
     /**
-     * \brief Checks whether the frame rate limiter is enabled
-     * \returns \c true if the target frame rate is non-zero.
-     */
-    bool isEnabled() const {
-      return m_targetInterval != TimerDuration::zero();
-    }
-
-    /**
      * \brief Queries environment override
      * \returns Frame rate given by environment override
      */
     static std::optional<double> getEnvironmentOverride();
 
-    inline static std::atomic<bool> m_isActive = { false };
-    inline static std::atomic<high_resolution_clock::time_point>
-      m_lastActive = { high_resolution_clock::now() };
+    static std::atomic<bool> m_isActive;
 
   private:
 
@@ -68,15 +58,10 @@ namespace dxvk {
     dxvk::mutex     m_mutex;
 
     TimerDuration   m_targetInterval  = TimerDuration::zero();
-    TimerDuration   m_deviation       = TimerDuration::zero();
-    TimePoint       m_lastFrame;
-
-    bool            m_initialized     = false;
+    TimePoint       m_nextFrame       = TimePoint();
     uint32_t        m_maxLatency      = 0;
 
     bool            m_envOverride     = false;
-
-    void initialize();
 
   };
 
