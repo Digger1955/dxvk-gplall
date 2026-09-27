@@ -17,7 +17,7 @@ namespace dxvk {
     auto override = getEnvironmentOverride();
 
     if (override) {
-      setTargetFrameRate(*override, 0);
+      setTargetFrameRate(*override);
       m_envOverride = true;
     }
   }
@@ -28,18 +28,17 @@ namespace dxvk {
   }
 
 
-  void FpsLimiter::setTargetFrameRate(double frameRate, uint32_t maxLatency) {
+  void FpsLimiter::setTargetFrameRate(double frameRate) {
     std::lock_guard<dxvk::mutex> lock(m_mutex);
 
     if (!m_envOverride) {
-      m_targetInterval = frameRate != 0.0
+      TimerDuration interval = frameRate != 0.0
         ? TimerDuration(int64_t(double(TimerDuration::period::den) / frameRate))
         : TimerDuration::zero();
 
-      if (isEnabled() && !m_initialized)
-        initialize();
-
-        m_maxLatency = maxLatency;
+      if (m_targetInterval != interval) {
+        m_targetInterval = interval;
+      }
     }
   }
 
@@ -50,60 +49,36 @@ namespace dxvk {
       return;
     }
 
-    m_isActive.store(false);
+    std::unique_lock<dxvk::mutex> lock(m_mutex);
+    auto interval = m_targetInterval;
 
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-
-    if (!isEnabled())
+    if (interval == TimerDuration::zero()) {
+      m_nextFrame = TimePoint(); // Reset
       return;
-
-    auto t0 = m_lastFrame;
-    auto t1 = dxvk::high_resolution_clock::now();
-
-    auto frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-
-    // FPS-dependent slow frame threshold - improves precision on different FPS
-    // m_targetInterval - a frame time to lock to - FPS Limit
-    // thresholdPercent -  how far a frame time can slip, before resetting deviation
-    // if m_targetInterval is Less than 83.3FPS - thresholdPercent=101; 
-    // if m_targetInterval is More than 83.3FPS - thresholdPercent=104;
-    int thresholdPercent = (m_targetInterval < 12ms) ? 104 : 101;
-
-    if (frameTime * 100 > m_targetInterval * thresholdPercent - m_deviation * 100) {
-      // If we have a slow frame, reset the deviation since we
-      // do not want to compensate for low performance later on
-      m_deviation = TimerDuration::zero();
-    } else {
-      // Don't call sleep if the amount of time to sleep is shorter
-      // than the time the function calls are likely going to take
-      TimerDuration sleepDuration = m_targetInterval - m_deviation - frameTime;
-      t1 = Sleep::sleepFor(t1, sleepDuration);
-
-      // Recalculate interval to figure out exact delivery error
-      frameTime = std::chrono::duration_cast<TimerDuration>(t1 - t0);
-      TimerDuration currentError = frameTime - m_targetInterval;
-
-      // EWMA-based deviation calculation
-      // 0.05/0.95 - prefer smoothness and jitter suppression, instead of adjustment speed
-      m_deviation = std::chrono::duration_cast<TimerDuration>((m_deviation * 0.95) + (currentError * 0.05));
-
-      // Total correction window - percentage of target interval.
-      // Percentage depends on m_targetInterval
-      // if m_targetInterval is Less than 83.3FPS - correctionWindow=32 - 3.125%; 
-      // if m_targetInterval is More than 83.3FPS - correctionWindow=8 - 12.5%;
-      int correctionWindow = (m_targetInterval < 12ms) ? 8 : 32;
-
-      TimerDuration maxCap = m_targetInterval / correctionWindow;
-      m_deviation = std::max(-maxCap, std::min(m_deviation, maxCap));
     }
 
-    m_lastFrame = t1;
-  }
+    auto t1 = dxvk::high_resolution_clock::now();
 
+    // Check for massive long-term engine stall / drop
+    if (t1 > m_nextFrame + (interval * 2)) {
+      m_nextFrame = t1;
+    }
 
-  void FpsLimiter::initialize() {
-    m_lastFrame = dxvk::high_resolution_clock::now();
-    m_initialized = true;
+    // Capture current sleep target safely under the lock
+    TimePoint sleepTarget = m_nextFrame;
+
+    // Increment the baseline. If t1 is early, advance by exactly one interval.
+    // If t1 is already late, advance the baseline relative to t1 to prevent pipeline stall cascades.
+    m_nextFrame = (t1 < sleepTarget + interval)
+      ? sleepTarget + interval
+      : t1 + interval;
+
+    // Decide whether to sleep based on the calculated timeline
+    if (t1 < sleepTarget) {
+      // Safe to unlock - m_nextFrame has already been pushed forward for concurrent threads
+      lock.unlock();
+      Sleep::sleepUntil(t1, sleepTarget);
+    }
   }
 
 
