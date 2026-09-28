@@ -10,7 +10,7 @@ namespace dxvk {
     const Rc<DxvkInstance>&         instance,
     const Rc<DxvkAdapter>&          adapter,
     const Rc<vk::DeviceFn>&         vkd,
-    const DxvkDeviceFeatures&       features,
+    const DxvkDeviceCapabilities&   caps,
     const DxvkDeviceQueueSet&       queues,
     const DxvkQueueCallback&        queueCallback)
   : m_options           (instance->options()),
@@ -19,16 +19,31 @@ namespace dxvk {
     m_vkd               (vkd),
     m_debugFlags        (instance->debugFlags()),
     m_queues            (queues),
-    m_features          (features),
-    m_properties        (adapter->devicePropertiesExt()),
+    m_features          (caps.getFeatures()),
+    m_properties        (caps.getProperties()),
     m_perfHints         (getPerfHints()),
     m_objects           (this),
     m_submissionQueue   (this, queueCallback) {
 
+    if (adapter->kmtLocal()) {
+      D3DKMT_CREATEDEVICE create = { };
+      create.hAdapter = adapter->kmtLocal();
+      if (D3DKMTCreateDevice(&create))
+        Logger::warn("Failed to create D3DKMT device");
+      else
+        m_kmtLocal = create.hDevice;
+    }
+
   }
-  
-  
+
+
   DxvkDevice::~DxvkDevice() {
+    if (m_kmtLocal) {
+      D3DKMT_DESTROYDEVICE destroy = { };
+      destroy.hDevice = m_kmtLocal;
+      D3DKMTDestroyDevice(&destroy);
+    }
+
     // If we are being destroyed during/after DLL process detachment
     // from TerminateProcess, etc, our CS threads are already destroyed
     // and we cannot synchronize against them.

@@ -5,7 +5,6 @@
 #include "dxvk_compute.h"
 #include "dxvk_constant_state.h"
 #include "dxvk_context.h"
-#include "dxvk_extensions.h"
 #include "dxvk_fence.h"
 #include "dxvk_framebuffer.h"
 #include "dxvk_image.h"
@@ -52,9 +51,11 @@ namespace dxvk {
    * queue family that it belongs to.
    */
   struct DxvkDeviceQueue {
-    VkQueue   queueHandle = VK_NULL_HANDLE;
-    uint32_t  queueFamily = 0;
-    uint32_t  queueIndex  = 0;
+    VkQueue       queueHandle = VK_NULL_HANDLE;
+    uint32_t      queueFamily = 0u;
+    uint32_t      queueIndex  = 0u;
+
+    DxvkDeviceQueueInfo properties = { };
   };
 
   /**
@@ -84,7 +85,7 @@ namespace dxvk {
       const Rc<DxvkInstance>&         instance,
       const Rc<DxvkAdapter>&          adapter,
       const Rc<vk::DeviceFn>&         vkd,
-      const DxvkDeviceFeatures&       features,
+      const DxvkDeviceCapabilities&   caps,
       const DxvkDeviceQueueSet&       queues,
       const DxvkQueueCallback&        queueCallback);
       
@@ -112,6 +113,15 @@ namespace dxvk {
      */
     VkDevice handle() const {
       return m_vkd->device();
+    }
+
+    /**
+     * \brief D3DKMT device local handle
+     * \returns The device D3DKMT local handle
+     * \returns \c 0 if there's no matching D3DKMT device
+     */
+    D3DKMT_HANDLE kmtLocal() const {
+      return m_kmtLocal;
     }
 
     /**
@@ -642,6 +652,7 @@ namespace dxvk {
     Rc<DxvkInstance>            m_instance;
     Rc<DxvkAdapter>             m_adapter;
     Rc<vk::DeviceFn>            m_vkd;
+    D3DKMT_HANDLE               m_kmtLocal = 0;
 
     DxvkDebugFlags              m_debugFlags;
     DxvkDeviceQueueSet          m_queues;

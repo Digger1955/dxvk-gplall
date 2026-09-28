@@ -682,8 +682,9 @@ namespace dxvk {
                             || (Usage & D3DUSAGE_DYNAMIC)
                             || IsVendorFormat(EnumerateFormat(Format));
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_TEXTURE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_TEXTURE, &desc);
+    if (FAILED(hr))
+      return hr;
 
     try {
       void* initialData = nullptr;
@@ -698,6 +699,11 @@ namespace dxvk {
       // Shared textures have to be in POOL_DEFAULT
       if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
         return D3DERR_INVALIDCALL;
+
+      // Shared resource handle has to be a D3DKMT global handle */
+      if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                   !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_TEXTURE, desc)))
+        return E_INVALIDARG;
 
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
       const Com<D3D9Texture2D> texture = new D3D9Texture2D(this, &desc, isExtended, pSharedHandle);
@@ -761,8 +767,13 @@ namespace dxvk {
     desc.IsLockable         = Pool != D3DPOOL_DEFAULT
                             || (Usage & D3DUSAGE_DYNAMIC);
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_VOLUMETEXTURE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_VOLUMETEXTURE, &desc);
+    if (FAILED(hr))
+      return hr;
+
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_VOLUMETEXTURE, desc)))
+      return E_INVALIDARG;
 
     try {
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
@@ -825,8 +836,13 @@ namespace dxvk {
                             || (Usage & D3DUSAGE_DYNAMIC)
                             || IsVendorFormat(EnumerateFormat(Format));
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_CUBETEXTURE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_CUBETEXTURE, &desc);
+    if (FAILED(hr))
+      return hr;
+
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_CUBETEXTURE, desc)))
+      return E_INVALIDARG;
 
     try {
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
@@ -880,6 +896,10 @@ namespace dxvk {
     if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, isExtended)))
       return D3DERR_INVALIDCALL;
 
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedBuffer(*pSharedHandle, desc)))
+      return E_INVALIDARG;
+
     try {
       const Com<D3D9VertexBuffer> buffer = new D3D9VertexBuffer(this, &desc, isExtended);
       m_initializer->InitBuffer(buffer->GetCommonBuffer());
@@ -929,6 +949,10 @@ namespace dxvk {
 
     if (FAILED(D3D9CommonBuffer::ValidateBufferProperties(&desc, isExtended)))
       return D3DERR_INVALIDCALL;
+
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedBuffer(*pSharedHandle, desc)))
+      return E_INVALIDARG;
 
     try {
       const Com<D3D9IndexBuffer> buffer = new D3D9IndexBuffer(this, &desc, isExtended);
@@ -1833,7 +1857,7 @@ namespace dxvk {
 
     // Update depth bias if necessary
     if (ds != nullptr && m_depthBiasRepresentation.depthBiasRepresentation != VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT) {
-      const int32_t vendorId = m_dxvkDevice->adapter()->deviceProperties().vendorID;
+      const int32_t vendorId = m_dxvkDevice->properties().core.properties.vendorID;
       const bool exact = m_depthBiasRepresentation.depthBiasExact;
       const bool forceUnorm = m_depthBiasRepresentation.depthBiasRepresentation == VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT;
       const float rValue = GetDepthBufferRValue(ds->GetCommonTexture()->GetFormatMapping().FormatColor, vendorId, exact, forceUnorm);
@@ -4309,9 +4333,6 @@ namespace dxvk {
     if (unlikely(ppSurface == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(MultiSample > D3DMULTISAMPLE_16_SAMPLES))
-      return D3DERR_INVALIDCALL;
-
     // The new Create functions added in 9Ex only accept the new USAGE flags added with 9Ex.
     // Yes, it actually fails when explicitly passing D3DUSAGE_RENDERTARGET.
     if (unlikely(Usage & ~(D3DUSAGE_RESTRICTED_CONTENT | D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)))
@@ -4320,11 +4341,6 @@ namespace dxvk {
     if (unlikely((Usage & (D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)) != 0
       && pSharedHandle == nullptr))
       return D3DERR_INVALIDCALL;
-
-    // Check if the sample count is valid and supported and
-    // specifically return D3DERR_NOTAVAILABLE on failure.
-    if (FAILED(DecodeMultiSampleType(m_dxvkDevice, MultiSample, MultisampleQuality, nullptr)))
-      return D3DERR_NOTAVAILABLE;
 
     D3D9_COMMON_TEXTURE_DESC desc;
     desc.Width              = Width;
@@ -4347,8 +4363,13 @@ namespace dxvk {
     if (unlikely(IsDepthStencilFormat(desc.Format) && !IsLockableDepthStencilFormat(desc.Format)))
       return D3DERR_INVALIDCALL;
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc);
+    if (FAILED(hr))
+      return hr;
+
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_SURFACE, desc)))
+      return E_INVALIDARG;
 
     try {
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
@@ -4404,8 +4425,9 @@ namespace dxvk {
     // Docs: Off-screen plain surfaces are always lockable, regardless of their pool types.
     desc.IsLockable         = TRUE;
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc);
+    if (FAILED(hr))
+      return hr;
 
     try {
       void* initialData = nullptr;
@@ -4420,6 +4442,10 @@ namespace dxvk {
       // Shared offscreen plain surfaces have to be in POOL_DEFAULT
       if (unlikely(pSharedHandle != nullptr && Pool != D3DPOOL_DEFAULT))
         return D3DERR_INVALIDCALL;
+
+      if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                   !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_SURFACE, desc)))
+        return E_INVALIDARG;
 
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
       const Com<D3D9Surface> surface = new D3D9Surface(this, &desc, isExtended, nullptr, pSharedHandle);
@@ -4478,8 +4504,13 @@ namespace dxvk {
     desc.IsAttachmentOnly   = TRUE;
     desc.IsLockable         = IsLockableDepthStencilFormat(desc.Format);
 
-    if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc)))
-      return D3DERR_INVALIDCALL;
+    HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc);
+    if (FAILED(hr))
+      return hr;
+
+    if (unlikely(pSharedHandle != nullptr && *pSharedHandle != nullptr &&
+                 !ValidateSharedTexture(*pSharedHandle, D3DRTYPE_SURFACE, desc)))
+      return E_INVALIDARG;
 
     try {
       const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
@@ -4749,86 +4780,6 @@ namespace dxvk {
 
   HWND D3D9DeviceEx::GetWindow() {
     return m_window;
-  }
-
-
-  DxvkDeviceFeatures D3D9DeviceEx::GetDeviceFeatures(const Rc<DxvkAdapter>& adapter) {
-    DxvkDeviceFeatures supported = adapter->features();
-    DxvkDeviceFeatures enabled = {};
-
-    // Geometry shaders are used for some meta ops
-    enabled.core.features.geometryShader = VK_TRUE;
-    enabled.core.features.robustBufferAccess = VK_TRUE;
-
-    enabled.vk12.samplerMirrorClampToEdge = VK_TRUE;
-
-    enabled.vk13.shaderDemoteToHelperInvocation = VK_TRUE;
-
-    enabled.extMemoryPriority.memoryPriority = supported.extMemoryPriority.memoryPriority;
-
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor;
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor;
-
-    // ProcessVertices
-    enabled.core.features.vertexPipelineStoresAndAtomics = supported.core.features.vertexPipelineStoresAndAtomics;
-    enabled.vk12.shaderInt8 = supported.vk12.shaderInt8;
-
-    // DXVK Meta
-    enabled.core.features.imageCubeArray = VK_TRUE;
-
-    // SM1 level hardware
-    enabled.core.features.depthClamp = VK_TRUE;
-    enabled.core.features.depthBiasClamp = VK_TRUE;
-    enabled.core.features.fillModeNonSolid = VK_TRUE;
-    enabled.core.features.pipelineStatisticsQuery = supported.core.features.pipelineStatisticsQuery;
-    enabled.core.features.sampleRateShading = VK_TRUE;
-    enabled.core.features.samplerAnisotropy = supported.core.features.samplerAnisotropy;
-    enabled.core.features.shaderClipDistance = VK_TRUE;
-    enabled.core.features.shaderCullDistance = VK_TRUE;
-
-    // Ensure we support real BC formats and unofficial vendor ones.
-    enabled.core.features.textureCompressionBC = VK_TRUE;
-
-    // SM2 level hardware
-    enabled.core.features.occlusionQueryPrecise = VK_TRUE;
-
-    // SM3 level hardware
-    enabled.core.features.multiViewport = VK_TRUE;
-    enabled.core.features.independentBlend = VK_TRUE;
-
-    // D3D10 level hardware supports this in D3D9 native.
-    enabled.core.features.fullDrawIndexUint32 = VK_TRUE;
-
-    // Enable depth bounds test if we support it.
-    enabled.core.features.depthBounds = supported.core.features.depthBounds;
-
-    // VK_EXT_border_color_swizzle - enable its features, if respective feature is supported
-    enabled.extBorderColorSwizzle.borderColorSwizzle             = supported.extBorderColorSwizzle.borderColorSwizzle;
-    enabled.extBorderColorSwizzle.borderColorSwizzleFromImage    = supported.extBorderColorSwizzle.borderColorSwizzleFromImage;
-
-    // VK_EXT_custom_border_color - enable its features unconditionally, if customBorderColorWithoutFormat feature is supported
-    if (supported.extCustomBorderColor.customBorderColorWithoutFormat) {
-      enabled.extCustomBorderColor.customBorderColors             = VK_TRUE;
-      enabled.extCustomBorderColor.customBorderColorWithoutFormat = VK_TRUE;
-    }
-
-    // VK_EXT_attachment_feedback_loop_layout - enable its feature unconditionally, if attachmentFeedbackLoopLayout feature is supported
-    if (supported.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout)
-      enabled.extAttachmentFeedbackLoopLayout.attachmentFeedbackLoopLayout = VK_TRUE;
-
-    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
-    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
-
-    enabled.extNonSeamlessCubeMap.nonSeamlessCubeMap = supported.extNonSeamlessCubeMap.nonSeamlessCubeMap;
-
-    enabled.extDepthBiasControl.depthBiasControl = supported.extDepthBiasControl.depthBiasControl;
-    enabled.extDepthBiasControl.depthBiasExact = supported.extDepthBiasControl.depthBiasExact;
-    if (supported.extDepthBiasControl.floatRepresentation)
-      enabled.extDepthBiasControl.floatRepresentation = VK_TRUE;
-    else if (supported.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation)
-      enabled.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation = VK_TRUE;
-
-    return enabled;
   }
 
 
@@ -6033,12 +5984,11 @@ namespace dxvk {
 
 
   int64_t D3D9DeviceEx::DetermineInitialTextureMemory() {
-    auto memoryProp = m_adapter->GetDXVKAdapter()->memoryProperties();
+    auto adapterInfo = m_dxvkDevice->adapter()->info();
 
-    VkDeviceSize availableTextureMemory = 0;
-
-    for (uint32_t i = 0; i < memoryProp.memoryHeapCount; i++)
-      availableTextureMemory += memoryProp.memoryHeaps[i].size;
+    // Apparently we need to return video and system memory combined:
+    // https://github.com/doitsujin/dxvk/pull/1436
+    VkDeviceSize availableTextureMemory = adapterInfo.deviceMemory + adapterInfo.systemMemory;
 
     constexpr VkDeviceSize Megabytes = 1024 * 1024;
     // Windows will typically "reserve" some amount of video memory,
@@ -8569,7 +8519,7 @@ namespace dxvk {
     const D3D9_COMMON_TEXTURE_DESC* dstDesc = dstTextureInfo->Desc();
 
     VkSampleCountFlagBits dstSampleCount;
-    DecodeMultiSampleType(m_dxvkDevice, dstDesc->MultiSample, dstDesc->MultisampleQuality, &dstSampleCount);
+    DecodeMultiSampleType(dstDesc->MultiSample, dstDesc->MultisampleQuality, &dstSampleCount);
 
     if (unlikely(dstSampleCount != VK_SAMPLE_COUNT_1_BIT)) {
       Logger::warn("D3D9DeviceEx::ResolveZ: dstSampleCount != 1. Discarding.");
@@ -8610,7 +8560,7 @@ namespace dxvk {
       srcSubresource.arrayLayer, 1 };
 
     VkSampleCountFlagBits srcSampleCount;
-    DecodeMultiSampleType(m_dxvkDevice, srcDesc->MultiSample, srcDesc->MultisampleQuality, &srcSampleCount);
+    DecodeMultiSampleType(srcDesc->MultiSample, srcDesc->MultisampleQuality, &srcSampleCount);
 
     if (srcSampleCount == VK_SAMPLE_COUNT_1_BIT) {
       EmitCs([
@@ -8780,7 +8730,7 @@ namespace dxvk {
     rs[D3DRS_CLIPPLANEENABLE] = 0;
     m_dirty.set(D3D9DeviceDirtyFlag::ClipPlanes);
 
-    const VkPhysicalDeviceLimits& limits = m_dxvkDevice->adapter()->deviceProperties().limits;
+    const auto& limits = m_dxvkDevice->properties().core.properties.limits;
 
     rs[D3DRS_POINTSPRITEENABLE]          = FALSE;
     rs[D3DRS_POINTSCALEENABLE]           = FALSE;
@@ -9255,4 +9205,197 @@ namespace dxvk {
       return GpuFlushType::ImplicitWeakHint;
   }
 
+
+  bool D3D9DeviceEx::ValidateSharedTexture(
+    HANDLE                          handle,
+    D3DRESOURCETYPE                 type,
+    const D3D9_COMMON_TEXTURE_DESC& textureDesc) const {
+    if (!(reinterpret_cast<uintptr_t>(handle) & 0xc0000000)) {
+/*
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: not a D3DKMT handle: ", handle));
+*/
+      return false;
+    }
+
+    union d3dkmt_desc desc;
+
+    D3DKMT_QUERYRESOURCEINFO query = { };
+    query.hDevice = m_dxvkDevice->kmtLocal();
+    query.hGlobalShare = reinterpret_cast<uintptr_t>(handle);
+    query.pPrivateRuntimeData = &desc;
+    query.PrivateRuntimeDataSize = sizeof(desc);
+
+    if (D3DKMTQueryResourceInfo(&query)) {
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Failed to query resource: ", handle));
+    } else if (query.PrivateRuntimeDataSize < sizeof(desc.dxgi) || query.PrivateRuntimeDataSize > sizeof(desc)) {
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Unexpected size: ", query.PrivateRuntimeDataSize));
+    } else {
+      D3DDDI_OPENALLOCATIONINFO2 alloc = { };
+      D3DKMT_OPENRESOURCE open = { };
+      open.hDevice = m_dxvkDevice->kmtLocal();
+      open.hGlobalShare = reinterpret_cast<uintptr_t>(handle);
+      open.NumAllocations = 1;
+      open.pOpenAllocationInfo2 = &alloc;
+      open.pPrivateRuntimeData = &desc;
+      open.PrivateRuntimeDataSize = query.PrivateRuntimeDataSize;
+
+      if (D3DKMTOpenResource2(&open)) {
+        Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Failed to open resource: ", handle));
+      } else {
+        D3DKMT_DESTROYALLOCATION destroy = { };
+        destroy.hDevice = m_dxvkDevice->kmtLocal();
+        destroy.hResource = open.hResource;
+        D3DKMTDestroyAllocation(&destroy);
+
+        if (desc.dxgi.size != sizeof(desc.d3d9) || desc.dxgi.version != 1) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid size: ",
+                                   desc.dxgi.size, " or version: ", desc.dxgi.version));
+*/
+          return false;
+        }
+        if (desc.d3d9.type != type) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid type: ", desc.d3d9.type));
+*/
+          return false;
+        }
+        if (desc.d3d9.dxgi.width != textureDesc.Width || desc.d3d9.dxgi.height != textureDesc.Height) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid dimensions: ", desc.d3d9.dxgi.width, "x", desc.d3d9.dxgi.height));
+*/
+          return false;
+        }
+        if (desc.d3d9.format != static_cast<D3DFORMAT>(textureDesc.Format)) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid format: ", desc.d3d9.format));
+*/
+          return false;
+        }
+        if (textureDesc.Usage & ~desc.d3d9.usage) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid usage: ", desc.d3d9.usage));
+*/
+          return false;
+        }
+        if (type == D3DRTYPE_TEXTURE && desc.d3d9.texture.levels != textureDesc.MipLevels) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedTexture: Invalid mip levels: ", desc.d3d9.texture.levels));
+*/
+          return false;
+        }
+/*
+        Logger::debug(str::format("Found D3D9 desc: ", desc.d3d9.type));
+        Logger::debug(str::format("  dxgi.width: ", desc.d3d9.dxgi.width));
+        Logger::debug(str::format("  dxgi.height: ", desc.d3d9.dxgi.height));
+        Logger::debug(str::format("  format: ", desc.d3d9.format));
+        Logger::debug(str::format("  usage: ", desc.d3d9.usage));
+*/
+
+/*
+        if (desc.d3d9.type == D3DRTYPE_TEXTURE) {
+          Logger::debug(str::format("  texture.width: ", desc.d3d9.texture.width));
+          Logger::debug(str::format("  texture.height: ", desc.d3d9.texture.height));
+          Logger::debug(str::format("  texture.depth: ", desc.d3d9.texture.depth));
+          Logger::debug(str::format("  texture.levels: ", desc.d3d9.texture.levels));
+        } else if (desc.d3d9.type == D3DRTYPE_SURFACE) {
+          Logger::debug(str::format("  surface.width: ", desc.d3d9.surface.width));
+          Logger::debug(str::format("  surface.height: ", desc.d3d9.surface.height));
+        }
+*/
+
+        return true;
+      }
+    }
+
+    /* ignore failures for legacy Proton implementation */
+    return true;
+  }
+
+  bool D3D9DeviceEx::ValidateSharedBuffer(
+      HANDLE                        handle,
+      const dxvk::D3D9_BUFFER_DESC& bufferDesc) const {
+    if (!(reinterpret_cast<uintptr_t>(handle) & 0xc0000000)) {
+/*
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: not a D3DKMT handle: ", handle));
+*/
+      return false;
+    }
+
+    union d3dkmt_desc desc;
+
+    D3DKMT_QUERYRESOURCEINFO query = { };
+    query.hDevice = m_dxvkDevice->kmtLocal();
+    query.hGlobalShare = reinterpret_cast<uintptr_t>(handle);
+    query.pPrivateRuntimeData = &desc;
+    query.PrivateRuntimeDataSize = sizeof(desc);
+
+    if (D3DKMTQueryResourceInfo(&query)) {
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Failed to query resource: ", handle));
+    } else if (query.PrivateRuntimeDataSize < sizeof(desc.dxgi) || query.PrivateRuntimeDataSize > sizeof(desc)) {
+      Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Unexpected size: ", query.PrivateRuntimeDataSize));
+    } else {
+      D3DDDI_OPENALLOCATIONINFO2 alloc = { };
+      D3DKMT_OPENRESOURCE open = { };
+      open.hDevice = m_dxvkDevice->kmtLocal();
+      open.hGlobalShare = reinterpret_cast<uintptr_t>(handle);
+      open.NumAllocations = 1;
+      open.pOpenAllocationInfo2 = &alloc;
+      open.pPrivateRuntimeData = &desc;
+      open.PrivateRuntimeDataSize = query.PrivateRuntimeDataSize;
+
+      if (D3DKMTOpenResource2(&open)) {
+        Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Failed to open resource: ", handle));
+      } else {
+        D3DKMT_DESTROYALLOCATION destroy = { };
+        destroy.hDevice = m_dxvkDevice->kmtLocal();
+        destroy.hResource = open.hResource;
+        D3DKMTDestroyAllocation(&destroy);
+
+        if (desc.dxgi.size != sizeof(desc.d3d9) || desc.dxgi.version != 1) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Invalid size: ",
+                                   desc.dxgi.size, " or version: ", desc.dxgi.version));
+*/
+          return false;
+        }
+        if (desc.d3d9.type != bufferDesc.Type) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Invalid type: ", desc.d3d9.type));
+*/
+          return false;
+        }
+        if (desc.d3d9.dxgi.width != bufferDesc.Size || desc.d3d9.buffer.width != bufferDesc.Size) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Invalid dimensions: ", desc.d3d9.dxgi.width, "x", desc.d3d9.dxgi.height));
+*/
+          return false;
+        }
+        if (desc.d3d9.buffer.format != static_cast<UINT>(bufferDesc.Format)) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Invalid format: ", desc.d3d9.format));
+*/
+          return false;
+        }
+        if (bufferDesc.Usage & ~desc.d3d9.usage) {
+/*
+          Logger::warn(str::format("D3D9DeviceEx::ValidateSharedBuffer: Invalid usage: ", desc.d3d9.usage));
+*/
+          return false;
+        }
+
+/*
+        Logger::debug(str::format("Found D3D9 desc: ", desc.d3d9.type));
+        Logger::debug(str::format("  dxgi.width: ", desc.d3d9.buffer.width));
+        Logger::debug(str::format("  format: ", desc.d3d9.buffer.format));
+        Logger::debug(str::format("  usage: ", desc.d3d9.usage));
+*/
+
+        return true;
+      }
+    }
+
+    /* ignore failures for legacy Proton implementation */
+    return true;
+  }
 }

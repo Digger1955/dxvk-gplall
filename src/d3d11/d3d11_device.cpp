@@ -47,8 +47,8 @@ namespace dxvk {
     m_d3d11Formats      (m_dxvkDevice),
     m_d3d11Options      (m_dxvkDevice->instance()->config()),
     m_dxbcOptions       (m_dxvkDevice, m_d3d11Options),
-    m_maxFeatureLevel   (GetMaxFeatureLevel(m_dxvkDevice->instance(), m_dxvkDevice->adapter())),
-    m_deviceFeatures    (m_dxvkDevice->instance(), m_dxvkDevice->adapter(), m_d3d11Options, m_featureLevel) {
+    m_maxFeatureLevel   (D3D11DeviceFeatures::GetMaxFeatureLevel(*m_dxvkDevice)),
+    m_deviceFeatures    (*m_dxvkDevice, m_d3d11Options, m_featureLevel) {
     m_initializer = new D3D11Initializer(this);
     m_context     = new D3D11ImmediateContext(this, m_dxvkDevice);
     m_d3d10Device = new D3D10Device(this, m_context.ptr());
@@ -1356,10 +1356,7 @@ namespace dxvk {
 
     if (m_featureLevel < featureLevel) {
       m_featureLevel = featureLevel;
-      m_deviceFeatures = D3D11DeviceFeatures(
-        m_dxvkDevice->instance(),
-        m_dxvkDevice->adapter(),
-        m_d3d11Options, m_featureLevel);
+      m_deviceFeatures = D3D11DeviceFeatures(*m_dxvkDevice, m_d3d11Options, m_featureLevel);
     }
 
     if (pChosenFeatureLevel)
@@ -1453,15 +1450,188 @@ namespace dxvk {
           HANDLE      hResource,
           REFIID      ReturnedInterface,
           void**      ppResource) {
+    InitReturnPtr(ppResource);
+
+    if (!(reinterpret_cast<uintptr_t>(hResource) & 0xc0000000)) {
+/*
+      Logger::warn("D3D11Device::OpenSharedResource: Invalid shared handle type");
+*/
+      return E_INVALIDARG;
+    }
+
+    if (ppResource == nullptr)
+      return S_FALSE;
+
+    union d3dkmt_desc d3dkmt;
+
+    D3DKMT_QUERYRESOURCEINFO query = { };
+    query.hDevice = m_dxvkDevice->kmtLocal();
+    query.hGlobalShare = reinterpret_cast<uintptr_t>(hResource);
+    query.pPrivateRuntimeData = &d3dkmt;
+    query.PrivateRuntimeDataSize = sizeof(d3dkmt);
+
+    if (D3DKMTQueryResourceInfo(&query)) {
+      Logger::warn(str::format("D3D11Device::OpenSharedResource: Failed to query resource: ", hResource));
+    } else if (query.PrivateRuntimeDataSize < sizeof(d3dkmt.dxgi) || query.PrivateRuntimeDataSize > sizeof(d3dkmt)) {
+      Logger::warn(str::format("D3D11Device::OpenSharedResource: Unexpected size: ", query.PrivateRuntimeDataSize));
+    } else {
+      D3DDDI_OPENALLOCATIONINFO2 alloc = { };
+      D3DKMT_OPENRESOURCE open = { };
+      open.hDevice = m_dxvkDevice->kmtLocal();
+      open.hGlobalShare = reinterpret_cast<uintptr_t>(hResource);
+      open.NumAllocations = 1;
+      open.pOpenAllocationInfo2 = &alloc;
+      open.pPrivateRuntimeData = &d3dkmt;
+      open.PrivateRuntimeDataSize = query.PrivateRuntimeDataSize;
+
+      if (D3DKMTOpenResource2(&open)) {
+        Logger::warn(str::format("D3D11Device::OpenSharedResource: Failed to open resource: ", hResource));
+      } else {
+        D3DKMT_DESTROYALLOCATION destroy = { };
+        destroy.hDevice = m_dxvkDevice->kmtLocal();
+        destroy.hResource = open.hResource;
+        D3DKMTDestroyAllocation(&destroy);
+
+        Rc<DxvkFence> fence;
+        if (d3dkmt.dxgi.sync_handle) {
+          DxvkFenceCreateInfo fenceInfo = { };
+          fenceInfo.sharedType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
+          fenceInfo.sharedHandle = reinterpret_cast<HANDLE>(d3dkmt.dxgi.sync_handle);
+          fence = this->GetDXVKDevice()->createFence(fenceInfo);
+        }
+
+        Rc<DxvkKeyedMutex> mutex;
+        if (d3dkmt.dxgi.keyed_mutex) {
+          D3DKMT_OPENKEYEDMUTEX openMutex = { };
+          openMutex.hSharedHandle = d3dkmt.dxgi.mutex_handle;
+
+          if (D3DKMTOpenKeyedMutex(&openMutex)) {
+            Logger::warn(str::format("D3D11Device::OpenSharedResource: Failed to open keyed mutex: ", d3dkmt.dxgi.keyed_mutex));
+          } else {
+            mutex = new DxvkKeyedMutex(m_dxvkDevice, std::move(fence), openMutex.hKeyedMutex, openMutex.hSharedHandle);
+          }
+        }
+
+        D3D11_COMMON_TEXTURE_DESC desc = { };
+        if (!ConvertRuntimeDescriptor(query.PrivateRuntimeDataSize, d3dkmt, &desc))
+          return E_INVALIDARG;
+
+        try {
+          const Com<D3D11Texture2D> texture = new D3D11Texture2D(this, &desc, nullptr, hResource);
+          texture->GetCommonTexture()->GetImage()->setKeyedMutex(std::move(mutex));
+          texture->QueryInterface(ReturnedInterface, ppResource);
+          return S_OK;
+        }
+        catch (const DxvkError& e) {
+          Logger::err(e.message());
+          return E_INVALIDARG;
+        }
+      }
+    }
+
+    /* try the legacy Proton shared resource implementation */
+
     return OpenSharedResourceGeneric<true>(
       hResource, ReturnedInterface, ppResource);
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11Device::OpenSharedResource1(
           HANDLE      hResource,
           REFIID      ReturnedInterface,
           void**      ppResource) {
+    InitReturnPtr(ppResource);
+
+    if (reinterpret_cast<uintptr_t>(hResource) & 0xc0000000) {
+/*
+      Logger::warn("D3D11Device::OpenSharedResource1: Invalid shared handle type");
+*/
+      return E_INVALIDARG;
+    }
+
+    if (ppResource == nullptr)
+      return S_FALSE;
+
+    union d3dkmt_desc d3dkmt;
+
+    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE query = { };
+    query.hDevice = m_dxvkDevice->kmtLocal();
+    query.hNtHandle = hResource;
+    query.pPrivateRuntimeData = &d3dkmt;
+    query.PrivateRuntimeDataSize = sizeof(d3dkmt);
+
+    if (D3DKMTQueryResourceInfoFromNtHandle(&query)) {
+      Logger::warn(str::format("D3D11Device::OpenSharedResource1: Failed to query resource: ", hResource));
+    } else if (query.PrivateRuntimeDataSize < sizeof(d3dkmt.dxgi) || query.PrivateRuntimeDataSize > sizeof(d3dkmt)) {
+      Logger::warn(str::format("D3D11Device::OpenSharedResource1: Unexpected size: ", query.PrivateRuntimeDataSize));
+    } else {
+      D3DDDI_OPENALLOCATIONINFO2 alloc = { };
+      D3DKMT_OPENRESOURCEFROMNTHANDLE open = { };
+      char dummy;
+
+      open.hDevice = m_dxvkDevice->kmtLocal();
+      open.hNtHandle = hResource;
+      open.NumAllocations = 1;
+      open.pOpenAllocationInfo2 = &alloc;
+      open.pPrivateRuntimeData = &d3dkmt;
+      open.PrivateRuntimeDataSize = query.PrivateRuntimeDataSize;
+      open.pTotalPrivateDriverDataBuffer = &dummy;
+      open.TotalPrivateDriverDataBufferSize = 0;
+
+      if (D3DKMTOpenResourceFromNtHandle(&open)) {
+        Logger::warn(str::format("D3D11Device::OpenSharedResource1: Failed to open resource: ", hResource));
+      } else {
+        D3DKMT_DESTROYALLOCATION destroy = { };
+        destroy.hDevice = m_dxvkDevice->kmtLocal();
+        destroy.hResource = open.hResource;
+        D3DKMTDestroyAllocation(&destroy);
+
+        Rc<DxvkFence> fence;
+        if (open.hSyncObject) {
+#ifdef _WIN32
+          DxvkFenceCreateInfo fenceInfo = { };
+
+          /* need to create a NT shared handle again to import the fence from it */
+          if (D3DKMTShareObjects(1, &open.hSyncObject, NULL, GENERIC_ALL, &fenceInfo.sharedHandle))
+            Logger::warn(str::format("D3D11Device::OpenSharedResource1: Failed to open sync object"));
+          else {
+            fenceInfo.sharedType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+            fence = m_dxvkDevice->createFence(fenceInfo);
+            CloseHandle(fenceInfo.sharedHandle);
+          }
+#else
+          Logger::warn(str::format("D3D11Device::OpenSharedResource1: Ignoring bundled sync object"));
+#endif
+
+          D3DKMT_DESTROYSYNCHRONIZATIONOBJECT destroySync = { };
+          destroySync.hSyncObject = open.hSyncObject;
+          D3DKMTDestroySynchronizationObject(&destroySync);
+        }
+
+        Rc<DxvkKeyedMutex> mutex;
+        if (open.hKeyedMutex) {
+          mutex = new DxvkKeyedMutex(m_dxvkDevice, std::move(fence), open.hKeyedMutex, 0);
+        }
+
+        D3D11_COMMON_TEXTURE_DESC desc = { };
+        if (!ConvertRuntimeDescriptor(query.PrivateRuntimeDataSize, d3dkmt, &desc))
+          return E_INVALIDARG;
+
+        try {
+          const Com<D3D11Texture2D> texture = new D3D11Texture2D(this, &desc, nullptr, hResource);
+          texture->GetCommonTexture()->GetImage()->setKeyedMutex(std::move(mutex));
+          texture->QueryInterface(ReturnedInterface, ppResource);
+          return S_OK;
+        }
+        catch (const DxvkError& e) {
+          Logger::err(e.message());
+          return E_INVALIDARG;
+        }
+      }
+    }
+
+    /* try the legacy Proton shared resource implementation */
+
     return OpenSharedResourceGeneric<false>(
       hResource, ReturnedInterface, ppResource);
   }
@@ -1858,15 +2028,7 @@ namespace dxvk {
   }
   
   
-  D3D_FEATURE_LEVEL D3D11Device::GetMaxFeatureLevel(
-    const Rc<DxvkInstance>& Instance,
-    const Rc<DxvkAdapter>&  Adapter) {
-    // Check whether baseline features are supported by the device    
-    DxvkDeviceFeatures features = GetDeviceFeatures(Adapter);
-    
-    if (!Adapter->checkFeatureSupport(features))
-      return D3D_FEATURE_LEVEL();
-
+  D3D_FEATURE_LEVEL D3D11Device::GetMaxFeatureLevel(const DxvkDevice& Device) {
     // The feature level override always takes precedence
     static const std::array<std::pair<std::string, D3D_FEATURE_LEVEL>, 9> s_featureLevels = {{
       { "12_1", D3D_FEATURE_LEVEL_12_1 },
@@ -1879,8 +2041,8 @@ namespace dxvk {
       { "9_2",  D3D_FEATURE_LEVEL_9_2  },
       { "9_1",  D3D_FEATURE_LEVEL_9_1  },
     }};
-    
-    std::string maxLevel = Instance->config().getOption<std::string>("d3d11.maxFeatureLevel");
+
+    std::string maxLevel = Device.instance()->config().getOption<std::string>("d3d11.maxFeatureLevel");
 
     auto entry = std::find_if(s_featureLevels.begin(), s_featureLevels.end(),
       [&] (const std::pair<std::string, D3D_FEATURE_LEVEL>& pair) {
@@ -1891,89 +2053,7 @@ namespace dxvk {
       return entry->second;
 
     // Otherwise, check the actually available device features
-    return D3D11DeviceFeatures::GetMaxFeatureLevel(Instance, Adapter);
-  }
-  
-  
-  DxvkDeviceFeatures D3D11Device::GetDeviceFeatures(
-    const Rc<DxvkAdapter>&  Adapter) {
-    DxvkDeviceFeatures supported = Adapter->features();
-    DxvkDeviceFeatures enabled   = {};
-
-    // Required for feature level 10_1
-    enabled.core.features.depthBiasClamp                          = VK_TRUE;
-    enabled.core.features.depthClamp                              = VK_TRUE;
-    enabled.core.features.dualSrcBlend                            = VK_TRUE;
-    enabled.core.features.fillModeNonSolid                        = VK_TRUE;
-    enabled.core.features.fullDrawIndexUint32                     = VK_TRUE;
-    enabled.core.features.geometryShader                          = VK_TRUE;
-    enabled.core.features.imageCubeArray                          = VK_TRUE;
-    enabled.core.features.independentBlend                        = VK_TRUE;
-    enabled.core.features.multiViewport                           = VK_TRUE;
-    enabled.core.features.occlusionQueryPrecise                   = VK_TRUE;
-    enabled.core.features.pipelineStatisticsQuery                 = supported.core.features.pipelineStatisticsQuery;
-    enabled.core.features.sampleRateShading                       = VK_TRUE;
-    enabled.core.features.samplerAnisotropy                       = supported.core.features.samplerAnisotropy;
-    enabled.core.features.shaderClipDistance                      = VK_TRUE;
-    enabled.core.features.shaderCullDistance                      = VK_TRUE;
-    enabled.core.features.shaderImageGatherExtended               = VK_TRUE;
-    enabled.core.features.textureCompressionBC                    = VK_TRUE;
-
-    enabled.vk12.samplerMirrorClampToEdge                         = VK_TRUE;
-
-    enabled.vk13.shaderDemoteToHelperInvocation                   = VK_TRUE;
-
-    // VK_EXT_custom_border_color - enable its features, if respective feature is supported
-    enabled.extCustomBorderColor.customBorderColors               = supported.extCustomBorderColor.customBorderColorWithoutFormat;
-    enabled.extCustomBorderColor.customBorderColorWithoutFormat   = supported.extCustomBorderColor.customBorderColorWithoutFormat;
-
-    // VK_EXT_dynamic_rendering_unused_attachments - enable its features, if respective feature is supported
-    enabled.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments = supported.extDynamicRenderingUnusedAttachments.dynamicRenderingUnusedAttachments;
-
-    enabled.extTransformFeedback.transformFeedback                = VK_TRUE;
-    enabled.extTransformFeedback.geometryStreams                  = VK_TRUE;
-
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor      = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateDivisor;
-    enabled.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor  = supported.extVertexAttributeDivisor.vertexAttributeInstanceRateZeroDivisor;
-
-    // Required for Feature Level 11_0
-    enabled.core.features.drawIndirectFirstInstance               = supported.core.features.drawIndirectFirstInstance;
-    enabled.core.features.fragmentStoresAndAtomics                = supported.core.features.fragmentStoresAndAtomics;
-    enabled.core.features.tessellationShader                      = supported.core.features.tessellationShader;
-
-    // Required for Feature Level 11_1
-    enabled.core.features.logicOp                                 = supported.core.features.logicOp;
-    enabled.core.features.vertexPipelineStoresAndAtomics          = supported.core.features.vertexPipelineStoresAndAtomics;
-
-    // Required for Feature Level 12_0
-    enabled.core.features.sparseBinding                           = supported.core.features.sparseBinding;
-    enabled.core.features.sparseResidencyBuffer                   = supported.core.features.sparseResidencyBuffer;
-    enabled.core.features.sparseResidencyImage2D                  = supported.core.features.sparseResidencyImage2D;
-    enabled.core.features.sparseResidencyImage3D                  = supported.core.features.sparseResidencyImage3D;
-    enabled.core.features.sparseResidency2Samples                 = supported.core.features.sparseResidency2Samples;
-    enabled.core.features.sparseResidency4Samples                 = supported.core.features.sparseResidency4Samples;
-    enabled.core.features.sparseResidency8Samples                 = supported.core.features.sparseResidency8Samples;
-    enabled.core.features.sparseResidency16Samples                = supported.core.features.sparseResidency16Samples;
-    enabled.core.features.sparseResidencyAliased                  = supported.core.features.sparseResidencyAliased;
-    enabled.core.features.shaderResourceResidency                 = supported.core.features.shaderResourceResidency;
-    enabled.core.features.shaderResourceMinLod                    = supported.core.features.shaderResourceMinLod;
-    enabled.vk12.samplerFilterMinmax                              = supported.vk12.samplerFilterMinmax;
-
-    // Required for Feature Level 12_1
-    enabled.extFragmentShaderInterlock.fragmentShaderSampleInterlock = supported.extFragmentShaderInterlock.fragmentShaderSampleInterlock;
-    enabled.extFragmentShaderInterlock.fragmentShaderPixelInterlock  = supported.extFragmentShaderInterlock.fragmentShaderPixelInterlock;
-
-    // Optional in any feature level
-    enabled.core.features.depthBounds                             = supported.core.features.depthBounds;
-    enabled.core.features.shaderFloat64                           = supported.core.features.shaderFloat64;
-    enabled.core.features.shaderInt64                             = supported.core.features.shaderInt64;
-
-    // Depth bias control
-    enabled.extDepthBiasControl.depthBiasControl                                = supported.extDepthBiasControl.depthBiasControl;
-    enabled.extDepthBiasControl.depthBiasExact                                  = supported.extDepthBiasControl.depthBiasExact;
-    enabled.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation = supported.extDepthBiasControl.leastRepresentableValueForceUnormRepresentation;
-
-    return enabled;
+    return D3D11DeviceFeatures::GetMaxFeatureLevel(Device);
   }
 
 
@@ -2348,11 +2428,6 @@ namespace dxvk {
           HANDLE      hResource,
           REFIID      ReturnedInterface,
           void**      ppResource) {
-    InitReturnPtr(ppResource);
-
-    if (ppResource == nullptr)
-      return S_FALSE;
-
 #ifdef _WIN32
     HANDLE ntHandle = IsKmtHandle ? openKmtHandle(hResource) : hResource;
 
@@ -2521,6 +2596,146 @@ namespace dxvk {
     return feedback;
   }
 
+
+  bool D3D11Device::ConvertRuntimeDescriptor(
+       UINT                       size,
+       const union d3dkmt_desc&   d3dkmt,
+       D3D11_COMMON_TEXTURE_DESC* desc) {
+
+    if (size == sizeof(d3dkmt.d3d12) && d3dkmt.d3d12.d3d11.dxgi.size == sizeof(d3dkmt.d3d12.d3d11) && d3dkmt.d3d12.d3d11.dxgi.version == 0) {
+/*
+      Logger::warn(str::format("D3D11Device::ConvertRuntimeDescriptor: D3D12 descriptor conversion not implemented"));
+*/
+      return false;
+    }
+
+    if (size >= sizeof(d3dkmt.d3d11) && d3dkmt.dxgi.size == sizeof(d3dkmt.d3d11) && d3dkmt.dxgi.version == 4) {
+/*
+      Logger::debug(str::format("D3D11Device::ConvertRuntimeDescriptor: Found D3D11 desc with dimension: ", d3dkmt.d3d11.dimension));
+*/
+
+      switch (d3dkmt.d3d11.dimension) {
+        case D3D11_RESOURCE_DIMENSION_TEXTURE2D:
+          desc->Width = d3dkmt.d3d11.d3d11_2d.Width;
+          desc->Height = d3dkmt.d3d11.d3d11_2d.Height;
+          desc->Depth = 1;
+          desc->MipLevels = d3dkmt.d3d11.d3d11_2d.MipLevels;
+          desc->ArraySize = d3dkmt.d3d11.d3d11_2d.ArraySize;
+          desc->Format = d3dkmt.d3d11.d3d11_2d.Format;
+          desc->SampleDesc = d3dkmt.d3d11.d3d11_2d.SampleDesc;
+          desc->Usage = d3dkmt.d3d11.d3d11_2d.Usage;
+          desc->BindFlags = d3dkmt.d3d11.d3d11_2d.BindFlags;
+          desc->CPUAccessFlags = d3dkmt.d3d11.d3d11_2d.CPUAccessFlags;
+          desc->MiscFlags = d3dkmt.d3d11.d3d11_2d.MiscFlags;
+          desc->TextureLayout = D3D11_TEXTURE_LAYOUT_UNDEFINED;
+          break;
+        default:
+/*
+          Logger::warn(str::format("D3D11Device::ConvertRuntimeDescriptor: Unsupported dimension: ", d3dkmt.d3d11.dimension));
+*/
+          return false;
+      }
+
+/*
+      Logger::debug(str::format("D3D11Device::ConvertRuntimeDescriptor: Translated D3D11 desc:"));
+      Logger::debug(str::format("  Width: ", desc->Width));
+      Logger::debug(str::format("  Height: ", desc->Height));
+      Logger::debug(str::format("  Depth: ", desc->Depth));
+      Logger::debug(str::format("  MipLevels: ", desc->MipLevels));
+      Logger::debug(str::format("  ArraySize: ", desc->ArraySize));
+      Logger::debug(str::format("  Format: ", desc->Format));
+      Logger::debug(str::format("  SampleDesc.Count: ", desc->SampleDesc.Count));
+      Logger::debug(str::format("  SampleDesc.Quality: ", desc->SampleDesc.Quality));
+      Logger::debug(str::format("  Usage: ", desc->Usage));
+      Logger::debug(str::format("  BindFlags: ", desc->BindFlags));
+      Logger::debug(str::format("  CPUAccessFlags: ", desc->CPUAccessFlags));
+      Logger::debug(str::format("  MiscFlags: ", desc->MiscFlags));
+      Logger::debug(str::format("  TextureLayout: ", desc->TextureLayout));
+*/
+      return true;
+    }
+
+    if (size >= sizeof(d3dkmt.d3d9) && d3dkmt.dxgi.size == sizeof(d3dkmt.d3d9) && d3dkmt.dxgi.version == 1) {
+/*
+      Logger::debug(str::format("D3D11Device::ConvertRuntimeDescriptor: Found D3D9 desc: ", d3dkmt.d3d9.type));
+      Logger::debug(str::format("  dxgi.width: ", d3dkmt.d3d9.dxgi.width));
+      Logger::debug(str::format("  dxgi.height: ", d3dkmt.d3d9.dxgi.height));
+      Logger::debug(str::format("  format: ", d3dkmt.d3d9.format));
+      Logger::debug(str::format("  usage: ", d3dkmt.d3d9.usage));
+*/
+      if (d3dkmt.d3d9.type == D3DRTYPE_TEXTURE) {
+        Logger::debug(str::format("  texture.width: ", d3dkmt.d3d9.texture.width));
+/*
+        Logger::debug(str::format("  texture.height: ", d3dkmt.d3d9.texture.height));
+        Logger::debug(str::format("  texture.depth: ", d3dkmt.d3d9.texture.depth));
+        Logger::debug(str::format("  texture.levels: ", d3dkmt.d3d9.texture.levels));
+*/
+      } else if (d3dkmt.d3d9.type == D3DRTYPE_SURFACE) {
+        Logger::debug(str::format("  surface.width: ", d3dkmt.d3d9.surface.width));
+/*
+        Logger::debug(str::format("  surface.height: ", d3dkmt.d3d9.surface.height));
+*/
+      } else {
+/*
+        Logger::warn(str::format("D3D11Device::ConvertRuntimeDescriptor: Unsupported D3D9 type: ", d3dkmt.d3d9.type));
+*/
+        return false;
+      }
+
+      desc->Width = d3dkmt.d3d9.dxgi.width;
+      desc->Height = d3dkmt.d3d9.dxgi.height;
+      desc->Depth = 1;
+      desc->MipLevels = 1;
+      desc->ArraySize = 1;
+      desc->Format = d3dkmt.d3d9.dxgi.format;
+      desc->SampleDesc.Count = 1;
+      desc->SampleDesc.Quality = 0;
+      desc->Usage = D3D11_USAGE_DEFAULT;
+      desc->BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+      desc->CPUAccessFlags = 0;
+      desc->MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+      desc->TextureLayout = D3D11_TEXTURE_LAYOUT_UNDEFINED;
+
+      switch (d3dkmt.d3d9.type) {
+        case D3DRTYPE_TEXTURE:
+          desc->Width = d3dkmt.d3d9.texture.width;
+          desc->Height = d3dkmt.d3d9.texture.height;
+          desc->MipLevels = d3dkmt.d3d9.texture.levels;
+          desc->ArraySize = d3dkmt.d3d9.texture.depth ? d3dkmt.d3d9.texture.depth : 1;
+          break;
+        case D3DRTYPE_SURFACE:
+          desc->Width = d3dkmt.d3d9.surface.width;
+          desc->Height = d3dkmt.d3d9.surface.height;
+          break;
+        default:
+          break;
+      }
+
+/*
+      Logger::debug(str::format("D3D11Device::ConvertRuntimeDescriptor: Translated D3D9 desc:"));
+      Logger::debug(str::format("  Width: ", desc->Width));
+      Logger::debug(str::format("  Height: ", desc->Height));
+      Logger::debug(str::format("  Depth: ", desc->Depth));
+      Logger::debug(str::format("  MipLevels: ", desc->MipLevels));
+      Logger::debug(str::format("  ArraySize: ", desc->ArraySize));
+      Logger::debug(str::format("  Format: ", desc->Format));
+      Logger::debug(str::format("  SampleDesc.Count: ", desc->SampleDesc.Count));
+      Logger::debug(str::format("  SampleDesc.Quality: ", desc->SampleDesc.Quality));
+      Logger::debug(str::format("  Usage: ", desc->Usage));
+      Logger::debug(str::format("  BindFlags: ", desc->BindFlags));
+      Logger::debug(str::format("  CPUAccessFlags: ", desc->CPUAccessFlags));
+      Logger::debug(str::format("  MiscFlags: ", desc->MiscFlags));
+      Logger::debug(str::format("  TextureLayout: ", desc->TextureLayout));
+*/
+      return true;
+    }
+
+/*
+    Logger::warn(str::format("D3D11Device::ConvertRuntimeDescriptor: Unsupported runtime desc size: ",
+                             size, "/", d3dkmt.dxgi.size, " version: ", d3dkmt.dxgi.version));
+*/
+    return false;
+  }
 
 
   D3D11DeviceExt::D3D11DeviceExt(

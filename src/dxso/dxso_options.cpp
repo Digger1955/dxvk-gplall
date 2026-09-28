@@ -8,11 +8,8 @@ namespace dxvk {
 
   DxsoOptions::DxsoOptions(D3D9DeviceEx* pDevice, const D3D9Options& options) {
     const Rc<DxvkDevice> device = pDevice->GetDXVKDevice();
-
-    const Rc<DxvkAdapter> adapter = device->adapter();
-
     const DxvkDeviceFeatures& devFeatures = device->features();
-    const DxvkDeviceInfo& devInfo = adapter->devicePropertiesExt();
+    const DxvkDeviceInfo& devInfo = device->properties();
 
     // Apply shader-related options
     strictConstantCopies = options.strictConstantCopies;

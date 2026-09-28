@@ -798,8 +798,6 @@ namespace dxvk {
       return m_dxvkDevice->getShaderPipelineStages();
     }
 
-    static DxvkDeviceFeatures GetDeviceFeatures(const Rc<DxvkAdapter>& adapter);
-
     /**
      * \brief Returns whether the Vulkan device supports the required features for ProcessVertices
      */
@@ -1278,6 +1276,10 @@ namespace dxvk {
       return m_d3d9On12Args.Enable9On12;
     }
 
+    D3D9Adapter* GetAdapter() const {
+      return m_adapter;
+    }
+
   private:
 
     template<bool AllowFlush = true, typename Cmd>
@@ -1571,6 +1573,15 @@ namespace dxvk {
     }
 
     GpuFlushType GetMaxFlushType() const;
+
+    bool ValidateSharedTexture(
+      HANDLE                          handle,
+      D3DRESOURCETYPE                 type,
+      const D3D9_COMMON_TEXTURE_DESC& textureDesc) const;
+
+    bool ValidateSharedBuffer(
+      HANDLE                        handle,
+      const dxvk::D3D9_BUFFER_DESC& bufferDesc) const;
 
     bool HasFormatsUnlocked() const { return m_unlockAdditionalFormats; }
 

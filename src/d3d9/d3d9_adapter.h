@@ -21,6 +21,7 @@ namespace dxvk {
     D3D9Adapter(
             D3D9InterfaceEx* pParent,
       const D3D9ON12_ARGS*   p9On12Args,
+            Rc<DxvkInstance> Instance,
             Rc<DxvkAdapter>  Adapter,
             UINT             Ordinal,
             UINT             DisplayIndex);
@@ -103,6 +104,15 @@ namespace dxvk {
 
     bool IsD3DCompatibile(D3DCompatibility d3dCompatibility) const;
 
+    force_inline void incRef() {
+      m_refCount.fetch_add(1u, std::memory_order_acquire);
+    }
+
+    force_inline void decRef() {
+      if (m_refCount.fetch_sub(1u, std::memory_order_acquire) == 1u)
+        delete this;
+    }
+
   private:
 
     // used as a global filter when mode count compatibility is enabled
@@ -138,9 +148,12 @@ namespace dxvk {
 
     void CacheIdentifierInfo();
 
+    std::atomic<uint32_t>         m_refCount = { 0u };
+
     D3D9InterfaceEx*              m_parent;
 
     Rc<DxvkAdapter>               m_adapter;
+    DxvkDeviceCapabilities        m_caps;
     UINT                          m_ordinal;
     UINT                          m_displayIndex;
 

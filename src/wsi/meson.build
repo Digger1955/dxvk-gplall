@@ -4,16 +4,21 @@ wsi_src = [
   'win32/wsi_monitor_win32.cpp',
   'win32/wsi_platform_win32.cpp',
   'win32/wsi_window_win32.cpp',
-  'sdl3/wsi_monitor_sdl3.cpp',
-  'sdl3/wsi_platform_sdl3.cpp',
-  'sdl3/wsi_window_sdl3.cpp',
-  'sdl2/wsi_monitor_sdl2.cpp',
-  'sdl2/wsi_platform_sdl2.cpp',
-  'sdl2/wsi_window_sdl2.cpp',
-  'glfw/wsi_monitor_glfw.cpp',
-  'glfw/wsi_platform_glfw.cpp',
-  'glfw/wsi_window_glfw.cpp',
 ]
+
+if platform != 'windows'
+  wsi_src += [
+    'sdl3/wsi_monitor_sdl3.cpp',
+    'sdl3/wsi_platform_sdl3.cpp',
+    'sdl3/wsi_window_sdl3.cpp',
+    'sdl2/wsi_monitor_sdl2.cpp',
+    'sdl2/wsi_platform_sdl2.cpp',
+    'sdl2/wsi_window_sdl2.cpp',
+    'glfw/wsi_monitor_glfw.cpp',
+    'glfw/wsi_platform_glfw.cpp',
+    'glfw/wsi_window_glfw.cpp',
+  ]
+endif
 
 wsi_deps = [ dep_displayinfo ]
 

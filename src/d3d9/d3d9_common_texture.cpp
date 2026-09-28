@@ -43,8 +43,7 @@ namespace dxvk {
                        (m_mapping.FormatColor == VK_FORMAT_D32_SFLOAT_S8_UINT || m_mapping.FormatColor == VK_FORMAT_D32_SFLOAT);
     m_supportsFetch4 = DetermineFetch4Compatibility();
 
-    const bool createImage = m_desc.Pool != D3DPOOL_SYSTEMMEM && m_desc.Pool != D3DPOOL_SCRATCH && m_desc.Format != D3D9Format::NULL_FORMAT;
-    if (createImage) {
+    if (TextureUsesImage(&m_desc)) {
       m_image = CreatePrimaryImage(ResourceType, pSharedHandle);
 
       if (unlikely(m_image == nullptr && (m_desc.Usage & D3DUSAGE_AUTOGENMIPMAP))) {
@@ -185,10 +184,33 @@ namespace dxvk {
         return D3DERR_INVALIDCALL;
     }
 
-    // Sample counts need to be valid
+    // Sample counts need to be valid and supported
     VkSampleCountFlagBits sampleCount;
-    if (FAILED(DecodeMultiSampleType(pDevice->GetDXVKDevice(), pDesc->MultiSample, pDesc->MultisampleQuality, &sampleCount)))
+    HRESULT hr = DecodeMultiSampleType(pDesc->MultiSample, pDesc->MultisampleQuality, &sampleCount);
+    if (FAILED(hr))
+      return hr;
+
+    // We never create an image for SCRATCH, SYSTEMMEM or NULL FMT D3D9 textures, so there's no point in checking
+    // whether the GPU supports the specified sampled count for those.
+    if (ResourceType == D3DRTYPE_SURFACE && TextureUsesImage(pDesc)) {
+      D3DMULTISAMPLE_TYPE d3dSampleCount = D3DMULTISAMPLE_TYPE(sampleCount);
+      // VK_SAMPLE_COUNT_1_BIT = 1 but the D3D9 equivalent we need is D3DMULTISAMPLE_NONE = 0
+      if (d3dSampleCount == D3DMULTISAMPLE_NONMASKABLE)
+        d3dSampleCount = D3DMULTISAMPLE_NONE;
+
+      hr = pDevice->GetAdapter()->CheckDeviceMultiSampleType(
+        D3DDEVTYPE_HAL,
+        pDesc->Format,
+        false,
+        d3dSampleCount,
+        nullptr
+      );
+      if (FAILED(hr))
+        return hr;
+    } else if (sampleCount != VK_SAMPLE_COUNT_1_BIT) {
+      // D3D9 only supports MSAA for surfaces
       return D3DERR_INVALIDCALL;
+    }
 
     // Using MANAGED pool with DYNAMIC usage is illegal
     if (IsPoolManaged(pDesc->Pool) && (pDesc->Usage & D3DUSAGE_DYNAMIC))
@@ -407,7 +429,7 @@ namespace dxvk {
       imageInfo.shared = true;
     }
 
-    DecodeMultiSampleType(m_device->GetDXVKDevice(), m_desc.MultiSample, m_desc.MultisampleQuality, &imageInfo.sampleCount);
+    DecodeMultiSampleType(m_desc.MultiSample, m_desc.MultisampleQuality, &imageInfo.sampleCount);
 
     // The image must be marked as mutable if it can be reinterpreted
     // by a view with a different format. Depth-stencil formats cannot
@@ -631,6 +653,43 @@ namespace dxvk {
 */
         return;
     }
+
+    struct d3dkmt_d3d9_desc desc = { };
+    desc.dxgi.size = sizeof(desc);
+    desc.dxgi.version = 1;
+    desc.dxgi.width = m_desc.Width;
+    desc.dxgi.height = m_desc.Height;
+    desc.dxgi.format = dxgiFormat;
+    desc.dxgi.unknown_0 = 1;
+    desc.format = static_cast<D3DFORMAT>(m_desc.Format);
+    desc.type = m_type;
+    desc.usage = m_desc.Usage | 0x8000000;
+
+    switch (m_type) {
+      case D3DRTYPE_TEXTURE:
+        desc.texture.width = m_desc.Width;
+        desc.texture.height = m_desc.Height;
+        desc.texture.levels = m_desc.MipLevels;
+        break;
+      case D3DRTYPE_SURFACE:
+        desc.surface.width = m_desc.Width;
+        desc.surface.height = m_desc.Height;
+        break;
+      default:
+        Logger::warn(str::format("D3D9: Unsupported type for shared textures:", m_type));
+        break;
+    }
+
+    D3DKMT_ESCAPE escape = { };
+    escape.Type = D3DKMT_ESCAPE_UPDATE_RESOURCE_WINE;
+    escape.pPrivateDriverData = &desc;
+    escape.PrivateDriverDataSize = sizeof(desc);
+    escape.hContext = m_image->storage()->kmtLocal();
+
+    if (!D3DKMTEscape(&escape))
+      return;
+
+    /* try the legacy Proton shared resource implementation */
 
     if (m_desc.Depth == 1 && m_desc.MipLevels == 1 && m_desc.MultiSample == D3DMULTISAMPLE_NONE &&
         m_desc.Usage & D3DUSAGE_RENDERTARGET && dxgiFormat != DXGI_FORMAT_UNKNOWN) {
