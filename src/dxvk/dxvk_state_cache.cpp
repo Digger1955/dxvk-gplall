@@ -496,7 +496,9 @@ namespace dxvk {
     std::ifstream ifile = openCacheFileForRead();
 
     if (!ifile) {
+/*
       Logger::debug("DXVK: No state cache file found");
+*/
       return true;
     }
 
@@ -506,14 +508,18 @@ namespace dxvk {
     DxvkStateCacheHeader curHeader;
 
     if (!readCacheHeader(ifile, curHeader)) {
+/*
       Logger::warn("DXVK: Failed to read state cache header");
+*/
       return false;
     }
 
     // Discard caches of unsupported versions
     if (curHeader.version < 8 || curHeader.version == 16
      || curHeader.version > newHeader.version) {
+/*
       Logger::warn("DXVK: State cache version not supported");
+*/
       return false;
     }
 

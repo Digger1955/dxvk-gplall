@@ -206,7 +206,9 @@ namespace dxvk {
         if (doForward) {
           m_finishQueue.push(std::move(entry));
         } else {
+/*
           Logger::err(str::format("DxvkSubmissionQueue: Command submission failed: ", entry.result));
+*/
           m_lastError = entry.result;
           if (entry.latency.tracker)
             entry.latency.tracker->freeSubmitQueryPool(entry.submit.queryPool);

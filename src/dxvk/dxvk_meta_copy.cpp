@@ -279,7 +279,9 @@ namespace dxvk {
 
     // We don't support color right now
     if (!(key.imageAspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
+/*
       Logger::err(str::format("DxvkMetaCopyObjects: Color images not supported"));
+*/
       return DxvkMetaCopyPipeline();
     }
 
@@ -366,7 +368,9 @@ namespace dxvk {
       sizeof(DxvkBufferImageCopyArgs), bindings.size(), bindings.data());
 
     if (key.imageViewType != VK_IMAGE_VIEW_TYPE_2D_ARRAY) {
+/*
       Logger::err(str::format("DxvkMetaCopyObjects: Unsupported view type: ", key.imageViewType));
+*/
       return DxvkMetaCopyPipeline();
     }
 

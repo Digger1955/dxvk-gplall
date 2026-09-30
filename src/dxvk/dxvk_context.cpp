@@ -746,7 +746,9 @@ namespace dxvk {
     }
 
     if (!format) {
+/*
       Logger::err(str::format("DxvkContext: copyPackedBufferImage: Unsupported element size ", elementSize));
+*/
       return;
     }
 
@@ -1336,9 +1338,11 @@ namespace dxvk {
     usageInfo.viewFormats = &viewFormat;
 
     if (!ensureImageCompatibility(imageView->image(), usageInfo)) {
+/*
       Logger::err(str::format("DxvkContext: generateMipmaps: Unsupported operation:"
         "\n  view format:  ", imageView->info().format,
         "\n  image format: ", imageView->image()->info().format));
+*/
       return;
     }
 
@@ -1670,9 +1674,11 @@ namespace dxvk {
 
     // Some images have to stay in their place, we can't do much in that case.
     if (!image->canRelocate()) {
+/*
       Logger::err(str::format("DxvkContext: Cannot relocate image:",
         "\n  Current usage:   0x", std::hex, image->info().usage, ", flags: 0x", image->info().flags, ", ", std::dec, image->info().viewFormatCount, " view formats"
         "\n  Requested usage: 0x", std::hex, usageInfo.usage, ", flags: 0x", usageInfo.flags, ", ", std::dec, usageInfo.viewFormatCount, " view formats"));
+*/
       return false;
     }
 
@@ -3450,7 +3456,9 @@ namespace dxvk {
     srcView = ensureImageViewCompatibility(srcView, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (!dstView || !srcView) {
+/*
       Logger::err(str::format("DxvkContext: blitImageFb: Resources not supported"));
+*/
       return;
     }
 
@@ -3886,7 +3894,9 @@ namespace dxvk {
     auto formatInfo = lookupFormatInfo(bufferFormat);
 
     if (formatInfo->flags.test(DxvkFormatFlag::MultiPlane)) {
+/*
       Logger::err(str::format("DxvkContext: Planar formats not supported for shader-based buffer to image copies"));
+*/
       return;
     }
 
@@ -3901,7 +3911,9 @@ namespace dxvk {
       slicePitch = bufferSliceAlignment >= slicePitch ? bufferSliceAlignment : align(slicePitch, bufferSliceAlignment);
 
     if ((rowPitch % formatInfo->elementSize) || (slicePitch % formatInfo->elementSize)) {
+/*
       Logger::err(str::format("DxvkContext: Pitches ", rowPitch, ",", slicePitch, " not a multiple of element size ", formatInfo->elementSize, " for format ", bufferFormat));
+*/
       return;
     }
 
@@ -4187,7 +4199,9 @@ namespace dxvk {
     auto formatInfo = lookupFormatInfo(bufferFormat);
 
     if (formatInfo->flags.test(DxvkFormatFlag::MultiPlane)) {
+/*
       Logger::err(str::format("DxvkContext: Planar formats not supported for shader-based image to buffer copies"));
+*/
       return;
     }
 
@@ -4202,7 +4216,9 @@ namespace dxvk {
       slicePitch = bufferSliceAlignment >= slicePitch ? bufferSliceAlignment : align(slicePitch, bufferSliceAlignment);
 
     if ((rowPitch % formatInfo->elementSize) || (slicePitch % formatInfo->elementSize)) {
+/*
       Logger::err(str::format("DxvkContext: Pitches ", rowPitch, ",", slicePitch, " not a multiple of element size ", formatInfo->elementSize, " for format ", bufferFormat));
+*/
       return;
     }
 
@@ -4688,9 +4704,11 @@ namespace dxvk {
 
     if (!ensureImageCompatibility(dstImage, dstUsage)
      || !ensureImageCompatibility(srcImage, srcUsage)) {
+/*
       Logger::err(str::format("DxvkContext: copyImageFb: Unsupported images:"
         "\n  dst format: ", dstImage->info().format,
         "\n  src format: ", srcImage->info().format));
+*/
       return;
     }
 
