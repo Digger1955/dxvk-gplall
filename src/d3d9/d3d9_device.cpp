@@ -4889,7 +4889,7 @@ namespace dxvk {
       if (stagingBufferAllocated <= m_stagingMemorySignaled + MaxMemoryInFlight)
         ConsiderFlush(GpuFlushType::ImplicitSynchronization);
       else
-        ExecuteFlush(false);
+        ExecuteFlush<false>();
     }
 
     // Wait for staging memory to get recycled.
