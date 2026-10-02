@@ -974,9 +974,9 @@ namespace dxvk {
         
     HRESULT STDMETHODCALLTYPE EnqueueSetEvent( 
             HANDLE                hEvent) final;
-    
+
     void STDMETHODCALLTYPE Trim() final;
-    
+
     Rc<DxvkDevice> STDMETHODCALLTYPE GetDXVKDevice();
 
     BOOL Is11on12Device() const {
@@ -1003,8 +1003,16 @@ namespace dxvk {
 
     D3DDestructionNotifier   m_destructionNotifier;
 
+    struct {
+      HMODULE igd10iumd64 = nullptr;
+    } m_vendorHacks;
+
     uint32_t m_frameLatency = DefaultFrameLatency;
 
+    HMODULE initVendorHacks();
+
+    void cleanupVendorHacks();
+
   };
-  
+
 }

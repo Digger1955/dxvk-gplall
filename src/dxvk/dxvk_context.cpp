@@ -1673,14 +1673,8 @@ namespace dxvk {
     }
 
     // Some images have to stay in their place, we can't do much in that case.
-    if (!image->canRelocate()) {
-/*
-      Logger::err(str::format("DxvkContext: Cannot relocate image:",
-        "\n  Current usage:   0x", std::hex, image->info().usage, ", flags: 0x", image->info().flags, ", ", std::dec, image->info().viewFormatCount, " view formats"
-        "\n  Requested usage: 0x", std::hex, usageInfo.usage, ", flags: 0x", usageInfo.flags, ", ", std::dec, usageInfo.viewFormatCount, " view formats"));
-*/
+    if (!image->canRelocate())
       return false;
-    }
 
     // Enable mutable format bit as necessary. We do not require
     // setting this explicitly so that the caller does not have
@@ -4181,7 +4175,12 @@ namespace dxvk {
     DxvkImageUsageInfo imageUsage = { };
     imageUsage.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 
-    ensureImageCompatibility(image, imageUsage);
+    if (!ensureImageCompatibility(image, imageUsage)) {
+/*
+      Logger::err("DxvkContext: copyImageToBufferCs: Failed to make image shader-readable.");
+*/
+      return;
+    }
 
     flushPendingAccesses(*image, imageSubresource,
       imageOffset, imageExtent, DxvkAccess::Read);
@@ -6461,26 +6460,26 @@ namespace dxvk {
       if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline) {
         // For pipelines created from graphics pipeline libraries, we need to
         // apply a bunch of dynamic state that is otherwise static or unused
-        if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
-          m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
-                      DxvkContextFlag::GpDynamicDepthTest,
-                      DxvkContextFlag::GpDynamicStencilTest);
+        m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
+                    DxvkContextFlag::GpDynamicDepthTest,
+                    DxvkContextFlag::GpDynamicStencilTest);
 
-          if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
-            m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
+        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
+          m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
 
-          if (m_device->features().core.features.depthBounds)
-            m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
+        if (m_device->features().core.features.depthBounds)
+          m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
 
-          if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
-          && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask
-          && m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading))
-            m_flags.set(DxvkContextFlag::GpDynamicMultisampleState);
-
-          if (m_device->features().extSampleLocations)
-            m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
+        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
+         && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask) {
+          m_flags.set(m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading)
+            ? DxvkContextFlag::GpDynamicMultisampleState
+            : DxvkContextFlag::GpDirtyMultisampleState);
         }
-      } else if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
+
+        if (m_device->canUseSampleLocations(0u))
+          m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
+      } else {
         // Conditionally set up dynamic state based on pipeline state.
         // Must match DxvkGraphicsPipelineDynamicState behaviour exactly.
         if (m_device->features().core.features.depthBounds) {
@@ -6502,7 +6501,7 @@ namespace dxvk {
         m_flags.set(m_state.gp.state.useDynamicStencilTest()
           ? DxvkContextFlags(DxvkContextFlag::GpDynamicStencilTest)
           : DxvkContextFlags(DxvkContextFlag::GpDirtyStencilTest,
-                            DxvkContextFlag::GpDirtyStencilRef));
+                             DxvkContextFlag::GpDirtyStencilRef));
 
         // Dirty state that is never dynamic for optimized pipelines
         if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
