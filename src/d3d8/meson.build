@@ -5,7 +5,6 @@ d3d8_src = [
   'd3d8_device.cpp',
   'd3d8_interface.cpp',
   'd3d8_main.cpp',
-  'd3d8_multithread.cpp',
   'd3d8_options.cpp',
   'd3d8_shader.cpp',
   'd3d8_state_block.cpp',
@@ -25,7 +24,7 @@ if platform != 'windows'
 endif
 
 d3d8_dll = shared_library(dxvk_name_prefix+'d3d8', d3d8_src, d3d8_res,
-  dependencies        : [ lib_d3d9, util_dep, dxso_dep, dxvk_dep ],
+  dependencies        : [ lib_d3d9, util_dep, dxbc_spirv_dep, dxvk_dep ],
   include_directories : dxvk_include_path,
   install             : true,
   vs_module_defs      : 'd3d8'+def_spec_ext,

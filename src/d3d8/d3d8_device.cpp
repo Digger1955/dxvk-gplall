@@ -41,10 +41,6 @@ namespace dxvk {
   }
 
   HRESULT STDMETHODCALLTYPE D3D8Device::GetInfo(DWORD DevInfoID, void* pDevInfoStruct, DWORD DevInfoStructSize) {
-/*
-    Logger::debug(str::format("D3D8Device::GetInfo: ", DevInfoID));
-*/
-
     if (unlikely(pDevInfoStruct == nullptr || DevInfoStructSize == 0))
       return D3DERR_INVALIDCALL;
 
@@ -425,6 +421,13 @@ namespace dxvk {
     if (unlikely(ppVertexBuffer == nullptr))
       return D3DERR_INVALIDCALL;
 
+    // Mark all D3DPOOL_DEFAULT D3DUSAGE_WRITEONLY buffers as
+    // D3DUSAGE_DYNAMIC, to ensure they're directly mapped
+    if (unlikely(m_d3d8Options.forceLegacyBuffers
+              && d3d9::D3DPOOL(Pool) == d3d9::D3DPOOL_DEFAULT
+              && (Usage & D3DUSAGE_WRITEONLY)))
+      Usage |= D3DUSAGE_DYNAMIC;
+
     if (unlikely(ShouldBatch())) {
       *ppVertexBuffer = m_batcher->CreateVertexBuffer(Length, Usage, FVF, Pool);
       return D3D_OK;
@@ -450,6 +453,13 @@ namespace dxvk {
 
     if (unlikely(ppIndexBuffer == nullptr))
       return D3DERR_INVALIDCALL;
+
+    // Mark all D3DPOOL_DEFAULT D3DUSAGE_WRITEONLY buffers as
+    // D3DUSAGE_DYNAMIC, to ensure they're directly mapped
+    if (unlikely(m_d3d8Options.forceLegacyBuffers
+              && d3d9::D3DPOOL(Pool) == d3d9::D3DPOOL_DEFAULT
+              && (Usage & D3DUSAGE_WRITEONLY)))
+      Usage |= D3DUSAGE_DYNAMIC;
 
     Com<d3d9::IDirect3DIndexBuffer9> pIndexBuffer9;
     HRESULT res = GetD3D9()->CreateIndexBuffer(Length, Usage, d3d9::D3DFORMAT(Format), d3d9::D3DPOOL(Pool), &pIndexBuffer9, NULL);
@@ -729,7 +739,6 @@ namespace dxvk {
     }
 
     for (uint32_t i = 0; i < cRects; i++) {
-
       RECT srcRect, dstRect;
       srcRect = pSourceRectsArray[i];
 
@@ -753,24 +762,6 @@ namespace dxvk {
       }
 
       POINT dstPt = { dstRect.left, dstRect.top };
-
-/*
-      auto unsupported = [&] {
-        Logger::err(str::format("D3D8Device::CopyRects: Unsupported case from src pool ", srcDesc.Pool, " to dst pool ", dstDesc.Pool));
-        return D3DERR_INVALIDCALL;
-      };
-
-      auto logError = [&] (HRESULT res) {
-
-        if (FAILED(res)) {
-          // Only a debug message because some games mess up CopyRects every frame in a way
-          // that fails on native too but are perfectly fine with it.
-          Logger::debug(str::format("D3D8Device::CopyRects: Failed to copy from src pool ", srcDesc.Pool, " to dst pool ", dstDesc.Pool));
-        }
-
-        return res;
-      };
-*/
 
       switch (dstDesc.Pool) {
 
@@ -1165,10 +1156,9 @@ namespace dxvk {
 
       if (unlikely(m_presentParams.Windowed && (isOnePixelWider || isOnePixelTaller))) {
         Logger::debug("D3D8Device::SetViewport: Viewport exceeds render target dimensions by one pixel");
-      }  else {
+      } else {
         return D3DERR_INVALIDCALL;
       }
-
     }
 
     StateChange();
@@ -1231,9 +1221,7 @@ namespace dxvk {
     D3D8StateBlockType stateBlockType = ConvertStateBlockType(Type);
 
     if (unlikely(stateBlockType == D3D8StateBlockType::Unknown)) {
-/*
       Logger::warn(str::format("D3D8Device::CreateStateBlock: Invalid state block type: ", Type));
-*/
       return D3DERR_INVALIDCALL;
     }
 
@@ -1260,9 +1248,7 @@ namespace dxvk {
 
     auto stateBlockIter = m_stateBlocks.find(Token);
     if (unlikely(stateBlockIter == m_stateBlocks.end())) {
-/*
       Logger::warn(str::format("D3D8Device::CaptureStateBlock: Invalid token: ", std::hex, Token));
-*/
       return D3D_OK;
     }
 
@@ -1280,9 +1266,7 @@ namespace dxvk {
 
     auto stateBlockIter = m_stateBlocks.find(Token);
     if (unlikely(stateBlockIter == m_stateBlocks.end())) {
-/*
       Logger::warn(str::format("D3D8Device::ApplyStateBlock: Invalid token: ", std::hex, Token));
-*/
       return D3D_OK;
     }
 
@@ -1298,9 +1282,7 @@ namespace dxvk {
 
     auto stateBlockIter = m_stateBlocks.find(Token);
     if (unlikely(stateBlockIter == m_stateBlocks.end())) {
-/*
       Logger::warn(str::format("D3D8Device::DeleteStateBlock: Invalid token: ", std::hex, Token));
-*/
       return D3D_OK;
     }
 
@@ -1650,10 +1632,8 @@ namespace dxvk {
     if (unlikely(ShouldRecord()))
       return m_recorder->SetIndices(pIndexData, BaseVertexIndex);
 
-/*
     if (unlikely(BaseVertexIndex > std::numeric_limits<int32_t>::max()))
       Logger::warn("D3D8Device::SetIndices: BaseVertexIndex exceeds INT_MAX");
-*/
 
     D3D8IndexBuffer* buffer = static_cast<D3D8IndexBuffer*>(pIndexData);
     HRESULT res = GetD3D9()->SetIndices(D3D8IndexBuffer::GetD3D9Nullable(buffer));
@@ -1892,17 +1872,13 @@ namespace dxvk {
   inline D3D8VertexShaderInfo* getVertexShaderInfo(D3D8Device* device, DWORD Handle) {
     Handle = getShaderIndex(Handle);
     if (unlikely(Handle >= device->m_vertexShaders.size())) {
-/*
       Logger::warn(str::format("D3D8Device: Invalid vertex shader handle ", std::hex, Handle));
-*/
       return nullptr;
     }
 
     D3D8VertexShaderInfo& info = device->m_vertexShaders[Handle];
     if (unlikely(info.pVertexDecl == nullptr && info.pVertexShader == nullptr)) {
-/*
       Logger::warn(str::format("D3D8Device: Application provided deleted vertex shader ", std::hex, Handle));
-*/
       return nullptr;
     }
 
@@ -2090,18 +2066,14 @@ namespace dxvk {
     Handle = getShaderIndex(Handle);
 
     if (unlikely(Handle >= device->m_pixelShaders.size())) {
-/*
       Logger::warn(str::format("D3D8Device: Invalid pixel shader handle ", std::hex, Handle));
-*/
       return nullptr;
     }
 
     d3d9::IDirect3DPixelShader9* pPixelShader = device->m_pixelShaders[Handle].ptr();
 
     if (unlikely(pPixelShader == nullptr)) {
-/*
       Logger::warn(str::format("D3D8Device: Application provided deleted pixel shader ", std::hex, Handle));
-*/
       return nullptr;
     }
 
