@@ -112,7 +112,7 @@ namespace dxvk {
 
     // Otherwise, use the sum of absolute differences to find the
     // closest fallback value. Some D3D9 games may rely on this.
-    Logger::warn("DXVK: Custom border colors not supported");
+    // Logger::warn("DXVK: Custom border colors not supported");
 
     VkBorderColor result = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 

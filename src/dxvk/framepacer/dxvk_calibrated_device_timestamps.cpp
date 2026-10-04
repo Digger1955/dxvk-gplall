@@ -27,10 +27,12 @@ namespace dxvk {
       foundDeviceTimeDomain |= timeDomains[i] == VK_TIME_DOMAIN_DEVICE_EXT;
     }
 
+/*
     if (!foundDeviceTimeDomain)
       Logger::err( str::format(
         "VK_TIME_DOMAIN_DEVICE_EXT is not reported by vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(), ",
         "possibly a Vulkan driver bug" ) );
+*/
 
     calibrate();
 
@@ -62,7 +64,9 @@ namespace dxvk {
     nextCalibration.hostTimestamp = high_resolution_clock::now();
 
     if (unlikely(res != VK_SUCCESS)) {
+/*
       Logger::err( "Failed to calibrate timestamp" );
+*/
       return;
     }
 

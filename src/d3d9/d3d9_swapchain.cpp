@@ -347,7 +347,7 @@ namespace dxvk {
     if (!similar || srcImage->info().extent != dstTexInfo->GetExtent()) {
       DxvkImageCreateInfo blitCreateInfo;
       blitCreateInfo.type          = VK_IMAGE_TYPE_2D;
-      blitCreateInfo.format        = dstTexInfo->GetFormatMapping().FormatColor;
+      blitCreateInfo.format        = dstTexInfo->GetFormatMapping().Format;
       blitCreateInfo.flags         = 0;
       blitCreateInfo.sampleCount   = VK_SAMPLE_COUNT_1_BIT;
       blitCreateInfo.extent        = dstTexInfo->GetExtent();
@@ -631,6 +631,11 @@ namespace dxvk {
     this->NormalizePresentParameters(pPresentParams);
 
     bool changeFullscreen = m_presentParams.Windowed != pPresentParams->Windowed;
+
+    if (m_window != pPresentParams->hDeviceWindow) {
+      m_window = pPresentParams->hDeviceWindow;
+      m_displayRefreshRateDirty = true;
+    }
 
     if (pPresentParams->Windowed) {
       if (changeFullscreen)

@@ -141,6 +141,14 @@ namespace dxvk {
   }
 
 
+  bool DxvkDevice::canUseSampleLocations(VkSampleCountFlags samples) const {
+    return (m_features.extSampleLocations)
+        && (m_features.extExtendedDynamicState3.extendedDynamicState3SampleLocationsEnable)
+        && (m_properties.extSampleLocations.variableSampleLocations)
+        && (m_properties.extSampleLocations.sampleLocationSampleCounts & samples) == samples;
+  }
+
+
   bool DxvkDevice::mustTrackPipelineLifetime() const {
     switch (m_options.trackPipelineLifetime) {
       case Tristate::True:
@@ -673,7 +681,8 @@ namespace dxvk {
                   || m_adapter->matchesDriver(VK_DRIVER_ID_MESA_V3DV)
                   || m_adapter->matchesDriver(VK_DRIVER_ID_BROADCOM_PROPRIETARY)
                   || m_adapter->matchesDriver(VK_DRIVER_ID_IMAGINATION_OPEN_SOURCE_MESA)
-                  || m_adapter->matchesDriver(VK_DRIVER_ID_IMAGINATION_PROPRIETARY);
+                  || m_adapter->matchesDriver(VK_DRIVER_ID_IMAGINATION_PROPRIETARY)
+                  || m_adapter->matchesDriver(VK_DRIVER_ID_MESA_KOSMICKRISP);
 
     applyTristate(tilerMode, m_options.tilerMode);
     hints.preferRenderPassOps = tilerMode;

@@ -743,18 +743,18 @@ namespace dxvk {
    */
   struct alignas(32) DxvkGraphicsPipelineStateInfo {
     DxvkGraphicsPipelineStateInfo() {
-      std::memset(this, 0, sizeof(*this));
+      std::memset((void *)this, 0, sizeof(*this));
     }
 
     DxvkGraphicsPipelineStateInfo(const DxvkGraphicsPipelineStateInfo& other) {
-      std::memcpy(this, &other, sizeof(*this));
+      std::memcpy((void *)this, &other, sizeof(*this));
     }
-    
+
     DxvkGraphicsPipelineStateInfo& operator = (const DxvkGraphicsPipelineStateInfo& other) {
-      std::memcpy(this, &other, sizeof(*this));
+      std::memcpy((void *)this, &other, sizeof(*this));
       return *this;
     }
-    
+
     bool eq(const DxvkGraphicsPipelineStateInfo& other) const {
       return bit::bcmpeq(this, &other);
     }
@@ -845,18 +845,18 @@ namespace dxvk {
    */
   struct alignas(32) DxvkComputePipelineStateInfo {
     DxvkComputePipelineStateInfo() {
-      std::memset(this, 0, sizeof(*this));
+      std::memset((void *)this, 0, sizeof(*this));
     }
 
     DxvkComputePipelineStateInfo(const DxvkComputePipelineStateInfo& other) {
-      std::memcpy(this, &other, sizeof(*this));
+      std::memcpy((void *)this, &other, sizeof(*this));
     }
-    
+
     DxvkComputePipelineStateInfo& operator = (const DxvkComputePipelineStateInfo& other) {
-      std::memcpy(this, &other, sizeof(*this));
+      std::memcpy((void *)this, &other, sizeof(*this));
       return *this;
     }
-    
+
     bool eq(const DxvkComputePipelineStateInfo& other) const {
       return bit::bcmpeq(this, &other);
     }

@@ -1721,9 +1721,12 @@ namespace dxvk {
       if (m_device->config().zeroMappedMemory)
         bit::bclear(memory.mapPtr, memory.size);
 
+/*
       Logger::debug(str::format("Mapped memory region 0x", std::hex,
         reinterpret_cast<uintptr_t>(memory.mapPtr), " - 0x",
         reinterpret_cast<uintptr_t>(memory.mapPtr) + memory.size - 1u));
+*/
+
     } else {
       if (!memory.mapPtr)
         return;
@@ -1731,9 +1734,11 @@ namespace dxvk {
       auto vk = m_device->vkd();
       vk->vkUnmapMemory(vk->device(), memory.memory);
 
+/*
       Logger::debug(str::format("Unmapped memory region 0x", std::hex,
         reinterpret_cast<uintptr_t>(memory.mapPtr), " - 0x",
         reinterpret_cast<uintptr_t>(memory.mapPtr) + memory.size - 1u));
+*/
 
       memory.mapPtr = nullptr;
     }
@@ -1923,8 +1928,11 @@ namespace dxvk {
     if (getImageMemoryRequirements(imageInfo, requirements))
       typeMask &= requirements.memoryRequirements.memoryTypeBits;
 
+/*
     Logger::log(typeMask ? LogLevel::Info : LogLevel::Error,
       str::format("Memory type mask for sparse resources: 0x", std::hex, typeMask));
+*/
+
     return typeMask;
   }
 
@@ -2009,8 +2017,11 @@ namespace dxvk {
       }
     }
 
+/*
     Logger::info(str::format("Memory type mask for buffer resources: "
       "0x", std::hex, m_globalBufferMemoryTypes, ", usage: 0x", m_globalBufferUsageFlags));
+*/
+
   }
 
 

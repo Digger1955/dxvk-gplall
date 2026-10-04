@@ -142,7 +142,9 @@ namespace dxvk {
         state.fs = util::DxvkBuiltInShaderStage(dxvk_resolve_frag_ds, &specInfo);
       } else {
         state.fs = util::DxvkBuiltInShaderStage(dxvk_resolve_frag_d, &specInfo);
+/*
         Logger::warn("DXVK: Stencil export not supported by device, skipping stencil resolve");
+*/
       }
     } else if (formatInfo->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) {
       state.fs = util::DxvkBuiltInShaderStage(dxvk_resolve_frag_d, &specInfo);

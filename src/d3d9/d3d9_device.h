@@ -7,7 +7,6 @@
 #include "d3d9_include.h"
 #include "d3d9_cursor.h"
 #include "d3d9_format.h"
-#include "d3d9_multithread.h"
 #include "d3d9_adapter.h"
 #include "d3d9_constant_buffer.h"
 #include "d3d9_constant_set.h"
@@ -1108,7 +1107,7 @@ namespace dxvk {
     void BindIndices();
 
     D3D9DeviceLock LockDevice() {
-      return m_multithread.AcquireLock();
+      return m_multithread.acquire();
     }
 
     const D3D9Options* GetOptions() const {

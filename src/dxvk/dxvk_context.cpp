@@ -746,7 +746,9 @@ namespace dxvk {
     }
 
     if (!format) {
+/*
       Logger::err(str::format("DxvkContext: copyPackedBufferImage: Unsupported element size ", elementSize));
+*/
       return;
     }
 
@@ -1336,9 +1338,11 @@ namespace dxvk {
     usageInfo.viewFormats = &viewFormat;
 
     if (!ensureImageCompatibility(imageView->image(), usageInfo)) {
+/*
       Logger::err(str::format("DxvkContext: generateMipmaps: Unsupported operation:"
         "\n  view format:  ", imageView->info().format,
         "\n  image format: ", imageView->image()->info().format));
+*/
       return;
     }
 
@@ -1669,12 +1673,8 @@ namespace dxvk {
     }
 
     // Some images have to stay in their place, we can't do much in that case.
-    if (!image->canRelocate()) {
-      Logger::err(str::format("DxvkContext: Cannot relocate image:",
-        "\n  Current usage:   0x", std::hex, image->info().usage, ", flags: 0x", image->info().flags, ", ", std::dec, image->info().viewFormatCount, " view formats"
-        "\n  Requested usage: 0x", std::hex, usageInfo.usage, ", flags: 0x", usageInfo.flags, ", ", std::dec, usageInfo.viewFormatCount, " view formats"));
+    if (!image->canRelocate())
       return false;
-    }
 
     // Enable mutable format bit as necessary. We do not require
     // setting this explicitly so that the caller does not have
@@ -3450,7 +3450,9 @@ namespace dxvk {
     srcView = ensureImageViewCompatibility(srcView, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     if (!dstView || !srcView) {
+/*
       Logger::err(str::format("DxvkContext: blitImageFb: Resources not supported"));
+*/
       return;
     }
 
@@ -3886,7 +3888,9 @@ namespace dxvk {
     auto formatInfo = lookupFormatInfo(bufferFormat);
 
     if (formatInfo->flags.test(DxvkFormatFlag::MultiPlane)) {
+/*
       Logger::err(str::format("DxvkContext: Planar formats not supported for shader-based buffer to image copies"));
+*/
       return;
     }
 
@@ -3901,7 +3905,9 @@ namespace dxvk {
       slicePitch = bufferSliceAlignment >= slicePitch ? bufferSliceAlignment : align(slicePitch, bufferSliceAlignment);
 
     if ((rowPitch % formatInfo->elementSize) || (slicePitch % formatInfo->elementSize)) {
+/*
       Logger::err(str::format("DxvkContext: Pitches ", rowPitch, ",", slicePitch, " not a multiple of element size ", formatInfo->elementSize, " for format ", bufferFormat));
+*/
       return;
     }
 
@@ -4169,7 +4175,12 @@ namespace dxvk {
     DxvkImageUsageInfo imageUsage = { };
     imageUsage.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 
-    ensureImageCompatibility(image, imageUsage);
+    if (!ensureImageCompatibility(image, imageUsage)) {
+/*
+      Logger::err("DxvkContext: copyImageToBufferCs: Failed to make image shader-readable.");
+*/
+      return;
+    }
 
     flushPendingAccesses(*image, imageSubresource,
       imageOffset, imageExtent, DxvkAccess::Read);
@@ -4187,7 +4198,9 @@ namespace dxvk {
     auto formatInfo = lookupFormatInfo(bufferFormat);
 
     if (formatInfo->flags.test(DxvkFormatFlag::MultiPlane)) {
+/*
       Logger::err(str::format("DxvkContext: Planar formats not supported for shader-based image to buffer copies"));
+*/
       return;
     }
 
@@ -4202,7 +4215,9 @@ namespace dxvk {
       slicePitch = bufferSliceAlignment >= slicePitch ? bufferSliceAlignment : align(slicePitch, bufferSliceAlignment);
 
     if ((rowPitch % formatInfo->elementSize) || (slicePitch % formatInfo->elementSize)) {
+/*
       Logger::err(str::format("DxvkContext: Pitches ", rowPitch, ",", slicePitch, " not a multiple of element size ", formatInfo->elementSize, " for format ", bufferFormat));
+*/
       return;
     }
 
@@ -4688,9 +4703,11 @@ namespace dxvk {
 
     if (!ensureImageCompatibility(dstImage, dstUsage)
      || !ensureImageCompatibility(srcImage, srcUsage)) {
+/*
       Logger::err(str::format("DxvkContext: copyImageFb: Unsupported images:"
         "\n  dst format: ", dstImage->info().format,
         "\n  src format: ", srcImage->info().format));
+*/
       return;
     }
 
@@ -6443,26 +6460,26 @@ namespace dxvk {
       if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline) {
         // For pipelines created from graphics pipeline libraries, we need to
         // apply a bunch of dynamic state that is otherwise static or unused
-        if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
-          m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
-                      DxvkContextFlag::GpDynamicDepthTest,
-                      DxvkContextFlag::GpDynamicStencilTest);
+        m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
+                    DxvkContextFlag::GpDynamicDepthTest,
+                    DxvkContextFlag::GpDynamicStencilTest);
 
-          if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
-            m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
+        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
+          m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
 
-          if (m_device->features().core.features.depthBounds)
-            m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
+        if (m_device->features().core.features.depthBounds)
+          m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
 
-          if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
-          && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask
-          && m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading))
-            m_flags.set(DxvkContextFlag::GpDynamicMultisampleState);
-
-          if (m_device->features().extSampleLocations)
-            m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
+        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
+         && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask) {
+          m_flags.set(m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading)
+            ? DxvkContextFlag::GpDynamicMultisampleState
+            : DxvkContextFlag::GpDirtyMultisampleState);
         }
-      } else if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
+
+        if (m_device->canUseSampleLocations(0u))
+          m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
+      } else {
         // Conditionally set up dynamic state based on pipeline state.
         // Must match DxvkGraphicsPipelineDynamicState behaviour exactly.
         if (m_device->features().core.features.depthBounds) {
@@ -6471,7 +6488,7 @@ namespace dxvk {
             : DxvkContextFlag::GpDirtyDepthBounds);
         }
 
-        if (m_device->features().extSampleLocations) {
+      if (m_device->canUseSampleLocations(0u)) {
           m_flags.set(m_state.gp.state.useSampleLocations()
             ? DxvkContextFlag::GpDynamicSampleLocations
             : DxvkContextFlag::GpDirtySampleLocations);
@@ -6484,7 +6501,7 @@ namespace dxvk {
         m_flags.set(m_state.gp.state.useDynamicStencilTest()
           ? DxvkContextFlags(DxvkContextFlag::GpDynamicStencilTest)
           : DxvkContextFlags(DxvkContextFlag::GpDirtyStencilTest,
-                            DxvkContextFlag::GpDirtyStencilRef));
+                             DxvkContextFlag::GpDirtyStencilRef));
 
         // Dirty state that is never dynamic for optimized pipelines
         if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
@@ -7386,10 +7403,6 @@ namespace dxvk {
       if (m_device->features().extExtendedDynamicState3.extendedDynamicState3AlphaToCoverageEnable
        && !m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleMaskExport))
         m_cmd->cmdSetAlphaToCoverageState(m_state.gp.state.ms.enableAlphaToCoverage());
-
-      if (m_device->features().extSampleLocations
-       && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleLocationsEnable) {
-      }
     }
 
     if (unlikely(m_flags.all(DxvkContextFlag::GpDirtySampleLocations,
@@ -7411,9 +7424,9 @@ namespace dxvk {
         msSampleCount = rsSampleCount ? rsSampleCount : VK_SAMPLE_COUNT_1_BIT;
 
       bool center = m_state.gp.state.useSampleLocations();
-      bool enable = true;
+      bool enable = m_device->canUseSampleLocations(msSampleCount);
 
-      if (m_state.om.renderTargets.depth.view) {
+      if (enable && m_state.om.renderTargets.depth.view) {
         auto flags = m_state.om.renderTargets.depth.view->image()->info().flags;
         enable = bool(flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT);
       }
@@ -7648,18 +7661,20 @@ namespace dxvk {
     // If a depth-stencil image is bound used with non-default sample locations,
     // make sure that the image actually has the compat flag set.
     if (unlikely(m_state.gp.state.useSampleLocations())) {
-      if (m_state.om.renderTargets.depth.view
-       && m_device->features().extSampleLocations
-       && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleLocationsEnable) {
-        auto flags = m_state.om.renderTargets.depth.view->image()->info().flags;
+      if (m_state.om.renderTargets.depth.view) {
+        VkSampleCountFlagBits samples = m_state.om.renderTargets.depth.view->image()->info().sampleCount;
 
-        if (!(flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT)) {
-          this->spillRenderPass(true);
+        if (m_device->canUseSampleLocations(samples)) {
+          auto flags = m_state.om.renderTargets.depth.view->image()->info().flags;
 
-          DxvkImageUsageInfo usage = { };
-          usage.flags = VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
+          if (!(flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT)) {
+            this->spillRenderPass(true);
 
-          ensureImageCompatibility(m_state.om.renderTargets.depth.view->image(), usage);
+            DxvkImageUsageInfo usage = { };
+            usage.flags = VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT;
+
+            ensureImageCompatibility(m_state.om.renderTargets.depth.view->image(), usage);
+          }
         }
       }
     }

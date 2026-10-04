@@ -217,7 +217,7 @@ namespace dxvk {
     }
 
     auto mapping = GetFormatMapping(CheckFormat);
-    if (mapping.FormatColor == VK_FORMAT_UNDEFINED)
+    if (mapping.Format == VK_FORMAT_UNDEFINED)
       return D3DERR_NOTAVAILABLE;
 
     const bool srgb = (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE)) != 0;
@@ -230,9 +230,9 @@ namespace dxvk {
       return D3DERR_NOTAVAILABLE;
 
     // Let's actually ask Vulkan now that we got some quirks out the way!
-    VkFormat format = mapping.FormatColor;
-    if (unlikely(mapping.ConversionFormatInfo.FormatColor != VK_FORMAT_UNDEFINED)) {
-      format = mapping.ConversionFormatInfo.FormatColor;
+    VkFormat format = mapping.Format;
+    if (unlikely(mapping.ConversionFormatInfo.Format != VK_FORMAT_UNDEFINED)) {
+      format = mapping.ConversionFormatInfo.Format;
     }
 
     return CheckDeviceVkFormat(format, Usage, RType);
@@ -255,7 +255,9 @@ namespace dxvk {
       return D3DERR_INVALIDCALL;
 
     auto dst = ConvertFormatUnfixed(SurfaceFormat);
-    if (dst.FormatColor == VK_FORMAT_UNDEFINED)
+    // Wargame: European Escalation expects a D3DMULTISAMPLE_NONE
+    // NULL format check to succeed, otherwise it will crash
+    if (SurfaceFormat != D3D9Format::NULL_FORMAT && dst.Format == VK_FORMAT_UNDEFINED)
       return D3DERR_NOTAVAILABLE;
 
     if (MultiSampleType != D3DMULTISAMPLE_NONE
@@ -283,7 +285,7 @@ namespace dxvk {
     VkSampleCountFlags sampleFlags = VkSampleCountFlags(sampleCount);
 
     VkSampleCountFlags availableFlags;
-    if (dst.FormatColor == VK_FORMAT_UNDEFINED)
+    if (dst.Format == VK_FORMAT_UNDEFINED)
       availableFlags = properties.core.properties.limits.framebufferDepthSampleCounts
                      & properties.core.properties.limits.framebufferColorSampleCounts;
     else if (IsDepthStencilFormat(SurfaceFormat))
@@ -291,12 +293,14 @@ namespace dxvk {
     else
       availableFlags = properties.core.properties.limits.framebufferColorSampleCounts;
 
-    if (!(availableFlags & sampleFlags) && dst.FormatColor != VK_FORMAT_UNDEFINED) {
+    if (!(availableFlags & sampleFlags) && dst.Format != VK_FORMAT_UNDEFINED) {
       // Adreno 7XX GPUs cannot report general support for 8x MSAA because they do not support it for 128 bit formats.
       // So take the format into consideration when checking whether the sample count is supported.
 
+      auto formatMapping = GetFormatMapping(SurfaceFormat);
+
       DxvkFormatQuery query = { };
-      query.format = dst.FormatColor;
+      query.format = formatMapping.Format;
       query.type   = VK_IMAGE_TYPE_2D; // D3D9 only allows using MSAA with 2D textures
       query.tiling = VK_IMAGE_TILING_OPTIMAL;
       query.usage  = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -346,14 +350,14 @@ namespace dxvk {
       return D3DERR_NOTAVAILABLE;
 
     auto dsfMapping = GetFormatMapping(DepthStencilFormat);
-    if (dsfMapping.FormatColor == VK_FORMAT_UNDEFINED)
+    if (dsfMapping.Format == VK_FORMAT_UNDEFINED)
       return D3DERR_NOTAVAILABLE;
 
     if (RenderTargetFormat == dxvk::D3D9Format::NULL_FORMAT)
       return D3D_OK;
 
     auto rtfMapping = GetFormatMapping(RenderTargetFormat);
-    if (rtfMapping.FormatColor == VK_FORMAT_UNDEFINED)
+    if (rtfMapping.Format == VK_FORMAT_UNDEFINED)
       return D3DERR_NOTAVAILABLE;
 
     return D3D_OK;

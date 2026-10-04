@@ -97,12 +97,16 @@ namespace dxvk {
     size = sizeof(value);
     if ((status = RegQueryValueExA(m_vr_key, "state", nullptr, &type, reinterpret_cast<BYTE*>(&value), &size)))
     {
+/*
         Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
         return false;
     }
     if (type != REG_DWORD)
     {
+/*
         Logger::err(str::format("OpenVR: unexpected value type ", type));
+*/
         return false;
     }
 
@@ -114,13 +118,17 @@ namespace dxvk {
     {
         if (RegNotifyChangeKeyValue(m_vr_key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, event, TRUE))
         {
+/*
             Logger::err("Error registering registry change notification");
+*/
             goto done;
         }
         size = sizeof(value);
         if ((status = RegQueryValueExA(m_vr_key, "state", nullptr, &type, reinterpret_cast<BYTE*>(&value), &size)))
         {
+/*
             Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
             goto done;
         }
         if (value)
@@ -130,7 +138,9 @@ namespace dxvk {
 
         if (wait_status != WAIT_OBJECT_0)
         {
+/*
             Logger::err(str::format("Got unexpected wait status ", wait_status));
+*/
             break;
         }
     }
@@ -155,13 +165,17 @@ namespace dxvk {
         len = 0;
         if ((status = RegQueryValueExA(m_vr_key, "openvr_vulkan_instance_extensions", nullptr, &type, nullptr, &len)))
         {
+/*
             Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
             return DxvkExtensionList();
         }
         extensionList.resize(len);
         if ((status = RegQueryValueExA(m_vr_key, "openvr_vulkan_instance_extensions", nullptr, &type, reinterpret_cast<BYTE*>(extensionList.data()), &len)))
         {
+/*
             Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
             return DxvkExtensionList();
         }
     }
@@ -193,14 +207,18 @@ namespace dxvk {
       len = 0;
 
       if ((status = RegQueryValueExA(m_vr_key, name, nullptr, &type, nullptr, &len))) {
+/*
         Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
         return DxvkExtensionList();
       }
 
       extensionList.resize(len);
 
       if ((status = RegQueryValueExA(m_vr_key, name, nullptr, &type, reinterpret_cast<BYTE*>(extensionList.data()), &len))) {
+/*
         Logger::err(str::format("OpenVR: could not query value, status ", status));
+*/
         return DxvkExtensionList();
       }
     } else {
@@ -235,7 +253,9 @@ namespace dxvk {
     m_ovrApi = this->loadLibrary();
     
     if (!m_ovrApi) {
+/*
       Logger::info("OpenVR: Failed to locate module");
+*/
       return nullptr;
     }
     
@@ -245,7 +265,9 @@ namespace dxvk {
     g_vrFunctions.getGenericInterface = reinterpret_cast<VR_GetGenericInterfaceProc>(this->getSym("VR_GetGenericInterface"));
     
     if (!g_vrFunctions.getGenericInterface) {
+/*
       Logger::warn("OpenVR: VR_GetGenericInterface not found");
+*/
       return nullptr;
     }
     
@@ -258,7 +280,9 @@ namespace dxvk {
     if (error != vr::VRInitError_None || !compositor) {
       if (!g_vrFunctions.initInternal
        || !g_vrFunctions.shutdownInternal) {
+/*
         Logger::warn("OpenVR: VR_InitInternal or VR_ShutdownInternal not found");
+*/
         return nullptr;
       }
 
@@ -268,7 +292,9 @@ namespace dxvk {
       m_initializedOpenVr = error == vr::VRInitError_None;
 
       if (error != vr::VRInitError_None) {
+/*
         Logger::warn("OpenVR: Failed to initialize OpenVR");
+*/
         return nullptr;
       }
 
@@ -276,13 +302,18 @@ namespace dxvk {
         g_vrFunctions.getGenericInterface(vr::IVRCompositor_Version, &error));
       
       if (error != vr::VRInitError_None || !compositor) {
+/*
         Logger::warn("OpenVR: Failed to query compositor interface");
+*/
         this->shutdown();
         return nullptr;
       }
     }
-    
+
+/*
     Logger::info("OpenVR: Compositor interface found");
+*/
+
     return compositor;
   }
 
