@@ -79,7 +79,7 @@ namespace dxvk {
    * window system integration.
    */
   class Presenter : public RcObject {
-
+    static constexpr size_t FrameQueueSize = 16u;
   public:
 
     Presenter(
@@ -321,13 +321,21 @@ namespace dxvk {
     dxvk::condition_variable    m_frameCond;
     dxvk::condition_variable    m_frameDrain;
     dxvk::thread                m_frameThread;
-    std::queue<PresenterFrame>  m_frameQueue;
+
+    size_t                      m_frameQueuePushId = 0u;
+    size_t                      m_frameQueuePopId = 0u;
+
+    std::array<PresenterFrame, FrameQueueSize> m_frameQueue;
 
     uint64_t                    m_lastSignaled = 0u;
+    uint64_t                    m_lastCompleted = 0u;
+
     Rc<DxvkLatencyTracker>      m_latencyTracker;
 
     alignas(CACHE_LINE_SIZE)
     FpsLimiter                  m_fpsLimiter;
+
+    bool                        m_hasGamescopeFenceSignalBug = false;
 
     static const std::array<std::pair<VkColorSpaceKHR, VkColorSpaceKHR>, 2> s_colorSpaceFallbacks;
 
@@ -387,6 +395,8 @@ namespace dxvk {
 
     void waitForSwapchainFence(
             PresenterSync&            sync);
+
+    void pushFrame(const PresenterFrame& frame);
 
     void runFrameThread();
 

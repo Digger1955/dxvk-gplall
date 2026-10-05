@@ -121,6 +121,8 @@ namespace dxvk {
 
 
   void DxvkContext::endFrame() {
+    this->spillRenderPass(true); // to replace with endRenderPass, if/when will port respective DXVK commits; this change - DXVK commit 40e0164
+
     if (m_descriptorPool->shouldSubmit(true)) {
       m_cmd->trackDescriptorPool(m_descriptorPool, m_descriptorManager);
       m_descriptorPool = m_descriptorManager->getDescriptorPool();
