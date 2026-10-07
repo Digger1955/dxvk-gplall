@@ -208,7 +208,7 @@ namespace dxvk {
     if (this_thread::isInModuleDetachment())
       return;
 
-    Flush();
+    ExecuteFlush(true);
     SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
 
     if (m_annotation)
@@ -577,7 +577,7 @@ namespace dxvk {
       return hr;
     }
 
-    Flush();
+    ExecuteFlush(true);
     SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
 
     if (m_d3d9Options.deferSurfaceCreation)
@@ -1218,8 +1218,16 @@ namespace dxvk {
     if (src->GetSurfaceExtent() != dst->GetSurfaceExtent())
       return D3DERR_INVALIDCALL;
 
-    if (dstTexInfo->Desc()->Pool == D3DPOOL_DEFAULT)
-      return this->StretchRect(pRenderTarget, nullptr, pDestSurface, nullptr, D3DTEXF_NONE);
+    if (unlikely(srcTexInfo->Desc()->Pool != D3DPOOL_DEFAULT))
+      return D3DERR_INVALIDCALL;
+
+    // Our D3D8 implementation uses it in CopyRects to copy DEFAULT -> SYSTEMMEM/SCRATCH/MANAGED.
+    // TODO: Using it for MANAGED is problematic because it doesn't update the image of a MANAGED texture.
+    if (unlikely(!m_d3dCompatibility.test(D3DCompatibility::D3D8) && dstTexInfo->Desc()->Pool != D3DPOOL_SYSTEMMEM))
+      return D3DERR_INVALIDCALL;
+
+    if (unlikely(srcTexInfo->Desc()->MultiSample != D3DMULTISAMPLE_NONE))
+      return D3DERR_INVALIDCALL;
 
     VkExtent3D dstTexExtent = dstTexInfo->GetExtentMip(dst->GetMipLevel());
     VkExtent3D srcTexExtent = srcTexInfo->GetExtentMip(src->GetMipLevel());
@@ -4337,13 +4345,7 @@ namespace dxvk {
     if (unlikely(ppSurface == nullptr))
       return D3DERR_INVALIDCALL;
 
-    // The new Create functions added in 9Ex only accept the new USAGE flags added with 9Ex.
-    // Yes, it actually fails when explicitly passing D3DUSAGE_RENDERTARGET.
-    if (unlikely(Usage & ~(D3DUSAGE_RESTRICTED_CONTENT | D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)))
-      return D3DERR_INVALIDCALL;
-
-    if (unlikely((Usage & (D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)) != 0
-      && pSharedHandle == nullptr))
+    if (unlikely(!D3D9CommonTexture::ValidateExUsages(Usage, pSharedHandle)))
       return D3DERR_INVALIDCALL;
 
     D3D9_COMMON_TEXTURE_DESC desc;
@@ -4404,12 +4406,7 @@ namespace dxvk {
     if (unlikely(ppSurface == nullptr))
       return D3DERR_INVALIDCALL;
 
-    // The new Create functions added in 9Ex only accept the new USAGE flags added with 9Ex.
-    if (unlikely(Usage & ~(D3DUSAGE_RESTRICTED_CONTENT | D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)))
-      return D3DERR_INVALIDCALL;
-
-    if (unlikely((Usage & (D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)) != 0
-      && pSharedHandle == nullptr))
+    if (unlikely(!D3D9CommonTexture::ValidateExUsages(Usage, pSharedHandle)))
       return D3DERR_INVALIDCALL;
 
     D3D9_COMMON_TEXTURE_DESC desc;
@@ -4483,13 +4480,7 @@ namespace dxvk {
     if (unlikely(ppSurface == nullptr))
       return D3DERR_INVALIDCALL;
 
-    // The new Create functions added in 9Ex only accept the new USAGE flags added with 9Ex.
-    // Yes, it actually fails when explicitly passing D3DUSAGE_DEPTHSTENCIL.
-    if (unlikely(Usage & ~(D3DUSAGE_RESTRICTED_CONTENT | D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)))
-      return D3DERR_INVALIDCALL;
-
-    if (unlikely((Usage & (D3DUSAGE_RESTRICT_SHARED_RESOURCE | D3DUSAGE_RESTRICT_SHARED_RESOURCE_DRIVER)) != 0
-      && pSharedHandle == nullptr))
+    if (unlikely(!D3D9CommonTexture::ValidateExUsages(Usage, pSharedHandle)))
       return D3DERR_INVALIDCALL;
 
     D3D9_COMMON_TEXTURE_DESC desc;
@@ -4889,7 +4880,7 @@ namespace dxvk {
       if (stagingBufferAllocated <= m_stagingMemorySignaled + MaxMemoryInFlight)
         ConsiderFlush(GpuFlushType::ImplicitSynchronization);
       else
-        ExecuteFlush<false>();
+        ExecuteFlush(false);
     }
 
     // Wait for staging memory to get recycled.
@@ -4945,7 +4936,7 @@ namespace dxvk {
       else {
         // Make sure pending commands using the resource get
         // executed on the the GPU if we have to wait for it
-        Flush();
+        ExecuteFlush(false);
         SynchronizeCsThread(SequenceNumber);
 
         m_dxvkDevice->waitForResource(Resource, access);
@@ -5925,7 +5916,7 @@ namespace dxvk {
     uint64_t submissionId = m_submissionFence->value();
 
     if (m_flushTracker.considerFlush(FlushType, chunkId, submissionId))
-      Flush();
+      ExecuteFlush(false);
   }
 
 
@@ -6310,11 +6301,10 @@ namespace dxvk {
   }
 
 
-  template <bool Synchronize9On12>
-  void D3D9DeviceEx::ExecuteFlush() {
+  void D3D9DeviceEx::ExecuteFlush(bool Synchronize9On12) {
     D3D9DeviceLock lock = LockDevice();
 
-    if constexpr (Synchronize9On12)
+    if (Synchronize9On12)
       m_submitStatus.result = VK_NOT_READY;
 
     // Update signaled staging buffer counter and signal the fence
@@ -6346,7 +6336,7 @@ namespace dxvk {
 
     // If necessary, block calling thread until the
     // Vulkan queue submission is performed.
-    if constexpr (Synchronize9On12)
+    if (Synchronize9On12)
       m_dxvkDevice->waitForSubmission(&m_submitStatus);
 
     // Notify the device that the context has been flushed,
@@ -6356,12 +6346,14 @@ namespace dxvk {
 
 
   void D3D9DeviceEx::Flush() {
-    ExecuteFlush<false>();
+    D3D9DeviceLock lock = LockDevice();
+    ExecuteFlush(false);
   }
 
 
   void D3D9DeviceEx::FlushAndSync9On12() {
-    ExecuteFlush<true>();
+    D3D9DeviceLock lock = LockDevice();
+    ExecuteFlush(true);
   }
 
 
@@ -7843,7 +7835,7 @@ namespace dxvk {
     // We should absolutely never hit this path in the real world.
     Logger::warn("Sampler pool exhausted, synchronizing with GPU.");
 
-    Flush();
+    ExecuteFlush(false);
     SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
 
     uint64_t submissionId = m_submissionFence->value();
@@ -8073,7 +8065,7 @@ namespace dxvk {
     pQuery->NotifyEnd();
     if (unlikely(pQuery->IsEvent())) {
       pQuery->IsStalling()
-        ? Flush()
+        ? ExecuteFlush(false)
         : ConsiderFlush(GpuFlushType::ImplicitStrongHint);
     } else if (pQuery->IsStalling()) {
       ConsiderFlush(GpuFlushType::ImplicitWeakHint);
@@ -8997,7 +8989,7 @@ namespace dxvk {
     if (FAILED(hr))
       return hr;
 
-    Flush();
+    ExecuteFlush(false);
     SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
 
     return D3D_OK;

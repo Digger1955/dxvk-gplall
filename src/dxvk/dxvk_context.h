@@ -1034,7 +1034,7 @@ namespace dxvk {
       const VkImageSubresourceRange&  dstSubresources,
             VkImageLayout             srcLayout,
             VkImageLayout             dstLayout);
-    
+
     /**
      * \brief Updates a buffer
      * 
@@ -1049,21 +1049,25 @@ namespace dxvk {
             VkDeviceSize              offset,
             VkDeviceSize              size,
       const void*                     data);
-    
+
     /**
      * \brief Uses transfer queue to initialize buffer
      *
-     * Always replaces the entire buffer. Only safe to use
-     * if the buffer is currently not in use by the GPU.
+     * Must only be use if the given buffer region is
+     * not currently in use by the GPU.
      * \param [in] buffer The buffer to initialize
+     * \param [in] bufferOffset Buffer offset
      * \param [in] source Staging buffer containing data
      * \param [in] sourceOffset Offset into staging buffer
+     * \param [in] size Number of bytes to copy
      */
     void uploadBuffer(
       const Rc<DxvkBuffer>&           buffer,
+            VkDeviceSize              bufferOffset,
       const Rc<DxvkBuffer>&           source,
-            VkDeviceSize              sourceOffset);
-    
+            VkDeviceSize              sourceOffset,
+            VkDeviceSize              size);
+
     /**
      * \brief Uses transfer queue to initialize image
      * 
@@ -1827,10 +1831,6 @@ namespace dxvk {
             VkAccessFlags             dstAccess);
 
     void trackDrawBuffer();
-
-    bool tryInvalidateDeviceLocalBuffer(
-      const Rc<DxvkBuffer>&           buffer,
-            VkDeviceSize              copySize);
 
     Rc<DxvkImageView> ensureImageViewCompatibility(
       const Rc<DxvkImageView>&        view,

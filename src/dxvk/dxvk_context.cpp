@@ -2834,10 +2834,12 @@ namespace dxvk {
   
   void DxvkContext::uploadBuffer(
     const Rc<DxvkBuffer>&           buffer,
+          VkDeviceSize              bufferOffset,
     const Rc<DxvkBuffer>&           source,
-          VkDeviceSize              sourceOffset) {
-    auto bufferSlice = buffer->getSliceHandle();
-    auto sourceSlice = source->getSliceHandle(sourceOffset, buffer->info().size);
+          VkDeviceSize              sourceOffset,
+          VkDeviceSize              size) {
+    auto bufferSlice = buffer->getSliceInfo(bufferOffset, size);
+    auto sourceSlice = source->getSliceInfo(sourceOffset, size);
 
     VkBufferCopy2 copyRegion = { VK_STRUCTURE_TYPE_BUFFER_COPY_2 };
     copyRegion.srcOffset = sourceSlice.offset;
@@ -8039,29 +8041,6 @@ namespace dxvk {
       if (m_state.id.cntBuffer.length())
         m_cmd->track(m_state.id.cntBuffer.buffer(), DxvkAccess::Read);
     }
-  }
-
-
-  bool DxvkContext::tryInvalidateDeviceLocalBuffer(
-      const Rc<DxvkBuffer>&           buffer,
-            VkDeviceSize              copySize) {
-    // We can only discard if the full buffer gets written, and we will only discard
-    // small buffers in order to not waste significant amounts of memory.
-    if (copySize != buffer->info().size || copySize > 0x40000)
-      return false;
-
-    // Check if the buffer is safe to move at all
-    if (!buffer->canRelocate())
-      return false;
-
-    // Suspend the current render pass if transform feedback is active prior to
-    // invalidating the buffer, since otherwise we may invalidate a bound buffer.
-    if ((buffer->info().usage & VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT)
-     && (m_flags.test(DxvkContextFlag::GpXfbActive)))
-      this->spillRenderPass(true);
-
-    this->invalidateBuffer(buffer, buffer->allocateStorage());
-    return true;
   }
 
 
