@@ -2838,8 +2838,8 @@ namespace dxvk {
     const Rc<DxvkBuffer>&           source,
           VkDeviceSize              sourceOffset,
           VkDeviceSize              size) {
-    auto bufferSlice = buffer->getSliceInfo(bufferOffset, size);
-    auto sourceSlice = source->getSliceInfo(sourceOffset, size);
+    auto bufferSlice = buffer->getSliceHandle(bufferOffset, size);
+    auto sourceSlice = source->getSliceHandle(sourceOffset, size);
 
     VkBufferCopy2 copyRegion = { VK_STRUCTURE_TYPE_BUFFER_COPY_2 };
     copyRegion.srcOffset = sourceSlice.offset;
