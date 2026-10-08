@@ -64,12 +64,12 @@ namespace dxvk {
     
     if (pQueue != nullptr)
       *pQueue = queue.queueHandle;
-    
+
     if (pQueueFamilyIndex != nullptr)
       *pQueueFamilyIndex = queue.queueFamily;
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11VkInterop::TransitionSurfaceLayout(
           IDXGIVkInteropSurface*    pSurface,
     const VkImageSubresourceRange*  pSubresources,
@@ -80,25 +80,28 @@ namespace dxvk {
     immediateContext->TransitionSurfaceLayout(
       pSurface, pSubresources, OldLayout, NewLayout);
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11VkInterop::FlushRenderingCommands() {
+    // Callers can expect the submission to have happened on the Vulkan queue
+    // by the time this returns, so we need to unconditionally synchronize
     auto immediateContext = m_device->GetContext();
-    immediateContext->Flush();
-    immediateContext->SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
+    auto immediateContextLock = immediateContext->LockContext();
+
+    immediateContext->ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, true);
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11VkInterop::LockSubmissionQueue() {
     m_device->GetDXVKDevice()->lockSubmission();
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11VkInterop::ReleaseSubmissionQueue() {
     m_device->GetDXVKDevice()->unlockSubmission();
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11VkInterop::GetSubmissionQueue1(
           VkQueue*              pQueue,
           uint32_t*             pQueueIndex,
