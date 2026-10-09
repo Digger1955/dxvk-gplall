@@ -521,6 +521,7 @@ namespace dxvk {
      * pitch for an A8_UNORM image                */
     { R"(\\Pharaoh\.exe$)", {{
       { "d3d11.disableDirectImageMapping",  "True" },
+      { "dxvk.zeroMappedMemory",            "True" },
     }} },
     /* Skyrim Speshul Edition                     */
     { R"(\\SkyrimSE\.exe$)", {{

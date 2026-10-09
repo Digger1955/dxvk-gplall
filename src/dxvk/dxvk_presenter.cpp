@@ -45,6 +45,10 @@ namespace dxvk {
     m_hasSwapchainMaintenance1 = m_device->features().khrSwapchainMaintenance1.swapchainMaintenance1
                               || m_device->features().extSwapchainMaintenance1.swapchainMaintenance1;
 
+    // Gamescope WSI is currently broken and doesn't properly signal
+    // the present fence if presentation is queued but fails.
+    // TODO Remove this hack when this gets fixed in stable SteamOS.
+    m_hasGamescopeFenceSignalBug = env::getEnvVar("ENABLE_GAMESCOPE_WSI") == "1";
   }
 
   Presenter::~Presenter() {
@@ -53,11 +57,7 @@ namespace dxvk {
     destroyLatencySemaphore();
 
     if (m_frameThread.joinable()) {
-      { std::lock_guard lock(m_frameMutex);
-
-        m_frameQueue.push(PresenterFrame());
-        m_frameCond.notify_one();
-      }
+      pushFrame(PresenterFrame());
 
       m_frameThread.join();
     }
@@ -219,6 +219,9 @@ namespace dxvk {
       currSync.fenceSignaled = status != VK_ERROR_OUT_OF_DEVICE_MEMORY
                             && status != VK_ERROR_OUT_OF_HOST_MEMORY
                             && status != VK_ERROR_DEVICE_LOST;
+
+      if (m_hasGamescopeFenceSignalBug)
+        currSync.fenceSignaled = status >= 0;
     }
 
     if (status >= 0) {
@@ -230,15 +233,13 @@ namespace dxvk {
 
     // Add frame to waiter queue with current properties
     if (m_hasPresentWait) {
-      std::lock_guard lock(m_frameMutex);
-
-      auto& frame = m_frameQueue.emplace();
+      PresenterFrame frame;
       frame.frameId = frameId;
       frame.tracker = tracker;
       frame.mode = m_presentMode;
       frame.result = status;
 
-      m_frameCond.notify_one();
+      pushFrame(frame);
     }
 
     // On a successful present, try to acquire next image already, in
@@ -275,9 +276,16 @@ namespace dxvk {
       return;
 
     if (m_hasPresentWait) {
-      std::lock_guard lock(m_frameMutex);
-      m_lastSignaled = frameId;
-      m_frameCond.notify_one();
+      bool canSignal = false;
+
+      { std::unique_lock lock(m_frameMutex);
+
+        m_lastSignaled = frameId;
+        canSignal = m_lastCompleted >= frameId;
+      }
+
+      if (canSignal)
+        m_signal->signal(frameId);
     } else {
       m_fpsLimiter.delay(tracker);
       m_signal->signal(frameId);
@@ -553,7 +561,7 @@ namespace dxvk {
     surfaceInfo.surface = m_surface;
 
     if (m_device->features().extFullScreenExclusive)
-      surfaceInfo.pNext = &fullScreenExclusiveInfo;
+      fullScreenExclusiveInfo.pNext = const_cast<void*>(std::exchange(surfaceInfo.pNext, &fullScreenExclusiveInfo));
 
     // Query surface capabilities. Some properties might have changed,
     // including the size limits and supported present modes, so we'll
@@ -576,7 +584,7 @@ namespace dxvk {
 
     VkResult status;
 
-    if (m_device->features().extFullScreenExclusive) {
+    if (m_device->instance()->extensions().khrGetSurfaceCapabilities2.specVersion) {
       status = m_vki->vkGetPhysicalDeviceSurfaceCapabilities2KHR(
         m_device->adapter()->handle(), &surfaceInfo, &caps);
     } else {
@@ -860,17 +868,19 @@ namespace dxvk {
     VkSurfaceFullScreenExclusiveInfoEXT fullScreenInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
     fullScreenInfo.fullScreenExclusive = m_fullscreenMode;
 
-    VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR, &fullScreenInfo };
+    VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR };
     surfaceInfo.surface = m_surface;
 
+    if (m_device->features().extFullScreenExclusive)
+      fullScreenInfo.pNext = const_cast<void*>(std::exchange(surfaceInfo.pNext, &fullScreenInfo));
+
     VkResult status;
-    
-    if (m_device->features().extFullScreenExclusive) {
+    if (m_device->instance()->extensions().khrGetSurfaceCapabilities2.specVersion) {
       status = m_vki->vkGetPhysicalDeviceSurfaceFormats2KHR(
         m_device->adapter()->handle(), &surfaceInfo, &numFormats, nullptr);
     } else {
       status = m_vki->vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_device->adapter()->handle(), m_surface, &numFormats, nullptr);
+        m_device->adapter()->handle(), surfaceInfo.surface, &numFormats, nullptr);
     }
 
     if (status != VK_SUCCESS) {
@@ -880,8 +890,8 @@ namespace dxvk {
     
     formats.resize(numFormats);
 
-    if (m_device->features().extFullScreenExclusive) {
-      std::vector<VkSurfaceFormat2KHR> tmpFormats(numFormats, 
+    if (m_device->instance()->extensions().khrGetSurfaceCapabilities2.specVersion) {
+      std::vector<VkSurfaceFormat2KHR> tmpFormats(numFormats,
         { VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR, nullptr, VkSurfaceFormatKHR() });
 
       status = m_vki->vkGetPhysicalDeviceSurfaceFormats2KHR(
@@ -891,7 +901,7 @@ namespace dxvk {
         formats[i] = tmpFormats[i].surfaceFormat;
     } else {
       status = m_vki->vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_device->adapter()->handle(), m_surface, &numFormats, formats.data());
+        m_device->adapter()->handle(), surfaceInfo.surface, &numFormats, formats.data());
     }
 
     if (status != VK_SUCCESS)
@@ -907,8 +917,11 @@ namespace dxvk {
     VkSurfaceFullScreenExclusiveInfoEXT fullScreenInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
     fullScreenInfo.fullScreenExclusive = m_fullscreenMode;
 
-    VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR, &fullScreenInfo };
+    VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR };
     surfaceInfo.surface = m_surface;
+
+    if (m_device->features().extFullScreenExclusive)
+      fullScreenInfo.pNext = const_cast<void*>(std::exchange(surfaceInfo.pNext, &fullScreenInfo));
 
     VkResult status;
 
@@ -917,7 +930,7 @@ namespace dxvk {
         m_device->adapter()->handle(), &surfaceInfo, &numModes, nullptr);
     } else {
       status = m_vki->vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_device->adapter()->handle(), m_surface, &numModes, nullptr);
+        m_device->adapter()->handle(), surfaceInfo.surface, &numModes, nullptr);
     }
 
     if (status != VK_SUCCESS) {
@@ -932,7 +945,7 @@ namespace dxvk {
         m_device->adapter()->handle(), &surfaceInfo, &numModes, modes.data());
     } else {
       status = m_vki->vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_device->adapter()->handle(), m_surface, &numModes, modes.data());
+        m_device->adapter()->handle(), surfaceInfo.surface, &numModes, modes.data());
     }
 
     if (status != VK_SUCCESS)
@@ -1197,7 +1210,7 @@ namespace dxvk {
     std::unique_lock lock(m_frameMutex);
 
     m_frameDrain.wait(lock, [this] {
-      return m_frameQueue.empty();
+      return m_frameQueuePopId == m_frameQueuePushId;
     });
 
     for (auto& sem : m_semaphores)
@@ -1264,27 +1277,44 @@ namespace dxvk {
   }
 
 
+  void Presenter::pushFrame(const PresenterFrame& frame) {
+    std::unique_lock lock(m_frameMutex);
+
+    // This should realistically never stall; this acts more as a safeguard
+    // in case the frame worker is being starved by the system.
+    m_frameDrain.wait(lock, [this] {
+      return m_frameQueuePushId - m_frameQueuePopId < m_frameQueue.size();
+    });
+
+    m_frameQueue[m_frameQueuePushId % m_frameQueue.size()] = frame;
+    m_frameQueuePushId += 1u;
+
+    m_frameCond.notify_one();
+  }
+
+
   void Presenter::runFrameThread() {
     env::setThreadName("dxvk-frame");
 
-    std::unique_lock lock(m_frameMutex);
-
     while (true) {
+      PresenterFrame frame = { };
+
       // Wait for all GPU work for this frame to complete in order to maintain
       // ordering guarantees of the frame signal w.r.t. objects being released
-      m_frameCond.wait(lock, [this] {
-        return !m_frameQueue.empty() && m_frameQueue.front().frameId <= m_lastSignaled;
-      });
+      { std::unique_lock lock(m_frameMutex);
 
-      // Use a frame ID of 0 as an exit condition
-      PresenterFrame frame = m_frameQueue.front();
+        m_frameCond.wait(lock, [this] {
+          return m_frameQueuePushId > m_frameQueuePopId;
+        });
 
-      if (!frame.frameId) {
-        m_frameQueue.pop();
-        return;
+        // Use a frame ID of 0 as an exit condition
+        frame = m_frameQueue[m_frameQueuePopId % m_frameQueue.size()];
+
+        if (!frame.frameId) {
+          m_frameQueuePopId += 1u;
+          return;
+        }
       }
-
-      lock.unlock();
 
       // If the present operation has succeeded, actually wait for it to complete.
       // Don't bother with it on MAILBOX / IMMEDIATE modes since doing so would
@@ -1312,21 +1342,27 @@ namespace dxvk {
       if (frame.tracker)
         frame.tracker->notifyGpuPresentEnd(frame.frameId);
 
-      // Apply FPS limtier here to align it as closely with scanout as we can,
+      // Apply FPS limiter here to align it as closely with scanout as we can,
       // and delay signaling the frame latency event to emulate behaviour of a
       // low refresh rate display as closely as we can.
       m_fpsLimiter.delay(frame.tracker);
       frame.tracker = nullptr;
 
+      // Wake up any thread that may be waiting for the queue to become empty
+      bool canSignal = false;
+
+      { std::unique_lock lock(m_frameMutex);
+        m_frameQueuePopId += 1u;
+        m_frameDrain.notify_one();
+
+        m_lastCompleted = frame.frameId;
+        canSignal = m_lastSignaled >= frame.frameId;
+      }
+
       // Always signal even on error, since failures here
       // are transparent to the front-end.
-      m_signal->signal(frame.frameId);
-
-      // Wake up any thread that may be waiting for the queue to become empty
-      lock.lock();
-
-      m_frameQueue.pop();
-      m_frameDrain.notify_one();
+      if (canSignal)
+        m_signal->signal(frame.frameId);
     }
   }
 

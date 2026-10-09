@@ -10,8 +10,7 @@ namespace dxvk {
           D3D11Device*                pParent)
   : m_parent(pParent),
     m_device(pParent->GetDXVKDevice()),
-    m_stagingBuffer(m_device, StagingBufferSize),
-    m_stagingSignal(new sync::Fence(0)),
+    m_memorySignal(new sync::Fence(0)),
     m_csChunk(m_parent->AllocCsChunk(DxvkCsChunkFlag::SingleUse)) {
 
   }
@@ -59,16 +58,13 @@ namespace dxvk {
           D3D11UnorderedAccessView*   pUav) {
     auto counterView = pUav->GetCounterView();
 
-    if (counterView == nullptr)
+    if (!counterView)
       return;
 
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    m_transferCommands += 1;
-
-    EmitCs([
+    EmitCs(0u, [
       cCounterSlice = DxvkBufferSlice(counterView)
     ] (DxvkContext* ctx) {
-      const uint32_t zero = 0;
+      static const uint32_t zero = 0;
       ctx->updateBuffer(
         cCounterSlice.buffer(),
         cCounterSlice.offset(),
@@ -81,61 +77,55 @@ namespace dxvk {
           D3D11CommonShader*          pShader,
           size_t                      IcbSize,
     const void*                       pIcbData) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    m_transferCommands += 1;
 
     auto icbSlice = pShader->GetIcb();
-    auto srcSlice = m_stagingBuffer.alloc(icbSlice.length());
+    auto srcSlice = AllocStagingBuffer(icbSlice.length());
 
     std::memcpy(srcSlice.mapPtr(0), pIcbData, IcbSize);
 
     if (IcbSize < icbSlice.length())
       std::memset(srcSlice.mapPtr(IcbSize), 0, icbSlice.length() - IcbSize);
 
-    EmitCs([
+    auto stagingSize = icbSlice.length();
+
+    EmitCs(stagingSize, [
       cIcbSlice = std::move(icbSlice),
       cSrcSlice = std::move(srcSlice)
     ] (DxvkContext* ctx) {
       ctx->copyBuffer(cIcbSlice.buffer(), cIcbSlice.offset(),
         cSrcSlice.buffer(), cSrcSlice.offset(), cIcbSlice.length());
     });
-
-    ThrottleAllocationLocked();
   }
 
 
   void D3D11Initializer::InitDeviceLocalBuffer(
           D3D11Buffer*                pBuffer,
     const D3D11_SUBRESOURCE_DATA*     pInitialData) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
 
     Rc<DxvkBuffer> buffer = pBuffer->GetBuffer();
 
     if (pInitialData != nullptr && pInitialData->pSysMem != nullptr) {
-      auto stagingSlice = m_stagingBuffer.alloc(buffer->info().size);
+      auto stagingSlice = AllocStagingBuffer(buffer->info().size);
+      auto stagingSize = stagingSlice.length();
+
       std::memcpy(stagingSlice.mapPtr(0), pInitialData->pSysMem, stagingSlice.length());
 
-      m_transferCommands += 1;
-
-      EmitCs([
-        cBuffer       = buffer,
+      EmitCs(stagingSize, [
+        cBuffer       = std::move(buffer),
         cStagingSlice = std::move(stagingSlice)
       ] (DxvkContext* ctx) {
-        ctx->uploadBuffer(cBuffer,
+        ctx->uploadBuffer(cBuffer, 0u,
           cStagingSlice.buffer(),
-          cStagingSlice.offset());
+          cStagingSlice.offset(),
+          cStagingSlice.length());
       });
     } else {
-      m_transferCommands += 1;
-
-      EmitCs([
-        cBuffer       = buffer
+      EmitCs(0u, [
+        cBuffer = std::move(buffer)
       ] (DxvkContext* ctx) {
         ctx->initBuffer(cBuffer);
       });
     }
-
-    ThrottleAllocationLocked();
   }
 
 
@@ -155,8 +145,6 @@ namespace dxvk {
   void D3D11Initializer::InitDeviceLocalTexture(
           D3D11CommonTexture*         pTexture,
     const D3D11_SUBRESOURCE_DATA*     pInitialData) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    
     // Image migt be null if this is a staging resource
     Rc<DxvkImage> image = pTexture->GetImage();
     auto desc = pTexture->Desc();
@@ -164,7 +152,7 @@ namespace dxvk {
     VkFormat packedFormat = m_parent->LookupPackedFormat(desc->Format, pTexture->GetFormatMode()).Format;
     auto formatInfo = lookupFormatInfo(packedFormat);
 
-    if (pInitialData != nullptr && pInitialData->pSysMem != nullptr) {
+    if (pInitialData && pInitialData->pSysMem) {
       // Compute data size for all subresources and allocate staging buffer memory
       DxvkBufferSlice stagingSlice;
 
@@ -176,7 +164,7 @@ namespace dxvk {
             packedFormat, image->mipLevelExtent(mip), formatInfo->aspectMask), CACHE_LINE_SIZE);
         }
 
-        stagingSlice = m_stagingBuffer.alloc(dataSize);
+        stagingSlice = AllocStagingBuffer(dataSize);
       }
 
       // Copy initial data for each subresource into the staging buffer,
@@ -191,8 +179,6 @@ namespace dxvk {
           if (pTexture->HasImage()) {
             VkDeviceSize mipSizePerLayer = util::computeImageDataSize(
               packedFormat, image->mipLevelExtent(mip), formatInfo->aspectMask);
-
-            m_transferCommands += 1;
 
             util::packImageData(stagingSlice.mapPtr(dataOffset),
               pInitialData[index].pSysMem, pInitialData[index].SysMemPitch, pInitialData[index].SysMemSlicePitch,
@@ -211,7 +197,9 @@ namespace dxvk {
 
       // Upload all subresources of the image in one go
       if (pTexture->HasImage()) {
-        EmitCs([
+        auto stagingSize = stagingSlice.length();
+
+        EmitCs(stagingSize, [
           cImage        = std::move(image),
           cStagingSlice = std::move(stagingSlice),
           cFormat       = packedFormat
@@ -224,12 +212,10 @@ namespace dxvk {
       }
     } else {
       if (pTexture->HasImage()) {
-        m_transferCommands += 1;
-        
         // While the Microsoft docs state that resource contents are
         // undefined if no initial data is provided, some applications
         // expect a resource to be pre-cleared.
-        EmitCs([
+        EmitCs(0u, [
           cImage = std::move(image)
         ] (DxvkContext* ctx) {
           ctx->initImage(cImage, VK_IMAGE_LAYOUT_UNDEFINED);
@@ -243,8 +229,6 @@ namespace dxvk {
         }
       }
     }
-
-    ThrottleAllocationLocked();
   }
 
 
@@ -298,73 +282,36 @@ namespace dxvk {
     }
 
     // Initialize the image on the GPU
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-
-    EmitCs([
+    EmitCs(0u, [
       cImage = std::move(image)
     ] (DxvkContext* ctx) {
       ctx->initImage(cImage, VK_IMAGE_LAYOUT_PREINITIALIZED);
     });
-
-    m_transferCommands += 1;
-    ThrottleAllocationLocked();
   }
 
 
   void D3D11Initializer::InitTiledTexture(
           D3D11CommonTexture*         pTexture) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-
-    EmitCs([
+    EmitCs(0u, [
       cImage = pTexture->GetImage()
     ] (DxvkContext* ctx) {
       ctx->initSparseImage(cImage);
     });
-
-    m_transferCommands += 1;
-    ThrottleAllocationLocked();
-  }
-
-
-  void D3D11Initializer::ThrottleAllocationLocked() {
-    DxvkStagingBufferStats stats = m_stagingBuffer.getStatistics();
-
-    // If the amount of memory in flight exceeds the limit, stall the
-    // calling thread and wait for some memory to actually get released.
-    VkDeviceSize stagingMemoryInFlight = stats.allocatedTotal - m_stagingSignal->value();
-
-    if (stagingMemoryInFlight > MaxMemoryInFlight) {
-      ExecuteFlushLocked();
-
-      m_stagingSignal->wait(stats.allocatedTotal - MaxMemoryInFlight);
-    } else if (m_transferCommands >= MaxCommandsPerSubmission || stats.allocatedSinceLastReset >= MaxMemoryPerSubmission) {
-      // Flush pending commands if there are a lot of updates in flight
-      // to keep both execution time and staging memory in check.
-      ExecuteFlushLocked();
-    }
   }
 
 
   void D3D11Initializer::ExecuteFlush() {
     std::lock_guard lock(m_mutex);
-
     ExecuteFlushLocked();
   }
 
 
   void D3D11Initializer::ExecuteFlushLocked() {
-    DxvkStagingBufferStats stats = m_stagingBuffer.getStatistics();
-
-    EmitCs([
-      cSignal       = m_stagingSignal,
-      cSignalValue  = stats.allocatedTotal
-    ] (DxvkContext* ctx) {
-      ctx->signal(cSignal, cSignalValue);
+    EmitCsLocked([] (DxvkContext* ctx) {
       ctx->flushCommandList(nullptr, nullptr);
     });
 
-    FlushCsChunk();
-
+    FlushCsChunkLocked();
     NotifyContextFlushLocked();
   }
 
@@ -393,6 +340,66 @@ namespace dxvk {
   }
 
 
+  DxvkBufferSlice D3D11Initializer::AllocStagingBuffer(VkDeviceSize Size) {
+    if (unlikely(!Size))
+      return DxvkBufferSlice();
+
+    VkDeviceSize alignedSize = dxvk::align(Size, StagingBufferAlignment);
+    VkDeviceSize maxPending = std::max<VkDeviceSize>(alignedSize, MaxMemoryInFlight);
+
+    { std::unique_lock lock(m_mutex);
+
+      // Serialize allocation requests so that we don't end up starving large
+      // allocations in case we have to throttle. Usually this will not wait.
+      uint64_t ticket = ++m_ticketNext;
+
+      m_ticketCond.wait(lock, [&] () {
+        return m_ticketDone + 1u == ticket;
+      });
+
+      while (true) {
+        // Flush pending commands to guarantee forward progress
+        if (m_memoryRecorded - m_memorySignaled + alignedSize > MaxMemoryPerSubmission)
+          ExecuteFlushLocked();
+
+        // If necessary, wait for GPU to consume and release memory so that we
+        // remain below the allocation threshold. Does not account for memory
+        // fragmentation, but that should be fine.
+        if (m_memoryRecorded - m_memorySignal->value() + alignedSize <= maxPending)
+          break;
+
+        // Unlock the initializer here so that we don't stall the immediate context.
+        // Based on the above, we know that m_memoryRecorded + alignedSize > maxPending.
+        uint64_t targetValue = m_memoryRecorded + alignedSize - maxPending;
+
+        lock.unlock();
+        m_memorySignal->wait(targetValue);
+        lock.lock();
+      }
+
+      m_ticketDone = ticket;
+      m_ticketCond.notify_all();
+    }
+
+    // Create temporary buffer. We can't really use the "normal" staging
+    // buffer path here because memory is consumed and release out of order.
+    DxvkBufferCreateInfo info;
+    info.size   = Size;
+    info.usage  = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT
+                | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    info.stages = VK_PIPELINE_STAGE_TRANSFER_BIT
+                | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    info.access = VK_ACCESS_TRANSFER_READ_BIT
+                | VK_ACCESS_SHADER_READ_BIT;
+    info.debugName = "Staging buffer";
+
+    return DxvkBufferSlice(m_device->createBuffer(info,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
+  }
+
+
   void D3D11Initializer::FlushCsChunkLocked() {
     m_parent->GetContext()->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(m_csChunk), false);
     m_csChunk = m_parent->AllocCsChunk(DxvkCsChunkFlag::SingleUse);
@@ -400,8 +407,8 @@ namespace dxvk {
 
 
   void D3D11Initializer::NotifyContextFlushLocked() {
-    m_stagingBuffer.reset();
-    m_transferCommands = 0;
+    m_csCommands = 0u;
+    m_memorySignaled = m_memoryRecorded;
   }
 
 }
