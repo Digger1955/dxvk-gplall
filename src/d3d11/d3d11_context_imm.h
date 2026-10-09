@@ -89,6 +89,11 @@ namespace dxvk {
     void SynchronizeCsThread(
             uint64_t                          SequenceNumber);
 
+    void ExecuteFlush(
+            GpuFlushType                FlushType,
+            HANDLE                      hEvent,
+            BOOL                        Synchronize);
+
     D3D10Multithread& GetMultithread() {
         return m_multithread;
     }
@@ -201,11 +206,6 @@ namespace dxvk {
 
     void ConsiderFlush(
             GpuFlushType                FlushType);
-
-    void ExecuteFlush(
-            GpuFlushType                FlushType,
-            HANDLE                      hEvent,
-            BOOL                        Synchronize);
 
     void ThrottleAllocation();
 
