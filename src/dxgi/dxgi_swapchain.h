@@ -244,9 +244,11 @@ namespace dxvk {
 
     void UpdateGlobalHDRState();
 
-    bool ValidateColorSpaceSupport(
+    bool CanUseColorSpace(
             DXGI_FORMAT             Format,
             DXGI_COLOR_SPACE_TYPE   ColorSpace);
+
+    bool IsCurrentOutputHdrEnabled();
 
     HRESULT UpdateColorSpace(
             DXGI_FORMAT             Format,

@@ -236,31 +236,43 @@ namespace dxvk {
       return E_FAIL;
     }
 
+    const DxgiOptions* options = m_factory->GetOptions();
+
+#if defined(DXVK_WSI_WIN32)
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo = { };
+    bool haveColorInfo = wsi::getMonitorAdvancedColorInfo(m_monitor, &colorInfo);
+    bool hdrEnabled = IsMonitorHdrEnabled(
+      *options, m_metadata.supportsST2084,
+      haveColorInfo ? &colorInfo : nullptr);
+    UINT bitsPerColor = haveColorInfo
+      ? colorInfo.bitsPerColorChannel
+      : hdrEnabled ? 10 : 8;
+#else
+    bool hdrEnabled = options->enableHDR == Tristate::True;
+    UINT bitsPerColor = hdrEnabled ? 10 : 8;
+#endif
+
+    wsi::WsiDisplayMetadata metadata = m_metadata;
+    NormalizeDisplayMetadata(hdrEnabled, metadata);
+
     pDesc->AttachedToDesktop     = 1;
     pDesc->Rotation              = DXGI_MODE_ROTATION_UNSPECIFIED;
     pDesc->Monitor               = m_monitor;
-    pDesc->BitsPerColor          = 10;
-    // This should only return DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
-    // (HDR) if the user has the HDR setting enabled in Windows.
-    // Games can still punt into HDR mode by using CheckColorSpaceSupport
-    // and SetColorSpace1.
-    //
-    // We have no way of checking the actual Windows colorspace as the
-    // only public method for this *is* DXGI which we are re-implementing.
-    // So we just pick our color space based on the DXVK_HDR env var
-    // and the punting from SetColorSpace1.
-    pDesc->ColorSpace            = m_monitorInfo->CurrentColorSpace();
-    pDesc->RedPrimary[0]         = m_metadata.redPrimary[0];
-    pDesc->RedPrimary[1]         = m_metadata.redPrimary[1];
-    pDesc->GreenPrimary[0]       = m_metadata.greenPrimary[0];
-    pDesc->GreenPrimary[1]       = m_metadata.greenPrimary[1];
-    pDesc->BluePrimary[0]        = m_metadata.bluePrimary[0];
-    pDesc->BluePrimary[1]        = m_metadata.bluePrimary[1];
-    pDesc->WhitePoint[0]         = m_metadata.whitePoint[0];
-    pDesc->WhitePoint[1]         = m_metadata.whitePoint[1];
-    pDesc->MinLuminance          = m_metadata.minLuminance;
-    pDesc->MaxLuminance          = m_metadata.maxLuminance;
-    pDesc->MaxFullFrameLuminance = m_metadata.maxFullFrameLuminance;
+    pDesc->BitsPerColor          = bitsPerColor;
+    pDesc->ColorSpace            = hdrEnabled
+      ? DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+      : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    pDesc->RedPrimary[0]         = metadata.redPrimary[0];
+    pDesc->RedPrimary[1]         = metadata.redPrimary[1];
+    pDesc->GreenPrimary[0]       = metadata.greenPrimary[0];
+    pDesc->GreenPrimary[1]       = metadata.greenPrimary[1];
+    pDesc->BluePrimary[0]        = metadata.bluePrimary[0];
+    pDesc->BluePrimary[1]        = metadata.bluePrimary[1];
+    pDesc->WhitePoint[0]         = metadata.whitePoint[0];
+    pDesc->WhitePoint[1]         = metadata.whitePoint[1];
+    pDesc->MinLuminance          = metadata.minLuminance;
+    pDesc->MaxLuminance          = metadata.maxLuminance;
+    pDesc->MaxFullFrameLuminance = metadata.maxFullFrameLuminance;
     return S_OK;
   }
 
@@ -679,19 +691,10 @@ namespace dxvk {
     wsi::getCurrentDisplayMode(m_monitor, &activeWsiMode);
 
     // Get the display metadata + colorimetry
-    wsi::WsiEdidData edidData = wsi::getMonitorEdid(m_monitor);
-    std::optional<wsi::WsiDisplayMetadata> metadata = std::nullopt;
-    if (!edidData.empty())
-      metadata = wsi::parseColorimetryInfo(edidData);
-
-    if (metadata)
-      m_metadata = metadata.value();
+    if (m_monitorInfo->GetMonitorMetadata(m_monitor, &m_metadata))
+      monitorData.DisplayMetadata = m_metadata;
     else
       Logger::err("DXGI: Failed to parse display metadata + colorimetry info, using blank.");
-
-    // Normalize either the display metadata we got back, or our
-    // blank one to get something sane here.
-    NormalizeDisplayMetadata(m_monitorInfo->DefaultColorSpace() != DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709, m_metadata);
 
     auto refreshPeriod = computeRefreshPeriod(
       activeWsiMode.refreshRate.numerator,
@@ -707,7 +710,6 @@ namespace dxvk {
     monitorData.GammaCurve.Scale = { 1.0f, 1.0f, 1.0f };
     monitorData.GammaCurve.Offset = { 0.0f, 0.0f, 0.0f };
     monitorData.LastMode = ConvertDisplayMode(activeWsiMode);
-    monitorData.DisplayMetadata = m_metadata;
 
     for (uint32_t i = 0; i < DXGI_VK_GAMMA_CP_COUNT; i++) {
       const float value = GammaControlPointLocation(i);

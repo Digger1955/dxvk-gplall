@@ -44,6 +44,10 @@ namespace dxvk::wsi {
 
     virtual WsiEdidData getMonitorEdid(HMONITOR hMonitor);
 
+    virtual bool getMonitorAdvancedColorInfo(
+            HMONITOR                                  hMonitor,
+            DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*    pInfo);
+
     // Window
 
     virtual void getWindowSize(

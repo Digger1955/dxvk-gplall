@@ -433,10 +433,10 @@ namespace dxvk {
       // than rendering, so we need to compute the active render time using
       // our own timestamps
       auto gpuActiveTime = currFrame.gpuExecEnd - currFrame.gpuExecStart - currFrame.gpuIdleTime;
+      auto gpuActiveTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(gpuActiveTime).count();
 
       reports[i].report = report;
-      reports[i].gpuActiveTimeUs = std::max<uint64_t>(0u,
-        std::chrono::duration_cast<std::chrono::microseconds>(gpuActiveTime).count());
+      reports[i].gpuActiveTimeUs = gpuActiveTimeUs > 0 ? uint64_t(gpuActiveTimeUs) : 0u;
     }
 
     return count;

@@ -660,7 +660,16 @@ namespace dxvk {
 
     std::lock_guard<dxvk::mutex> lock(m_lockBuffer);
 
-    if (ValidateColorSpaceSupport(m_desc.Format, ColorSpace))
+    bool supported = m_colorSpace == ColorSpace;
+
+    if (!supported) {
+      supported = CanUseColorSpace(m_desc.Format, ColorSpace);
+
+      if (supported && ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+        supported = IsCurrentOutputHdrEnabled();
+    }
+
+    if (supported)
       *pColorSpaceSupport = DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT;
     else
       *pColorSpaceSupport = 0;
@@ -672,7 +681,7 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE DxgiSwapChain::SetColorSpace1(DXGI_COLOR_SPACE_TYPE ColorSpace) {
     std::lock_guard<dxvk::mutex> lock(m_lockBuffer);
 
-    if (!ValidateColorSpaceSupport(m_desc.Format, ColorSpace))
+    if (!CanUseColorSpace(m_desc.Format, ColorSpace))
       return E_INVALIDARG;
 
     // Write back color space if setting it up succeeded. This way, we preserve
@@ -1014,7 +1023,7 @@ namespace dxvk {
   }
 
 
-  bool DxgiSwapChain::ValidateColorSpaceSupport(
+  bool DxgiSwapChain::CanUseColorSpace(
           DXGI_FORMAT             Format,
           DXGI_COLOR_SPACE_TYPE   ColorSpace) {
     // RGBA16 swap chains are treated as scRGB even on SDR displays,
@@ -1026,11 +1035,43 @@ namespace dxvk {
     if (ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)
       return true;
 
-    // Only expose HDR10 color space if HDR option is enabled
+    // HDR10 can be selected even when the current output is SDR.
     if (ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
-      return m_factory->GetOptions()->enableHDR && m_presenter->CheckColorSpaceSupport(ColorSpace);
+      return m_presenter->CheckColorSpaceSupport(ColorSpace);
 
     return false;
+  }
+
+
+  bool DxgiSwapChain::IsCurrentOutputHdrEnabled() {
+    const DxgiOptions* options = m_factory->GetOptions();
+
+    if (options->enableHDR == Tristate::True)
+      return true;
+
+    if (options->enableHDR == Tristate::False)
+      return false;
+
+#if defined(DXVK_WSI_WIN32)
+    HMONITOR monitor = m_descFs.Windowed
+      ? wsi::getWindowMonitor(m_window)
+      : m_monitor;
+
+    // Cache metadata independently of adapter outputs since the render
+    // adapter may not own the monitor on multi-GPU systems.
+    wsi::WsiDisplayMetadata metadata = { };
+    if (!m_factory->GetMonitorInfo()->GetMonitorMetadata(monitor, &metadata))
+      return false;
+
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo = { };
+    bool haveColorInfo = wsi::getMonitorAdvancedColorInfo(monitor, &colorInfo);
+
+    return IsMonitorHdrEnabled(
+      *options, metadata.supportsST2084,
+      haveColorInfo ? &colorInfo : nullptr);
+#else
+    return false;
+#endif
   }
 
 
@@ -1039,7 +1080,7 @@ namespace dxvk {
           DXGI_COLOR_SPACE_TYPE   ColorSpace) {
     // Don't do anything if the explicitly sepected color space
     // is compatible with the back buffer format already
-    if (!ValidateColorSpaceSupport(Format, ColorSpace)) {
+    if (!CanUseColorSpace(Format, ColorSpace)) {
       ColorSpace = Format == DXGI_FORMAT_R16G16B16A16_FLOAT
         ? DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709
         : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
@@ -1051,11 +1092,6 @@ namespace dxvk {
       ColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
 
     HRESULT hr = m_presenter->SetColorSpace(ColorSpace);
-
-    // If this was a colorspace other than our current one,
-    // punt us into that one on the DXGI output.
-    if (SUCCEEDED(hr))
-      m_monitorInfo->PuntColorSpace(ColorSpace);
 
     return hr;
   }

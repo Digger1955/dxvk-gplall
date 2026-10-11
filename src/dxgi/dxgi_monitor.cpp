@@ -2,10 +2,8 @@
 
 namespace dxvk {
 
-  DxgiMonitorInfo::DxgiMonitorInfo(IUnknown* pParent, const DxgiOptions& options)
-  : m_parent(pParent)
-  , m_options(options)
-  , m_globalColorSpace(DefaultColorSpace()) {
+  DxgiMonitorInfo::DxgiMonitorInfo(IUnknown* pParent)
+  : m_parent(pParent) {
 
   }
 
@@ -71,28 +69,57 @@ namespace dxvk {
   }
 
 
-  void STDMETHODCALLTYPE DxgiMonitorInfo::PuntColorSpace(DXGI_COLOR_SPACE_TYPE ColorSpace) {
-    // Only allow punting if we started from sRGB.
-    // That way we can go from sRGB -> HDR10 or HDR10 -> sRGB if we started in sRGB.
-    // But if we started off by advertising HDR10 to the game, don't allow us to go back.
-    // This mirrors the behaviour of the global Windows HDR toggle more closely.
-    if (DefaultColorSpace() != DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)
-      return;
+  bool DxgiMonitorInfo::GetMonitorMetadata(
+          HMONITOR                hMonitor,
+          wsi::WsiDisplayMetadata* pMetadata) {
+    if (!hMonitor || !pMetadata)
+      return false;
 
-    m_globalColorSpace = ColorSpace;
+    {
+      std::lock_guard<dxvk::mutex> lock(m_monitorMutex);
+      auto dataEntry = m_monitorData.find(hMonitor);
+
+      if (dataEntry != m_monitorData.end()) {
+        *pMetadata = dataEntry->second.DisplayMetadata;
+        return true;
+      }
+
+      auto entry = m_fallbackMetadata.find(hMonitor);
+
+      if (entry != m_fallbackMetadata.end()) {
+        *pMetadata = entry->second;
+        return true;
+      }
+    }
+
+
+    auto metadata = wsi::parseColorimetryInfo(wsi::getMonitorEdid(hMonitor));
+    if (!metadata)
+      return false;
+
+    std::lock_guard<dxvk::mutex> lock(m_monitorMutex);
+    auto result = m_fallbackMetadata.insert({ hMonitor, *metadata });
+    *pMetadata = result.first->second;
+    return true;
   }
 
 
-  DXGI_COLOR_SPACE_TYPE STDMETHODCALLTYPE DxgiMonitorInfo::CurrentColorSpace() const {
-    return m_globalColorSpace;
-  }
+#if defined(DXVK_WSI_WIN32)
+  bool IsMonitorHdrEnabled(
+    const DxgiOptions&                            options,
+          bool                                    supportsST2084,
+    const DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*  pInfo) {
+    if (options.enableHDR == Tristate::True)
+      return true;
 
+    if (options.enableHDR == Tristate::False || !pInfo)
+      return false;
 
-  DXGI_COLOR_SPACE_TYPE DxgiMonitorInfo::DefaultColorSpace() const {
-    return m_options.enableHDR
-      ? DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
-      : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    return pInfo->advancedColorSupported
+        && pInfo->advancedColorEnabled
+        && supportsST2084;
   }
+#endif
 
 
   uint32_t GetMonitorFormatBpp(DXGI_FORMAT Format) {

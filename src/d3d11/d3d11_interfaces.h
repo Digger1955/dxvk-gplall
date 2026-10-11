@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "../dxgi/dxgi_interfaces.h"
 
 #include "d3d11_include.h"
@@ -206,9 +208,16 @@ struct D3D_LOW_LATENCY_FRAME_REPORT
     UINT64 gpuRenderEndTime;
     UINT32 gpuActiveRenderTimeUs;
     UINT32 gpuFrameTimeUs;
-    UINT8 rsvd[120];
+    UINT64 cameraConstructedTime;
+    UINT32 crossAdapterCopyTimeUs;
+    UINT32 aiFrameTimeUs;
+    UINT8 rsvd[104];
 };
 
+static_assert(sizeof(D3D_LOW_LATENCY_FRAME_REPORT) == 240);
+static_assert(offsetof(D3D_LOW_LATENCY_FRAME_REPORT, cameraConstructedTime) == 120);
+static_assert(offsetof(D3D_LOW_LATENCY_FRAME_REPORT, crossAdapterCopyTimeUs) == 128);
+static_assert(offsetof(D3D_LOW_LATENCY_FRAME_REPORT, aiFrameTimeUs) == 132);
 
 /**
  * \brief Data structure used for Reflex interop
@@ -220,6 +229,8 @@ struct D3D_LOW_LATENCY_RESULTS
     UINT8 rsvd[32];
 };
 
+static_assert(sizeof(D3D_LOW_LATENCY_RESULTS) == 15400);
+static_assert(offsetof(D3D_LOW_LATENCY_RESULTS, frameReports) == 8);
 
 /**
  * \brief D3D interop interface for Nvidia Reflex

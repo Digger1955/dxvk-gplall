@@ -83,7 +83,7 @@ namespace dxvk {
   : m_instance        (g_dxvkInstance.acquire(0)),
     m_interop         (this),
     m_options         (g_dxgiOptions.acquire(m_instance->config())),
-    m_monitorInfo     (this, *m_options),
+    m_monitorInfo     (this),
     m_flags           (Flags),
     m_monitorFallback (false),
     m_destructionNotifier(this) {

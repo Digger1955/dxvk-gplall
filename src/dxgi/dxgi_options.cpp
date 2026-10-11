@@ -199,13 +199,20 @@ namespace dxvk {
       this->hideIntelGpu = true;
     }
 
-    this->enableHDR = config.getOption<bool>("dxgi.enableHDR", env::getEnvVar("DXVK_HDR") == "1");
+    std::string enableHdrEnv = env::getEnvVar("DXVK_HDR");
+    Tristate enableHdrDefault = enableHdrEnv == "1"
+      ? Tristate::True
+      : enableHdrEnv == "0"
+      ? Tristate::False
+      : Tristate::Auto;
+
+    this->enableHDR = config.getOption<Tristate>("dxgi.enableHDR", enableHdrDefault);
 
     bool enableUe4Workarounds = config.getOption<bool>("dxgi.enableUe4Workarounds", false);
 
-    if (this->enableHDR && isHDRDisallowed(enableUe4Workarounds)) {
-      Logger::info("HDR was configured to be enabled, but has been force disabled as a UE4 DX11 game was detected.");
-      this->enableHDR = false;
+    if (this->enableHDR != Tristate::False && isHDRDisallowed(enableUe4Workarounds)) {
+      Logger::info("HDR was force disabled as a UE4 DX11 game was detected.");
+      this->enableHDR = Tristate::False;
     }
   }
 

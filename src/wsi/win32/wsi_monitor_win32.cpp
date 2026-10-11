@@ -223,66 +223,126 @@ namespace dxvk::wsi {
     return retrieveDisplayMode(hMonitor, ENUM_REGISTRY_SETTINGS, pMode);
   }
 
-  static std::wstring getMonitorDevicePath(HMONITOR hMonitor) {
-    // Get the device name of the monitor.
+  static bool getMonitorDisplayPath(
+          HMONITOR                  hMonitor,
+          DISPLAYCONFIG_PATH_INFO*  pDisplayPath,
+          bool                      requireUnique) {
     MONITORINFOEXW monInfo;
     monInfo.cbSize = sizeof(monInfo);
+
     if (!::GetMonitorInfoW(hMonitor, &monInfo)) {
-      Logger::err("getMonitorDevicePath: Failed to get monitor info.");
-      return {};
+      Logger::err("getMonitorDisplayPath: Failed to get monitor info");
+      return false;
     }
 
-    // Try and find the monitor device path that matches
-    // the name of our HMONITOR from the monitor info.
     LONG result = ERROR_SUCCESS;
     std::vector<DISPLAYCONFIG_PATH_INFO> paths;
     std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+
     do {
       uint32_t pathCount = 0, modeCount = 0;
+
       if ((result = ::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount)) != ERROR_SUCCESS) {
-        Logger::err(str::format("getMonitorDevicePath: GetDisplayConfigBufferSizes failed. ret: ", result, " LastError: ", GetLastError()));
-        return {};
+        Logger::err(str::format("getMonitorDisplayPath: GetDisplayConfigBufferSizes failed, result ", result));
+        return false;
       }
+
       paths.resize(pathCount);
       modes.resize(modeCount);
+
       result = ::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+
+      if (result == ERROR_SUCCESS) {
+        paths.resize(pathCount);
+        modes.resize(modeCount);
+      }
     } while (result == ERROR_INSUFFICIENT_BUFFER);
 
     if (result != ERROR_SUCCESS) {
-      Logger::err(str::format("getMonitorDevicePath: QueryDisplayConfig failed. ret: ", result, " LastError: ", GetLastError()));
-      return {};
+      Logger::err(str::format("getMonitorDisplayPath: QueryDisplayConfig failed, result ", result));
+      return false;
     }
 
-    // Link a source name -> target name
+    bool found = false;
+
     for (const auto& path : paths) {
-      DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName;
+      DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = { };
       sourceName.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
       sourceName.header.size      = sizeof(sourceName);
       sourceName.header.adapterId = path.sourceInfo.adapterId;
       sourceName.header.id        = path.sourceInfo.id;
+
       if ((result = ::DisplayConfigGetDeviceInfo(&sourceName.header)) != ERROR_SUCCESS) {
-        Logger::err(str::format("getMonitorDevicePath: DisplayConfigGetDeviceInfo with DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME failed. ret: ", result, " LastError: ", GetLastError()));
+        Logger::err(str::format("getMonitorDisplayPath: Failed to get source name, result ", result));
         continue;
       }
 
-      DISPLAYCONFIG_TARGET_DEVICE_NAME targetName;
-      targetName.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
-      targetName.header.size      = sizeof(targetName);
-      targetName.header.adapterId = path.targetInfo.adapterId;
-      targetName.header.id        = path.targetInfo.id;
-      if ((result = ::DisplayConfigGetDeviceInfo(&targetName.header)) != ERROR_SUCCESS) {
-        Logger::err(str::format("getMonitorDevicePath: DisplayConfigGetDeviceInfo with DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME failed. ret: ", result, " LastError: ", GetLastError()));
+      if (wcscmp(sourceName.viewGdiDeviceName, monInfo.szDevice))
+        continue;
+
+      if (found) {
+        if (requireUnique) {
+          Logger::debug("getMonitorDisplayPath: Monitor maps to multiple active targets");
+          return false;
+        }
+
         continue;
       }
 
-      // Does the source match the GDI device we are looking for?
-      // If so, return the target back.
-      if (!wcscmp(sourceName.viewGdiDeviceName, monInfo.szDevice))
-        return targetName.monitorDevicePath;
+      *pDisplayPath = path;
+      found = true;
     }
 
-    Logger::err("getMonitorDevicePath: Failed to find a link from source -> target.");
-    return {};
+    if (!found)
+      Logger::err("getMonitorDisplayPath: Failed to find an active display path");
+
+    return found;
+  }
+
+  static std::wstring getMonitorDevicePath(HMONITOR hMonitor) {
+    DISPLAYCONFIG_PATH_INFO path = { };
+
+    if (!getMonitorDisplayPath(hMonitor, &path, false))
+      return { };
+
+    DISPLAYCONFIG_TARGET_DEVICE_NAME targetName = { };
+    targetName.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+    targetName.header.size      = sizeof(targetName);
+    targetName.header.adapterId = path.targetInfo.adapterId;
+    targetName.header.id        = path.targetInfo.id;
+
+    LONG result = ::DisplayConfigGetDeviceInfo(&targetName.header);
+    if (result != ERROR_SUCCESS) {
+      Logger::err(str::format("getMonitorDevicePath: Failed to get target name, result ", result));
+      return { };
+    }
+
+    return targetName.monitorDevicePath;
+  }
+
+  bool Win32WsiDriver::getMonitorAdvancedColorInfo(
+          HMONITOR                                  hMonitor,
+          DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*    pInfo) {
+    if (!pInfo)
+      return false;
+
+    DISPLAYCONFIG_PATH_INFO path = { };
+    if (!getMonitorDisplayPath(hMonitor, &path, true))
+      return false;
+
+    *pInfo = { };
+    pInfo->header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+    pInfo->header.size      = sizeof(*pInfo);
+    pInfo->header.adapterId = path.targetInfo.adapterId;
+    pInfo->header.id        = path.targetInfo.id;
+
+    LONG result = ::DisplayConfigGetDeviceInfo(&pInfo->header);
+    if (result != ERROR_SUCCESS) {
+      Logger::debug(str::format("getMonitorAdvancedColorInfo: Query failed, result ", result));
+      return false;
+    }
+
+    return true;
   }
 
   static WsiEdidData readMonitorEdidFromKey(HKEY deviceRegKey) {
@@ -320,6 +380,13 @@ namespace dxvk::wsi {
     }
 
     const HDEVINFO devInfo = ::SetupDiGetClassDevsW(&GUID_DEVINTERFACE_MONITOR, nullptr, nullptr, DIGCF_DEVICEINTERFACE);
+    if (devInfo == INVALID_HANDLE_VALUE) {
+      Logger::err("getMonitorEdid: Failed to enumerate monitor device interfaces.");
+      return {};
+    }
+
+    WsiEdidData result;
+    bool found = false;
 
     SP_DEVICE_INTERFACE_DATA interfaceData;
     memset(&interfaceData, 0, sizeof(interfaceData));
@@ -345,21 +412,24 @@ namespace dxvk::wsi {
       if (_wcsicmp(monitorDevicePath.c_str(), detailData.base.DevicePath) != 0)
         continue;
 
+      found = true;
       HKEY deviceRegKey = ::SetupDiOpenDevRegKey(devInfo, &devInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
       if (deviceRegKey == INVALID_HANDLE_VALUE) {
         Logger::err("getMonitorEdid: Failed to open monitor device registry key.");
-        return {};
+        break;
       }
 
-      auto edidData = readMonitorEdidFromKey(deviceRegKey);
-
+      result = readMonitorEdidFromKey(deviceRegKey);
       ::RegCloseKey(deviceRegKey);
-
-      return edidData;
+      break;
     }
 
-    Logger::err("getMonitorEdid: Failed to find device interface for monitor using setupapi.");
-    return {};
+    ::SetupDiDestroyDeviceInfoList(devInfo);
+
+    if (!found)
+      Logger::err("getMonitorEdid: Failed to find device interface for monitor using setupapi.");
+
+    return result;
   }
 
 }

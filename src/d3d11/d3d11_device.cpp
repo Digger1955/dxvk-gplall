@@ -3486,12 +3486,15 @@ namespace dxvk {
       dst.osRenderQueueEndTime = src.report.osRenderQueueEndTimeUs;
       dst.gpuRenderStartTime = src.report.gpuRenderStartTimeUs;
       dst.gpuRenderEndTime = src.report.gpuRenderEndTimeUs;
-      dst.gpuActiveRenderTimeUs = src.gpuActiveTimeUs;
+      dst.gpuActiveRenderTimeUs = uint32_t(std::min<uint64_t>(src.gpuActiveTimeUs, UINT32_MAX));
       dst.gpuFrameTimeUs = 0;
 
       if (i) {
-        dst.gpuFrameTimeUs = reports[i - 0].report.gpuRenderEndTimeUs
-                           - reports[i - 1].report.gpuRenderEndTimeUs;
+        uint64_t currentEnd = reports[i].report.gpuRenderEndTimeUs;
+        uint64_t previousEnd = reports[i - 1].report.gpuRenderEndTimeUs;
+
+        if (currentEnd >= previousEnd)
+          dst.gpuFrameTimeUs = uint32_t(std::min<uint64_t>(currentEnd - previousEnd, UINT32_MAX));
       }
     }
 
