@@ -22,6 +22,12 @@ namespace dxvk {
 }
 
 extern "C" {
+  DLLEXPORT BOOL __stdcall CompatValue(const char* pName, UINT64* pValue) {
+    // DXVK has no compatibility overrides. Match a failed native lookup
+    // by leaving the caller's value unchanged.
+    return FALSE;
+  }
+
   DLLEXPORT HRESULT __stdcall CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppFactory) {
 /*
     dxvk::Logger::warn("CreateDXGIFactory2: Ignoring flags");

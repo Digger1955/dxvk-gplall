@@ -1,5 +1,6 @@
 {
   global:
+    CompatValue;
     CreateDXGIFactory2;
     CreateDXGIFactory1;
     CreateDXGIFactory;
