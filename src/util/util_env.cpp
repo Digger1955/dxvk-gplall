@@ -20,15 +20,19 @@ namespace dxvk::env {
 
   std::string getEnvVar(const char* name) {
 #ifdef _WIN32
-    std::vector<WCHAR> result;
-    result.resize(MAX_PATH + 1);
+    const auto wideName = str::tows(name);
+    std::vector<WCHAR> result(MAX_PATH + 1);
 
-    DWORD len = ::GetEnvironmentVariableW(str::tows(name).c_str(), result.data(), MAX_PATH);
-    if (!len || len >= MAX_PATH)
-      return "";
-    result.resize(len + 1);
+    for (;;) {
+      DWORD len = ::GetEnvironmentVariableW(wideName.c_str(), result.data(), result.size());
+      if (!len)
+        return "";
+      if (len < result.size())
+        return str::fromws(result.data());
 
-    return str::fromws(result.data());
+      // Required size includes the terminator. Retry if the value grows again.
+      result.resize(len);
+    }
 #else
     const char* result = std::getenv(name);
     return result ? result : "";

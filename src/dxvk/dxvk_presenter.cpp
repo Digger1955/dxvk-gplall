@@ -422,7 +422,13 @@ namespace dxvk {
     info.signalSemaphore = m_latencySemaphore;
     info.value = ++m_latencySleepCounter;
 
-    m_vkd->vkLatencySleepNV(m_vkd->device(), m_swapchain, &info);
+    VkResult vr = m_vkd->vkLatencySleepNV(m_vkd->device(), m_swapchain, &info);
+
+    // A failed sleep request may not signal the semaphore.
+    if (vr != VK_SUCCESS) {
+      Logger::err(str::format("Presenter: Latency sleep failed: ", vr));
+      return dxvk::high_resolution_clock::duration(0u);
+    }
 
     lock.unlock();
 
@@ -433,7 +439,12 @@ namespace dxvk {
     waitInfo.pSemaphores = &info.signalSemaphore;
     waitInfo.pValues = &info.value;
 
-    m_vkd->vkWaitSemaphores(m_vkd->device(), &waitInfo, ~0ull);
+    vr = m_vkd->vkWaitSemaphores(m_vkd->device(), &waitInfo, ~0ull);
+
+    if (vr != VK_SUCCESS) {
+      Logger::err(str::format("Presenter: Latency sleep wait failed: ", vr));
+      return dxvk::high_resolution_clock::duration(0u);
+    }
 
     auto t1 = dxvk::high_resolution_clock::now();
     return t1 - t0;
@@ -508,6 +519,25 @@ namespace dxvk {
 
     if (hdrMetadata.pNext)
       Logger::warn("Presenter: HDR metadata extensions not currently supported.");
+
+    if (m_hdrMetadata) {
+      const auto& current = *m_hdrMetadata;
+
+      // Keep pending updates, including metadata replay after swapchain recreation.
+      if (current.displayPrimaryRed.x         == hdrMetadata.displayPrimaryRed.x
+       && current.displayPrimaryRed.y         == hdrMetadata.displayPrimaryRed.y
+       && current.displayPrimaryGreen.x       == hdrMetadata.displayPrimaryGreen.x
+       && current.displayPrimaryGreen.y       == hdrMetadata.displayPrimaryGreen.y
+       && current.displayPrimaryBlue.x        == hdrMetadata.displayPrimaryBlue.x
+       && current.displayPrimaryBlue.y        == hdrMetadata.displayPrimaryBlue.y
+       && current.whitePoint.x                == hdrMetadata.whitePoint.x
+       && current.whitePoint.y                == hdrMetadata.whitePoint.y
+       && current.maxLuminance                == hdrMetadata.maxLuminance
+       && current.minLuminance                == hdrMetadata.minLuminance
+       && current.maxContentLightLevel        == hdrMetadata.maxContentLightLevel
+       && current.maxFrameAverageLightLevel   == hdrMetadata.maxFrameAverageLightLevel)
+        return;
+    }
 
     m_hdrMetadata = hdrMetadata;
     m_hdrMetadata->pNext = nullptr;
