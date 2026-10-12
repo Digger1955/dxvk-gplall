@@ -42,8 +42,8 @@ namespace dxvk {
    * 
    * Pair of semaphores used for acquire and present
    * operations, including the command buffers used
-   * in between. Also stores a fence to signal on
-   * image acquisition.
+   * in between. Also stores a fence that tracks
+   * completion of presentation.
    */
   struct PresenterSync {
     VkSemaphore acquire = VK_NULL_HANDLE;
@@ -393,7 +393,7 @@ namespace dxvk {
 
     void destroyLatencySemaphore();
 
-    void waitForSwapchainFence(
+    VkResult waitForSwapchainFence(
             PresenterSync&            sync);
 
     void pushFrame(const PresenterFrame& frame);

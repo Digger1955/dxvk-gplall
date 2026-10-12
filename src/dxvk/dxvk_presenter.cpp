@@ -93,11 +93,13 @@ namespace dxvk {
 
     updateSwapChain();
 
-    // Don't acquire if we already did so after present
+    // Don't acquire if we already did so after present.
     if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
-      PresenterSync sync = m_semaphores.at(m_frameIndex);
+      PresenterSync& sync = m_semaphores.at(m_frameIndex);
 
-      waitForSwapchainFence(sync);
+      VkResult vr = waitForSwapchainFence(sync);
+      if (vr != VK_SUCCESS)
+        return softError(vr);
 
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
@@ -242,15 +244,18 @@ namespace dxvk {
       pushFrame(frame);
     }
 
-    // On a successful present, try to acquire next image already, in
-    // order to hide potential delays from the application thread.
+    // On a successful present, acquire the next image early to hide
+    // potential delays from the application thread.
     if (status == VK_SUCCESS) {
       PresenterSync& nextSync = m_semaphores.at(m_frameIndex);
-      waitForSwapchainFence(nextSync);
 
-      m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
-        m_swapchain, std::numeric_limits<uint64_t>::max(),
-        nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      // If fence reuse fails, leave acquisition to the application thread
+      // so it can retry without changing the result of this present.
+      if (waitForSwapchainFence(nextSync) == VK_SUCCESS) {
+        m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
+          m_swapchain, std::numeric_limits<uint64_t>::max(),
+          nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      }
     }
 
     // Recreate the swapchain on the next acquire, even if we get suboptimal.
@@ -1289,21 +1294,26 @@ namespace dxvk {
   }
 
 
-  void Presenter::waitForSwapchainFence(
+  VkResult Presenter::waitForSwapchainFence(
           PresenterSync&            sync) {
     if (!sync.fenceSignaled)
-      return;
+      return VK_SUCCESS;
 
     VkResult vr = m_vkd->vkWaitForFences(m_vkd->device(),
       1, &sync.fence, VK_TRUE, ~0ull);
 
-    if (vr)
+    if (vr != VK_SUCCESS) {
       Logger::err(str::format("Presenter: Failed to wait for WSI fence: ", vr));
+      return vr;
+    }
 
-    if ((vr = m_vkd->vkResetFences(m_vkd->device(), 1, &sync.fence)))
+    if ((vr = m_vkd->vkResetFences(m_vkd->device(), 1, &sync.fence))) {
       Logger::err(str::format("Presenter: Failed to reset WSI fence: ", vr));
+      return vr;
+    }
 
     sync.fenceSignaled = VK_FALSE;
+    return VK_SUCCESS;
   }
 
 
