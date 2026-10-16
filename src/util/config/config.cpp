@@ -641,6 +641,13 @@ namespace dxvk {
       { "d3d9.hideNvidiaGpu",               "True" },
       { "d3d9.forceDrawTimeBufferUpload",   "True" },
     }} },
+    /* Left 4 Dead 2 / Source Engine                  *
+       Updates dynamic vertex and index buffers after *
+       unlocking them. Uploading at draw time keeps   *
+       world geometry and its UVs from becoming black. */
+    { R"(\\left4dead2\.exe$)", {{
+      { "d3d9.forceDrawTimeBufferUpload",   "True" },
+    }} },
     /* Vampire - The Masquerade Bloodlines        */
     { R"(\\vampire\.exe$)", {{
       { "d3d9.deferSurfaceCreation",        "True" },
