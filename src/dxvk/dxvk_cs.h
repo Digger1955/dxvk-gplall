@@ -12,7 +12,16 @@
 
 namespace dxvk {
 
-  constexpr static size_t DxvkCsChunkSize = 16384;
+  // CS chunk size, swept against live render-thread IP-sampling under Skyrim (Tamriel
+  // exterior, render thread ~100% / CS thread ~69% -- the render thread is the bottleneck,
+  // the CS thread keeps up with headroom, so it never stalls the render thread). The render
+  // thread's ntdll park is pipeline-slack waiting that GROWS with coarser chunks (the render
+  // thread races ahead then waits on the GPU): 16K=1.7% 32K=2.0% 64K=3.0% 256K=8.5% park.
+  // FPS peaks in the 32-64K band; 256K regresses ~6% (pipeline starvation) and 16K ~1.6%
+  // (dispatch overhead). 32K is the sweet spot: FPS-equal to 64K with ~1/3 less park and
+  // fresher (lower-latency) submission. Do not raise/lower without an FPS A/B in a
+  // CPU-bound scene, where finer chunks add render-thread dispatch overhead.
+  constexpr static size_t DxvkCsChunkSize = 32768;
 
   /**
    * \brief Command stream operation

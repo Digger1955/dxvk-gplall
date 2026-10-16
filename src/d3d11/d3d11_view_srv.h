@@ -80,8 +80,15 @@ namespace dxvk {
     static UINT GetPlaneSlice(
       const D3D11_SHADER_RESOURCE_VIEW_DESC1* pDesc);
 
+  protected:
+
+    // SRVs are bound non-owningly and captured by raw pointer into async CS
+    // closures; defer destruction until the CS thread drains past any such
+    // reference. See D3D11Device::RetireResource.
+    void deleteThis() override;
+
   private:
-    
+
     ID3D11Resource*                   m_resource;
     D3D11_SHADER_RESOURCE_VIEW_DESC1  m_desc;
     D3D11_VK_VIEW_INFO                m_info;

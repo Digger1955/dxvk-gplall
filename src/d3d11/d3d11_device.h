@@ -1,6 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <mutex>
 #include <vector>
 
@@ -429,7 +431,61 @@ namespace dxvk {
     void NotifyContextFlush() {
       m_initializer->NotifyContextFlush();
     }
-    
+
+    /**
+     * \brief Defers destruction of a resource wrapper
+     *
+     * D3D11Buffer / D3D11ShaderResourceView are bound non-owningly and captured
+     * by raw pointer into async CS closures. When the app drops the last public
+     * reference, the wrapper (and the DxvkBuffer/DxvkImageView Rc it holds) must
+     * outlive any raw reference still queued in the CS stream. Instead of an
+     * immediate \c delete, the wrapper is parked here and actually deleted a few
+     * present boundaries later (see \ref FlushRetiredResources), by which point
+     * the CS thread has drained past any reference. Thread-safe: resources may
+     * be released from worker threads.
+     * \param [in] deleter Type-erased deleter that runs the real destructor.
+     */
+    void RetireResource(std::function<void()>&& deleter) {
+      std::lock_guard lock(m_retireMutex);
+      m_retirePending.push_back(std::move(deleter));
+    }
+
+    /**
+     * \brief Actually destroys resources parked >= 2 present boundaries ago
+     *
+     * Called once per frame from D3D11ImmediateContext::EndFrame on the render
+     * thread. Uses a small ring of buckets so a retired wrapper always survives
+     * at least two full frames — comfortably longer than the render->CS handoff.
+     * Deletions run OUTSIDE the lock (a destructor may itself retire resources).
+     */
+    void FlushRetiredResources() {
+      std::vector<std::function<void()>> toDelete;
+      { std::lock_guard lock(m_retireMutex);
+        toDelete = std::move(m_retireRing[m_retireSlot]);
+        m_retireRing[m_retireSlot] = std::move(m_retirePending);
+        m_retirePending.clear();
+        m_retireSlot = (m_retireSlot + 1u) % uint32_t(m_retireRing.size());
+      }
+      for (auto& fn : toDelete)
+        fn();
+    }
+
+    /** \brief Deletes everything parked, ignoring the delay (device teardown). */
+    void DrainRetiredResources() {
+      for (;;) {
+        std::vector<std::function<void()>> toDelete;
+        { std::lock_guard lock(m_retireMutex);
+          toDelete = std::move(m_retirePending);
+          m_retirePending.clear();
+          for (auto& b : m_retireRing) { for (auto& f : b) toDelete.push_back(std::move(f)); b.clear(); }
+        }
+        if (toDelete.empty())
+          break;
+        for (auto& fn : toDelete)
+          fn();
+      }
+    }
+
     void InitShaderIcb(
             D3D11CommonShader*          pShader,
             size_t                      IcbSize,
@@ -508,6 +564,13 @@ namespace dxvk {
     
     D3D11Initializer*               m_initializer = nullptr;
     D3D10Device*                    m_d3d10Device = nullptr;
+
+    // Deferred-destruction ring for non-owningly-bound resource wrappers.
+    // 3 buckets → a retired wrapper lives 2-3 present boundaries before delete.
+    dxvk::mutex                                  m_retireMutex;
+    std::vector<std::function<void()>>           m_retirePending;
+    std::array<std::vector<std::function<void()>>, 3> m_retireRing = { };
+    uint32_t                                     m_retireSlot = 0u;
 
     D3D11StateObjectSet<D3D11BlendState>        m_bsStateObjects;
     D3D11StateObjectSet<D3D11DepthStencilState> m_dsStateObjects;
