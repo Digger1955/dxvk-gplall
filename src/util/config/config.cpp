@@ -524,8 +524,18 @@ namespace dxvk {
       { "dxvk.zeroMappedMemory",            "True" },
     }} },
     /* Skyrim Speshul Edition                     */
+    /* Skyrim Special Edition heavily CPU/draw-call *
+     * bound. Caching its many dynamic Map/DISCARD  *
+     * constant & vertex buffers in system memory   *
+     * avoids GPU stalls on that traffic.           */
+    /* Skyrim does not rely on DXVK's implicit WAR  *
+     * and WAW barriers between draws, so relaxing  *
+     * them trims per-draw barrier work on the      *
+     * CPU-bound draw path.                         */
     { R"(\\SkyrimSE\.exe$)", {{
       { "d3d11.cachedDynamicResources",        "a" },
+      { "d3d11.relaxedGraphicsBarriers",    "True" },
+      { "d3d11.relaxedBarriers",            "True" },
     }} },
 
     /**********************************************/
@@ -629,6 +639,13 @@ namespace dxvk {
        Also writes to buffer after unlocking it. */
     { R"(\\csgo\.exe$)", {{
       { "d3d9.hideNvidiaGpu",               "True" },
+      { "d3d9.forceDrawTimeBufferUpload",   "True" },
+    }} },
+    /* Left 4 Dead 2 / Source Engine                  *
+       Updates dynamic vertex and index buffers after *
+       unlocking them. Uploading at draw time keeps   *
+       world geometry and its UVs from becoming black. */
+    { R"(\\left4dead2\.exe$)", {{
       { "d3d9.forceDrawTimeBufferUpload",   "True" },
     }} },
     /* Vampire - The Masquerade Bloodlines        */
@@ -976,7 +993,7 @@ namespace dxvk {
      * depth buffer resolves                      */
     { R"(\\Fallout( -)? New Vegas.*\\(FalloutNV)?(Launcher)?\.exe$)", {{
       { "d3d9.floatEmulation",            "Strict" },
-      { "d3d9.hideNvidiaGpu",               "True" },
+      { "d3d9.customVendorId",              "1002" },
     }} },
     /* Dungeons and Dragons: Dragonshard          *
      * Massive FPS decreases in some scenes       */

@@ -16,7 +16,7 @@ namespace dxvk {
 
   public:
 
-    DxgiMonitorInfo(IUnknown* pParent, const DxgiOptions& options);
+    DxgiMonitorInfo(IUnknown* pParent);
 
     ~DxgiMonitorInfo();
 
@@ -38,23 +38,27 @@ namespace dxvk {
 
     void STDMETHODCALLTYPE ReleaseMonitorData();
 
-    void STDMETHODCALLTYPE PuntColorSpace(DXGI_COLOR_SPACE_TYPE ColorSpace);
-
-    DXGI_COLOR_SPACE_TYPE STDMETHODCALLTYPE CurrentColorSpace() const;
-
-    DXGI_COLOR_SPACE_TYPE DefaultColorSpace() const;
+    bool GetMonitorMetadata(
+            HMONITOR                hMonitor,
+            wsi::WsiDisplayMetadata* pMetadata);
 
   private:
 
     IUnknown* m_parent;
-    const DxgiOptions& m_options;
 
     dxvk::mutex                                        m_monitorMutex;
     std::unordered_map<HMONITOR, DXGI_VK_MONITOR_DATA> m_monitorData;
-
-    std::atomic<DXGI_COLOR_SPACE_TYPE> m_globalColorSpace;
+    std::unordered_map<HMONITOR, wsi::WsiDisplayMetadata> m_fallbackMetadata;
 
   };
+
+
+#if defined(DXVK_WSI_WIN32)
+  bool IsMonitorHdrEnabled(
+    const DxgiOptions&                            options,
+          bool                                    supportsST2084,
+    const DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*  pInfo);
+#endif
 
 
   /**

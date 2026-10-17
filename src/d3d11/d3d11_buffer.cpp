@@ -130,8 +130,17 @@ namespace dxvk {
     if (m_desc.CPUAccessFlags && m_11on12.Resource != nullptr)
       m_11on12.Resource->Unmap(0, nullptr);
   }
-  
-  
+
+
+  void D3D11Buffer::deleteThis() {
+    // Defer the real destruction: this wrapper may still be referenced by a
+    // raw pointer in the non-owning binding state or an un-drained CS closure.
+    // m_parent (the D3D11Device) actually deletes it a few present boundaries
+    // later, by which point the CS thread has processed past any reference.
+    m_parent->RetireResource([this] { delete this; });
+  }
+
+
   HRESULT STDMETHODCALLTYPE D3D11Buffer::QueryInterface(REFIID riid, void** ppvObject) {
     if (ppvObject == nullptr)
       return E_POINTER;

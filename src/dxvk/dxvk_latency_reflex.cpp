@@ -1,3 +1,5 @@
+#include <limits>
+
 #include "dxvk_latency_reflex.h"
 
 namespace dxvk {
@@ -36,18 +38,17 @@ namespace dxvk {
         Logger::warn(str::format("Reflex: Expected internal frame ID ",
           expectedFrameId, " for ", m_lastPresentAppFrameId, ", got ", frameId));
 
-        uint64_t nextAppFrameId = m_lastPresentAppFrameId;
         uint64_t nextDxvkFrameId = frameId;
 
-        auto entry = m_appToDxvkFrameIds.find(nextAppFrameId);
+        auto first = m_appToDxvkFrameIds.find(m_lastPresentAppFrameId);
 
-        while (entry != m_appToDxvkFrameIds.end()) {
-          nextAppFrameId = entry->first;
+        // Update all mappings before recycling slots so that an old slot
+        // cannot erase a pending frame's mapping during the remap.
+        for (auto entry = first; entry != m_appToDxvkFrameIds.end(); entry++)
+          entry->second = nextDxvkFrameId++;
 
-          mapFrameId(nextAppFrameId, nextDxvkFrameId++);
-
-          entry = m_appToDxvkFrameIds.upper_bound(nextAppFrameId);
-        }
+        for (auto entry = first; entry != m_appToDxvkFrameIds.end(); entry++)
+          getFrameData(entry->second).appFrameId = entry->first;
 
         m_nextAllocFrameId = nextDxvkFrameId;
         m_nextValidFrameId = nextDxvkFrameId + 1u;
@@ -433,10 +434,10 @@ namespace dxvk {
       // than rendering, so we need to compute the active render time using
       // our own timestamps
       auto gpuActiveTime = currFrame.gpuExecEnd - currFrame.gpuExecStart - currFrame.gpuIdleTime;
+      auto gpuActiveTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(gpuActiveTime).count();
 
       reports[i].report = report;
-      reports[i].gpuActiveTimeUs = std::max<uint64_t>(0u,
-        std::chrono::duration_cast<std::chrono::microseconds>(gpuActiveTime).count());
+      reports[i].gpuActiveTimeUs = gpuActiveTimeUs > 0 ? uint64_t(gpuActiveTimeUs) : 0u;
     }
 
     return count;
@@ -455,7 +456,10 @@ namespace dxvk {
     auto& frameData = m_frames[dxvkFrameId % FrameCount];
 
     if (frameData.frameId != dxvkFrameId) {
-      m_appToDxvkFrameIds.erase(frameData.appFrameId);
+      // A remapped application frame may still be referenced by an old slot.
+      auto entry = m_appToDxvkFrameIds.find(frameData.appFrameId);
+      if (entry != m_appToDxvkFrameIds.end() && entry->second == frameData.frameId)
+        m_appToDxvkFrameIds.erase(entry);
 
       frameData = DxvkReflexLatencyFrameData();
       frameData.frameId = dxvkFrameId;
@@ -521,11 +525,19 @@ namespace dxvk {
     const DxvkReflexLatencyFrameData&     frame,
     const VkLatencyTimingsFrameReportNV&  report,
           time_point                      timestamp) {
-    if (frame.cpuSimBegin == time_point() || !report.simStartTimeUs)
+    if (timestamp == time_point() || frame.cpuSimBegin == time_point() || !report.simStartTimeUs)
       return 0u;
 
     int64_t diffUs = std::chrono::duration_cast<std::chrono::microseconds>(timestamp - frame.cpuSimBegin).count();
-    return report.simStartTimeUs + diffUs;
+
+    if (diffUs < 0) {
+      uint64_t offset = uint64_t(0) - uint64_t(diffUs);
+      return offset <= report.simStartTimeUs ? report.simStartTimeUs - offset : 0u;
+    }
+
+    uint64_t offset = uint64_t(diffUs);
+    return offset <= std::numeric_limits<uint64_t>::max() - report.simStartTimeUs
+      ? report.simStartTimeUs + offset : 0u;
   }
 
 }

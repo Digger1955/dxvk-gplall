@@ -801,6 +801,21 @@ namespace dxvk {
 
     DxvkLocalAllocationCache    m_allocationCache;
 
+    // Immediate-context keep-alive: buffers captured as raw pointers into CS
+    // closures take ONE private reference per buffer per flush window (dedup'd
+    // via the buffer's m_csRefSeq stamp) instead of one refcount atomic per
+    // bind. The references are released by a closure appended to the CS stream
+    // (replayed after every use), so the wrapper provably outlives the
+    // render->CS handoff even during load-time resource churn. Unused by
+    // deferred contexts (they keep fully owning captures).
+    std::vector<D3D11Buffer*>   m_csKeepAlive;
+    uint64_t                    m_csKeepAliveSeq = 1u;
+    uint32_t                    m_csKeepAliveTick = 0u;
+
+    void KeepBufferAlive(D3D11Buffer* pBuffer);
+
+    void FlushKeepAlive();
+
     DxvkCsChunkRef AllocCsChunk();
     
     DxvkBufferSlice AllocStagingBuffer(
@@ -1216,6 +1231,18 @@ namespace dxvk {
     }
 
     void FlushCsChunk() {
+      // Release keep-alive references INSIDE the stream being flushed so the
+      // release closure replays after every command that captured the buffers.
+      // Widened dedup window: only draining every 8th flush (or when the list
+      // grows large) keeps the stamp hit-rate near 100% for the few hot
+      // dynamic CBs that are rebound thousands of times per frame, while still
+      // bounding how long wrapper references are held to a few flush windows.
+      // EmitCs inside FlushKeepAlive handles chunk overflow transparently.
+      if constexpr (!IsDeferred) {
+        if (unlikely((++m_csKeepAliveTick & 7u) == 0u) || unlikely(m_csKeepAlive.size() >= 1024u))
+          FlushKeepAlive();
+      }
+
       if (likely(!m_csChunk->empty())) {
         m_csData = nullptr;
         m_csDataType = D3D11CmdType::None;

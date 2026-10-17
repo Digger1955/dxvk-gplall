@@ -206,9 +206,11 @@ struct D3D_LOW_LATENCY_FRAME_REPORT
     UINT64 gpuRenderEndTime;
     UINT32 gpuActiveRenderTimeUs;
     UINT32 gpuFrameTimeUs;
-    UINT8 rsvd[120];
+    UINT64 cameraConstructedTime;
+    UINT32 crossAdapterCopyTimeUs;
+    UINT32 aiFrameTimeUs;
+    UINT8 rsvd[104];
 };
-
 
 /**
  * \brief Data structure used for Reflex interop
@@ -219,7 +221,6 @@ struct D3D_LOW_LATENCY_RESULTS
     D3D_LOW_LATENCY_FRAME_REPORT frameReports[64];
     UINT8 rsvd[32];
 };
-
 
 /**
  * \brief D3D interop interface for Nvidia Reflex

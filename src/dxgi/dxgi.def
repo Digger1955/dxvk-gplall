@@ -1,5 +1,6 @@
 LIBRARY DXGI.DLL
 EXPORTS  
+    CompatValue @3
     CreateDXGIFactory @9
     CreateDXGIFactory1 @10
     CreateDXGIFactory2 @11

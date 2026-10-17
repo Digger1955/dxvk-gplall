@@ -149,4 +149,17 @@ namespace dxvk::wsi {
     */
   WsiEdidData getMonitorEdid(HMONITOR hMonitor);
 
+#if defined(DXVK_WSI_WIN32)
+  /**
+    * \brief Get advanced color information for a monitor
+    *
+    * \param [in] hMonitor The monitor
+    * \param [out] pInfo Advanced color information
+    * \returns \c true on success, \c false on failure
+    */
+  bool getMonitorAdvancedColorInfo(
+          HMONITOR                                  hMonitor,
+          DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*    pInfo);
+#endif
+
 }

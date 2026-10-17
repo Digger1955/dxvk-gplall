@@ -64,7 +64,7 @@ namespace dxvk {
       uint32_t refPrivate = --m_refPrivate;
       if (unlikely(!refPrivate)) {
         m_refPrivate += 0x80000000;
-        delete this;
+        deleteThis();
       }
     }
 
@@ -77,10 +77,19 @@ namespace dxvk {
     }
 
   protected:
-    
+
     std::atomic<uint32_t> m_refCount   = { 0ul };
     std::atomic<uint32_t> m_refPrivate = { 0ul };
-    
+
+    // Final-destruction hook. Defaults to immediate delete; overridden by
+    // resource types (D3D11Buffer / D3D11ShaderResourceView) that are bound
+    // non-owningly and captured by raw pointer into async CS closures, so
+    // their destruction can be DEFERRED until the CS thread has drained past
+    // any such reference (see D3D11Device::RetireResource).
+    virtual void deleteThis() {
+      delete this;
+    }
+
   };
 
   /**

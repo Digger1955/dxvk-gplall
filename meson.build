@@ -147,8 +147,12 @@ if platform == 'windows'
       '/O1', # Minimizes Size, eqvivalent to - /Og /Os /Oy /Ob2 /GF /Gy. For out-of-order CPUs fitting a code segment into the instruction cache is preffered to fastest code
       '/Oi', # Replaces function calls with intrinsic or otherwise special forms of the function
       '/Ob3', # More aggressive inlining than /Ob2, but has the same restrictions
+      '/fp:contract', # Generates floating-point contractions (instructions that combine floating-point operations) for MSVC default /fp:precise mode
       '/GL', # Enables whole program optimization, required for LTCG
       '/Gw', # Package global data in COMDAT sections for optimization, required for LTCG
+      '/GS-', # Disables buffer security check
+      '/sdl-', # MSVC default, disables Security Development Lifecycle (SDL) checks
+      '/guard:cf-', # MSVC default, disables compiler generation of Control Flow Guard security checks
       '/Qpar',# Enables automatic parallelization of loops
       '/Qpar-report:1', # Outputs an informational message for loops that are parallelized
       '/Qvec-report:1', # Outputs an informational message for loops that are vectorized
@@ -160,6 +164,7 @@ if platform == 'windows'
       '/LTCG', # Performs a Link-Time Code Generation
       '/INCREMENTAL:NO', # Performs a full link LTCG
       '/OPT:REF,ICF', # REF - eliminates functions and data that are never referenced; ICF - performs identical COMDAT folding
+      '/GUARD:NO', # MSVC default, disables linker generation of Control Flow Guard security checks
       '/DEBUG:NONE', # Doesn't generate a PDB
       '-lsynchronization'
     ]

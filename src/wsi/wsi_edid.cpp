@@ -28,14 +28,12 @@ namespace dxvk::wsi {
     const di_cta_hdr_static_metadata_block* hdr_static_metadata = nullptr;
     const di_cta_colorimetry_block* colorimetry = nullptr;
 
-    const di_edid_cta* cta = nullptr;
-
+    // HDR metadata and colorimetry may be in different CTA extensions.
     for (auto exts = di_edid_get_extensions(edid); *exts != nullptr; exts++) {
-      if ((cta = di_edid_ext_get_cta(*exts)))
-        break;
-    }
+      const di_edid_cta* cta = di_edid_ext_get_cta(*exts);
+      if (!cta)
+        continue;
 
-    if (cta) {
       for (auto blocks = di_edid_cta_get_data_blocks(cta); *blocks != nullptr; blocks++) {
         if (!hdr_static_metadata && (hdr_static_metadata = di_cta_data_block_get_hdr_static_metadata(*blocks)))
           continue;

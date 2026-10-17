@@ -196,29 +196,37 @@ namespace dxvk {
 
       if (entry.status)
         entry.status->result = entry.result;
-      
-      // On success, pass it on to the queue thread
-      { std::unique_lock<dxvk::mutex> lock(m_mutex);
 
-        bool doForward = (entry.result == VK_SUCCESS) ||
-          (entry.present.presenter != nullptr && entry.result != VK_ERROR_DEVICE_LOST);
+      bool doForward = (entry.result == VK_SUCCESS) ||
+        (entry.present.presenter != nullptr && entry.result != VK_ERROR_DEVICE_LOST);
 
-        if (doForward) {
-          m_finishQueue.push(std::move(entry));
-        } else {
-/*
-          Logger::err(str::format("DxvkSubmissionQueue: Command submission failed: ", entry.result));
-*/
-          m_lastError = entry.result;
+      if (!doForward) {
+        Logger::err(str::format("DxvkSubmissionQueue: Command submission failed: ", entry.result));
+        m_lastError = entry.result;
+
           if (entry.latency.tracker)
             entry.latency.tracker->freeSubmitQueryPool(entry.submit.queryPool);
 
-          if (m_lastError != VK_ERROR_DEVICE_LOST)
-            m_device->waitForIdle();
-        }
+        // A command list may have been partially submitted. Keep its resources
+        // alive until GPU work completes, without waiting on our own workers.
+        if (m_lastError != VK_ERROR_DEVICE_LOST)
+          waitForGpuIdle();
+
+        if (entry.submit.cmdList != nullptr)
+          entry.submit.cmdList->notifyObjects();
+      }
+
+      // On success, pass it on to the queue thread.
+      { std::unique_lock<dxvk::mutex> lock(m_mutex);
+
+        if (doForward)
+          m_finishQueue.push(std::move(entry));
 
         m_submitQueue.pop();
         m_submitCond.notify_all();
+
+        if (!doForward)
+          m_finishCond.notify_all();
       }
 
       // Good time to invoke allocator tasks now since we
@@ -226,8 +234,8 @@ namespace dxvk {
       m_device->m_objects.memoryManager().performTimedTasks();
     }
   }
-  
-  
+
+
   void DxvkSubmissionQueue::finishCmdLists() {
     env::setThreadName("dxvk-queue");
 
@@ -288,7 +296,7 @@ namespace dxvk {
           m_lastError = status;
 
           if (status != VK_ERROR_DEVICE_LOST)
-            m_device->waitForIdle();
+            waitForGpuIdle();
         }
       } else if (entry.present.presenter != nullptr) {
         // Signal the frame and then immediately destroy the reference.
@@ -318,5 +326,19 @@ namespace dxvk {
       }
     }
   }
-  
+
+
+  void DxvkSubmissionQueue::waitForGpuIdle() {
+    // Called by queue workers without m_mutex held. The device-level idle
+    // helper also waits for these workers, which would deadlock here.
+    lockDeviceQueue();
+
+    auto vk = m_device->vkd();
+    if (vk->vkDeviceWaitIdle(vk->device()) != VK_SUCCESS)
+      Logger::err("DxvkSubmissionQueue: Failed to wait for GPU idle");
+
+    unlockDeviceQueue();
+  }
+
+
 }

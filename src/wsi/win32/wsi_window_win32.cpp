@@ -273,15 +273,15 @@ namespace dxvk::wsi {
 
 
   HMONITOR Win32WsiDriver::getWindowMonitor(HWND hWindow) {
-    RECT windowRect = { 0, 0, 0, 0 };
-    ::GetWindowRect(hWindow, &windowRect);
-    
-    HMONITOR monitor = ::MonitorFromPoint(
-      { (windowRect.left + windowRect.right) / 2,
-        (windowRect.top + windowRect.bottom) / 2 },
-      MONITOR_DEFAULTTOPRIMARY);
+    RECT clientRect = { };
 
-    return monitor;
+    if (!::GetClientRect(hWindow, &clientRect))
+      return ::MonitorFromWindow(hWindow, MONITOR_DEFAULTTOPRIMARY);
+
+    ::MapWindowPoints(hWindow, nullptr,
+      reinterpret_cast<POINT*>(&clientRect), 2);
+
+    return ::MonitorFromRect(&clientRect, MONITOR_DEFAULTTONEAREST);
   }
 
 

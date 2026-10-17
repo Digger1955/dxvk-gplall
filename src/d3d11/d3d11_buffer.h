@@ -87,6 +87,33 @@ namespace dxvk {
       return m_buffer;
     }
 
+    /**
+     * \brief Buffer reference without refcount traffic
+     *
+     * Returns the underlying buffer by const reference so hot paths that
+     * already guarantee the wrapper's lifetime (e.g. the immediate context's
+     * per-chunk keep-alive list) can avoid the Rc copy entirely.
+     */
+    const Rc<DxvkBuffer>& GetBufferRef() const {
+      return m_buffer;
+    }
+
+    /**
+     * \brief Immediate-context keep-alive generation stamp
+     *
+     * Owned exclusively by the thread driving the immediate context (which is
+     * externally synchronized per D3D11 rules), so no atomics are required.
+     * Used to take at most one private reference per buffer per CS chunk
+     * instead of one refcount atomic per bind.
+     */
+    uint64_t GetCsRefSeq() const {
+      return m_csRefSeq;
+    }
+
+    void SetCsRefSeq(uint64_t Seq) {
+      m_csRefSeq = Seq;
+    }
+
     Rc<DxvkSparsePageAllocator> GetSparseAllocator() const {
       return m_sparseAllocator;
     }
@@ -124,8 +151,12 @@ namespace dxvk {
     }
     
     Rc<DxvkResourceAllocation> DiscardSlice(DxvkLocalAllocationCache* cache) {
-      auto allocation = m_buffer->allocateStorage(cache);
-      m_mapPtr = allocation->mapPtr();
+      // allocateStorageWithMapPtr avoids LOADING from the cold allocation
+      // object on this hot render-thread path — the mapped pointer comes
+      // from the cache slot captured at free time instead.
+      void* mapPtr = nullptr;
+      auto allocation = m_buffer->allocateStorageWithMapPtr(cache, &mapPtr);
+      m_mapPtr = mapPtr;
       return allocation;
     }
 
@@ -182,8 +213,15 @@ namespace dxvk {
       const D3D11_RESOURCE_FLAGS*   pResourceFlags,
             D3D11_BUFFER_DESC*      pBufferDesc);
 
+  protected:
+
+    // Buffers are bound non-owningly (CBV/VBV/IBV) and captured by raw pointer
+    // into async CS closures, so defer destruction until the CS thread drains
+    // past any such reference. See D3D11Device::RetireResource.
+    void deleteThis() override;
+
   private:
-    
+
     D3D11_BUFFER_DESC             m_desc;
     D3D11_ON_12_RESOURCE_INFO     m_11on12;
     D3D11_COMMON_BUFFER_MAP_MODE  m_mapMode;
@@ -196,6 +234,10 @@ namespace dxvk {
     uint64_t                      m_seq = 0ull;
 
     void*                         m_mapPtr = nullptr;
+    // Keep-alive generation stamp; render-thread-owned, see GetCsRefSeq().
+    // Placed with the other render-thread-written members (m_seq/m_mapPtr)
+    // to stay on a warm cache line and away from the refcount atomics.
+    uint64_t                      m_csRefSeq = 0ull;
 
     D3D11DXGIResource             m_resource;
     D3D10Buffer                   m_d3d10;

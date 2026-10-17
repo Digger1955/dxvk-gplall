@@ -53,7 +53,51 @@ namespace dxvk {
 
   template<typename ContextType>
   D3D11CommonContext<ContextType>::~D3D11CommonContext() {
+    // Drop any keep-alive references that were never handed to the CS stream.
+    // This base dtor runs after the immediate context's dtor body (which has
+    // already flushed and synchronized the CS thread), so no closure can still
+    // be using these wrappers.
+    for (auto* buffer : m_csKeepAlive)
+      buffer->ReleasePrivate();
+    m_csKeepAlive.clear();
+  }
 
+
+  template<typename ContextType>
+  void D3D11CommonContext<ContextType>::KeepBufferAlive(D3D11Buffer* pBuffer) {
+    if (pBuffer->GetCsRefSeq() != m_csKeepAliveSeq) {
+      // Backstop for pathological flush-free stretches. Must run BEFORE the
+      // current buffer is stamped/added: the release closure only covers
+      // captures already recorded into the stream, and this buffer's capture
+      // is only emitted by the caller after we return.
+      if (unlikely(m_csKeepAlive.size() >= 4096u))
+        FlushKeepAlive();
+
+      pBuffer->SetCsRefSeq(m_csKeepAliveSeq);
+      pBuffer->AddRefPrivate();
+      m_csKeepAlive.push_back(pBuffer);
+    }
+  }
+
+
+  template<typename ContextType>
+  void D3D11CommonContext<ContextType>::FlushKeepAlive() {
+    if (m_csKeepAlive.empty())
+      return;
+
+    // Bump the generation FIRST so captures recorded after this point re-add
+    // their buffer, and move the list out before EmitCs so a chunk-overflow
+    // re-entry sees an empty list.
+    m_csKeepAliveSeq += 1u;
+
+    EmitCs([
+      cList = std::move(m_csKeepAlive)
+    ] (DxvkContext*) {
+      for (auto* buffer : cList)
+        buffer->ReleasePrivate();
+    });
+
+    m_csKeepAlive.clear();
   }
 
 
@@ -953,7 +997,7 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11CommonContext<ContextType>::DrawAuto() {
     D3D10DeviceLock lock = LockContext();
 
-    D3D11Buffer* buffer = m_state.ia.vertexBuffers[0].buffer.ptr();
+    D3D11Buffer* buffer = m_state.ia.vertexBuffers[0].buffer;
 
     if (!buffer)
       return;
@@ -1310,7 +1354,7 @@ namespace dxvk {
 
       if (ppVertexBuffers) {
         ppVertexBuffers[i] = inRange
-          ? m_state.ia.vertexBuffers[StartSlot + i].buffer.ref()
+          ? ref(m_state.ia.vertexBuffers[StartSlot + i].buffer)
           : nullptr;
       }
 
@@ -1337,7 +1381,7 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     if (ppIndexBuffer)
-      *ppIndexBuffer = m_state.ia.indexBuffer.buffer.ref();
+      *ppIndexBuffer = ref(m_state.ia.indexBuffer.buffer);
 
     if (pFormat)
       *pFormat = m_state.ia.indexBuffer.format;
@@ -3170,7 +3214,7 @@ namespace dxvk {
     for (uint32_t slot : bit::BitMask(bindMask)) {
       const auto& cbv = state.buffers[slot];
 
-      BindConstantBuffer(Stage, slot, cbv.buffer.ptr(),
+      BindConstantBuffer(Stage, slot, cbv.buffer,
         cbv.constantOffset, cbv.constantBound);
     }
   }
@@ -3213,7 +3257,7 @@ namespace dxvk {
       DirtyMask.srvMask[maskIndex] -= bindMask;
 
       for (uint32_t slot : bit::BitMask(bindMask))
-        BindShaderResource(Stage, slot + i, state.views[slot + i].ptr());
+        BindShaderResource(Stage, slot + i, state.views[slot + i]);
     }
   }
 
@@ -3727,15 +3771,35 @@ namespace dxvk {
           UINT                              Offset,
           UINT                              Stride) {
     if (pBuffer) {
-      EmitCs([
-        cSlotId       = Slot,
-        cBufferSlice  = pBuffer->GetBufferSlice(Offset),
-        cStride       = Stride
-      ] (DxvkContext* ctx) mutable {
-        ctx->bindVertexBuffer(cSlotId,
-          Forwarder::move(cBufferSlice),
-          cStride);
-      });
+      if constexpr (!IsDeferred) {
+        // Immediate context: capture the raw D3D11Buffer* (no refcount atomic on the render
+        // thread) and build the logical DxvkBufferSlice on the CS thread instead. This is
+        // behavior-identical, and safe because the app keeps the buffer alive across the
+        // sub-frame render->CS handoff (same assumption as the non-owning state bindings).
+        // Not keep-alive tracked: for apps that bind thousands of distinct VBs/IBs once each per
+        // frame, the dedup stamp does not pay for itself. Deferred lists can replay after
+        // the buffer dies, so they keep the ref-holding slice (below).
+        EmitCs([
+          cSlotId       = Slot,
+          cBuffer       = pBuffer,
+          cOffset       = Offset,
+          cStride       = Stride
+        ] (DxvkContext* ctx) mutable {
+          ctx->bindVertexBuffer(cSlotId,
+            cBuffer->GetBufferSlice(cOffset),
+            cStride);
+        });
+      } else {
+        EmitCs([
+          cSlotId       = Slot,
+          cBufferSlice  = pBuffer->GetBufferSlice(Offset),
+          cStride       = Stride
+        ] (DxvkContext* ctx) mutable {
+          ctx->bindVertexBuffer(cSlotId,
+            Forwarder::move(cBufferSlice),
+            cStride);
+        });
+      }
     } else {
       EmitCs([
         cSlotId       = Slot
@@ -3779,14 +3843,29 @@ namespace dxvk {
       : VK_INDEX_TYPE_UINT32;
 
     if (pBuffer) {
-      EmitCs([
-        cBufferSlice  = pBuffer->GetBufferSlice(Offset),
-        cIndexType    = indexType
-      ] (DxvkContext* ctx) mutable {
-        ctx->bindIndexBuffer(
-          Forwarder::move(cBufferSlice),
-          cIndexType);
-      });
+      if constexpr (!IsDeferred) {
+        // Immediate context: build the slice on the CS thread; render thread only
+        // captures a raw pointer. See BindVertexBuffer for rationale and safety
+        // (including why this is NOT keep-alive tracked).
+        EmitCs([
+          cBuffer       = pBuffer,
+          cOffset       = Offset,
+          cIndexType    = indexType
+        ] (DxvkContext* ctx) mutable {
+          ctx->bindIndexBuffer(
+            cBuffer->GetBufferSlice(cOffset),
+            cIndexType);
+        });
+      } else {
+        EmitCs([
+          cBufferSlice  = pBuffer->GetBufferSlice(Offset),
+          cIndexType    = indexType
+        ] (DxvkContext* ctx) mutable {
+          ctx->bindIndexBuffer(
+            Forwarder::move(cBufferSlice),
+            cIndexType);
+        });
+      }
     } else {
       EmitCs([
         cIndexType    = indexType
@@ -3869,14 +3948,33 @@ namespace dxvk {
     uint32_t slotId = computeConstantBufferBinding(ShaderStage, Slot);
 
     if (pBuffer) {
-      EmitCs([
-        cSlotId      = slotId,
-        cStage       = GetShaderStage(ShaderStage),
-        cBufferSlice = pBuffer->GetBufferSlice(16 * Offset, 16 * Length)
-      ] (DxvkContext* ctx) mutable {
-        ctx->bindUniformBuffer(cStage, cSlotId,
-          Forwarder::move(cBufferSlice));
-      });
+      if constexpr (!IsDeferred) {
+        // Immediate context: capture the raw wrapper and build the slice on the CS thread
+        // (see BindVertexBuffer). Unlike VB/IB, constant buffers are rebound thousands of
+        // times per frame, so the per-chunk keep-alive reference both pays for itself and
+        // guarantees the wrapper's lifetime across the handoff during load-time churn.
+        KeepBufferAlive(pBuffer);
+
+        EmitCs([
+          cSlotId = slotId,
+          cStage  = GetShaderStage(ShaderStage),
+          cBuffer = pBuffer,
+          cOffset = VkDeviceSize(16u) * Offset,
+          cLength = VkDeviceSize(16u) * Length
+        ] (DxvkContext* ctx) {
+          ctx->bindUniformBuffer(cStage, cSlotId,
+            cBuffer->GetBufferSlice(cOffset, cLength));
+        });
+      } else {
+        EmitCs([
+          cSlotId      = slotId,
+          cStage       = GetShaderStage(ShaderStage),
+          cBufferSlice = pBuffer->GetBufferSlice(16 * Offset, 16 * Length)
+        ] (DxvkContext* ctx) mutable {
+          ctx->bindUniformBuffer(cStage, cSlotId,
+            Forwarder::move(cBufferSlice));
+        });
+      }
     } else {
       EmitCs([
         cSlotId      = slotId,
@@ -3943,23 +4041,46 @@ namespace dxvk {
 
     if (pResource) {
       if (pResource->GetViewInfo().Dimension != D3D11_RESOURCE_DIMENSION_BUFFER) {
-        EmitCs([
-          cSlotId = slotId,
-          cStage  = GetShaderStage(ShaderStage),
-          cView   = pResource->GetImageView()
-        ] (DxvkContext* ctx) mutable {
-          ctx->bindResourceImageView(cStage, cSlotId,
-            Forwarder::move(cView));
-        });
+        if constexpr (!IsDeferred) {
+          // Immediate context: capture the raw view and take the DxvkImageView ref on the
+          // CS thread (see BindVertexBuffer). SRVs (textures) outlive the sub-frame handoff,
+          // so the raw capture is safe here without keep-alive tracking.
+          EmitCs([
+            cSlotId = slotId,
+            cStage  = GetShaderStage(ShaderStage),
+            cView   = pResource
+          ] (DxvkContext* ctx) mutable {
+            ctx->bindResourceImageView(cStage, cSlotId, cView->GetImageView());
+          });
+        } else {
+          EmitCs([
+            cSlotId = slotId,
+            cStage  = GetShaderStage(ShaderStage),
+            cView   = pResource->GetImageView()
+          ] (DxvkContext* ctx) mutable {
+            ctx->bindResourceImageView(cStage, cSlotId,
+              Forwarder::move(cView));
+          });
+        }
       } else {
-        EmitCs([
-          cSlotId = slotId,
-          cStage  = GetShaderStage(ShaderStage),
-          cView   = pResource->GetBufferView()
-        ] (DxvkContext* ctx) mutable {
-          ctx->bindResourceBufferView(cStage, cSlotId,
-            Forwarder::move(cView));
-        });
+        if constexpr (!IsDeferred) {
+          EmitCs([
+            cSlotId = slotId,
+            cStage  = GetShaderStage(ShaderStage),
+            cView   = pResource
+          ] (DxvkContext* ctx) mutable {
+            ctx->bindResourceBufferView(cStage, cSlotId, cView->GetBufferView());
+          });
+        } else {
+          EmitCs([
+            cSlotId = slotId,
+            cStage  = GetShaderStage(ShaderStage),
+            cView   = pResource->GetBufferView()
+          ] (DxvkContext* ctx) mutable {
+            ctx->bindResourceBufferView(cStage, cSlotId,
+              Forwarder::move(cView));
+          });
+        }
       }
     } else {
       EmitCs([
@@ -4683,7 +4804,7 @@ namespace dxvk {
 
       if (ppConstantBuffers) {
         ppConstantBuffers[i] = inRange
-          ? bindings.buffers[StartSlot + i].buffer.ref()
+          ? ref(bindings.buffers[StartSlot + i].buffer)
           : nullptr;
       }
 
@@ -4712,7 +4833,7 @@ namespace dxvk {
 
     for (uint32_t i = 0; i < NumViews; i++) {
       ppShaderResourceViews[i] = StartSlot + i < bindings.views.size()
-        ? bindings.views[StartSlot + i].ref()
+        ? ref(bindings.views[StartSlot + i])
         : nullptr;
     }
   }
@@ -4970,7 +5091,7 @@ namespace dxvk {
     int32_t srvId = bindings.hazardous.findNext(0);
 
     while (srvId >= 0) {
-      auto srv = bindings.views[srvId].ptr();
+      auto srv = bindings.views[srvId];
 
       if (likely(srv && srv->TestHazards())) {
         bool hazard = CheckViewOverlap(pView, srv);
@@ -5077,13 +5198,13 @@ namespace dxvk {
     ApplyViewportState();
 
     BindIndexBuffer(
-      m_state.ia.indexBuffer.buffer.ptr(),
+      m_state.ia.indexBuffer.buffer,
       m_state.ia.indexBuffer.offset,
       m_state.ia.indexBuffer.format);
 
     for (uint32_t i = 0; i < m_state.ia.maxVbCount; i++) {
       BindVertexBuffer(i,
-        m_state.ia.vertexBuffers[i].buffer.ptr(),
+        m_state.ia.vertexBuffers[i].buffer,
         m_state.ia.vertexBuffers[i].offset,
         m_state.ia.vertexBuffers[i].stride);
     }
@@ -5119,7 +5240,7 @@ namespace dxvk {
     const auto& bindings = m_state.cbv[Stage];
 
     for (uint32_t i = 0; i < bindings.maxCount; i++) {
-      BindConstantBuffer(Stage, i, bindings.buffers[i].buffer.ptr(),
+      BindConstantBuffer(Stage, i, bindings.buffers[i].buffer,
         bindings.buffers[i].constantOffset, bindings.buffers[i].constantBound);
     }
   }
@@ -5141,7 +5262,7 @@ namespace dxvk {
     const auto& bindings = m_state.srv[Stage];
 
     for (uint32_t i = 0; i < bindings.maxCount; i++)
-      BindShaderResource(Stage, i, bindings.views[i].ptr());
+      BindShaderResource(Stage, i, bindings.views[i]);
   }
 
 

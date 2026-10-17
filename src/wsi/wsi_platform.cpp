@@ -199,4 +199,12 @@ namespace dxvk::wsi {
     return s_driver->getMonitorEdid(hMonitor);
   }
 
+#if defined(DXVK_WSI_WIN32)
+  bool getMonitorAdvancedColorInfo(
+          HMONITOR                                  hMonitor,
+          DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO*    pInfo) {
+    return s_driver->getMonitorAdvancedColorInfo(hMonitor, pInfo);
+  }
+#endif
+
 }

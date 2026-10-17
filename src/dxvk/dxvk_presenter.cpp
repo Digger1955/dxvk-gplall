@@ -93,11 +93,13 @@ namespace dxvk {
 
     updateSwapChain();
 
-    // Don't acquire if we already did so after present
+    // Don't acquire if we already did so after present.
     if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
-      PresenterSync sync = m_semaphores.at(m_frameIndex);
+      PresenterSync& sync = m_semaphores.at(m_frameIndex);
 
-      waitForSwapchainFence(sync);
+      VkResult vr = waitForSwapchainFence(sync);
+      if (vr != VK_SUCCESS)
+        return softError(vr);
 
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
@@ -242,15 +244,18 @@ namespace dxvk {
       pushFrame(frame);
     }
 
-    // On a successful present, try to acquire next image already, in
-    // order to hide potential delays from the application thread.
+    // On a successful present, acquire the next image early to hide
+    // potential delays from the application thread.
     if (status == VK_SUCCESS) {
       PresenterSync& nextSync = m_semaphores.at(m_frameIndex);
-      waitForSwapchainFence(nextSync);
 
-      m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
-        m_swapchain, std::numeric_limits<uint64_t>::max(),
-        nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      // If fence reuse fails, leave acquisition to the application thread
+      // so it can retry without changing the result of this present.
+      if (waitForSwapchainFence(nextSync) == VK_SUCCESS) {
+        m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
+          m_swapchain, std::numeric_limits<uint64_t>::max(),
+          nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      }
     }
 
     // Recreate the swapchain on the next acquire, even if we get suboptimal.
@@ -422,7 +427,13 @@ namespace dxvk {
     info.signalSemaphore = m_latencySemaphore;
     info.value = ++m_latencySleepCounter;
 
-    m_vkd->vkLatencySleepNV(m_vkd->device(), m_swapchain, &info);
+    VkResult vr = m_vkd->vkLatencySleepNV(m_vkd->device(), m_swapchain, &info);
+
+    // A failed sleep request may not signal the semaphore.
+    if (vr != VK_SUCCESS) {
+      Logger::err(str::format("Presenter: Latency sleep failed: ", vr));
+      return dxvk::high_resolution_clock::duration(0u);
+    }
 
     lock.unlock();
 
@@ -433,7 +444,12 @@ namespace dxvk {
     waitInfo.pSemaphores = &info.signalSemaphore;
     waitInfo.pValues = &info.value;
 
-    m_vkd->vkWaitSemaphores(m_vkd->device(), &waitInfo, ~0ull);
+    vr = m_vkd->vkWaitSemaphores(m_vkd->device(), &waitInfo, ~0ull);
+
+    if (vr != VK_SUCCESS) {
+      Logger::err(str::format("Presenter: Latency sleep wait failed: ", vr));
+      return dxvk::high_resolution_clock::duration(0u);
+    }
 
     auto t1 = dxvk::high_resolution_clock::now();
     return t1 - t0;
@@ -508,6 +524,25 @@ namespace dxvk {
 
     if (hdrMetadata.pNext)
       Logger::warn("Presenter: HDR metadata extensions not currently supported.");
+
+    if (m_hdrMetadata) {
+      const auto& current = *m_hdrMetadata;
+
+      // Keep pending updates, including metadata replay after swapchain recreation.
+      if (current.displayPrimaryRed.x         == hdrMetadata.displayPrimaryRed.x
+       && current.displayPrimaryRed.y         == hdrMetadata.displayPrimaryRed.y
+       && current.displayPrimaryGreen.x       == hdrMetadata.displayPrimaryGreen.x
+       && current.displayPrimaryGreen.y       == hdrMetadata.displayPrimaryGreen.y
+       && current.displayPrimaryBlue.x        == hdrMetadata.displayPrimaryBlue.x
+       && current.displayPrimaryBlue.y        == hdrMetadata.displayPrimaryBlue.y
+       && current.whitePoint.x                == hdrMetadata.whitePoint.x
+       && current.whitePoint.y                == hdrMetadata.whitePoint.y
+       && current.maxLuminance                == hdrMetadata.maxLuminance
+       && current.minLuminance                == hdrMetadata.minLuminance
+       && current.maxContentLightLevel        == hdrMetadata.maxContentLightLevel
+       && current.maxFrameAverageLightLevel   == hdrMetadata.maxFrameAverageLightLevel)
+        return;
+    }
 
     m_hdrMetadata = hdrMetadata;
     m_hdrMetadata->pNext = nullptr;
@@ -1259,21 +1294,26 @@ namespace dxvk {
   }
 
 
-  void Presenter::waitForSwapchainFence(
+  VkResult Presenter::waitForSwapchainFence(
           PresenterSync&            sync) {
     if (!sync.fenceSignaled)
-      return;
+      return VK_SUCCESS;
 
     VkResult vr = m_vkd->vkWaitForFences(m_vkd->device(),
       1, &sync.fence, VK_TRUE, ~0ull);
 
-    if (vr)
+    if (vr != VK_SUCCESS) {
       Logger::err(str::format("Presenter: Failed to wait for WSI fence: ", vr));
+      return vr;
+    }
 
-    if ((vr = m_vkd->vkResetFences(m_vkd->device(), 1, &sync.fence)))
+    if ((vr = m_vkd->vkResetFences(m_vkd->device(), 1, &sync.fence))) {
       Logger::err(str::format("Presenter: Failed to reset WSI fence: ", vr));
+      return vr;
+    }
 
     sync.fenceSignaled = VK_FALSE;
+    return VK_SUCCESS;
   }
 
 
