@@ -55,13 +55,12 @@ namespace dxvk {
     /// or FIFO_RELAXED (if false) present mode
     Tristate tearFree = Tristate::Auto;
 
-    /// Enables latency sleep
-    /// Defaults to false in this build to activate the FramePacer,
-    /// especially for the case when the game doesn't support Reflex
-    Tristate latencySleep = Tristate::False;
+    /// Enables upstream DXVK algorithm for
+    /// latency reduction in `max-frame-latency` mode
+    Tristate latencySleep = Tristate::True;
 
     /// Latency tolerance, in microseconds
-    int32_t latencyTolerance = 0u;
+    int32_t latencyTolerance = 1000u;
 
     /// Disable VK_NV_low_latency2. This extension
     /// appears to be all sorts of broken on 32-bit.
@@ -76,7 +75,7 @@ namespace dxvk {
     bool zeroMappedMemory = false;
 
     /// Allows full-screen exclusive mode on Windows
-    bool allowFse = false;
+    bool allowFse = true;
 
     /// Whether to enable tiler optimizations
     Tristate tilerMode = Tristate::Auto;

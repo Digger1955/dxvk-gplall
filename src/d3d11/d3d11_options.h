@@ -74,7 +74,7 @@ namespace dxvk {
 
     /// Override maximum frame latency if the app specifies
     /// a higher value. May help with frame timing issues.
-    int32_t maxFrameLatency = 0;
+    int32_t maxFrameLatency = 1;
 
     /// Defer surface creation until first present call. This
     /// fixes issues with games that create multiple swap chains

@@ -279,7 +279,7 @@ namespace dxvk {
     VkSurfaceKHR                m_surface     = VK_NULL_HANDLE;
     VkSwapchainKHR              m_swapchain   = VK_NULL_HANDLE;
 
-    VkFullScreenExclusiveEXT    m_fullscreenMode = VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT;
+    VkFullScreenExclusiveEXT    m_fullscreenMode = VK_FULL_SCREEN_EXCLUSIVE_ALLOWED_EXT;
 
     std::vector<Rc<DxvkImage>>  m_images;
     std::vector<PresenterSync>  m_semaphores;
