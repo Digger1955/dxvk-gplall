@@ -1200,7 +1200,9 @@ namespace dxvk {
   uint32_t Presenter::pickImageCount(
           uint32_t                  minImageCount,
           uint32_t                  maxImageCount) {
-    uint32_t count = minImageCount + 1;
+    const auto& options = m_device->config();
+
+    uint32_t count = options.minSwapchainLatency ? minImageCount : (minImageCount + 1);
 
     if (count > maxImageCount && maxImageCount != 0)
       count = maxImageCount;

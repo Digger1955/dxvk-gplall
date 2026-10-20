@@ -98,6 +98,10 @@ namespace dxvk {
     /// Enable descriptor update templates
     bool enableDescriptorUpdateTemplates = true;
 
+    /// Minimizes swapchain latency by using minImageCount (double-buffering)
+    /// instead of forced triple-buffering (minImageCount + 1).
+    bool minSwapchainLatency = false;
+
     // Device name
     std::string deviceFilter;
   };
