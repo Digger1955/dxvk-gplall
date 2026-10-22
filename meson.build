@@ -12,11 +12,14 @@ dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
 compiler_args = [
   '-O3', # Optimizes for speed. -Os fails to compile due to interaction of LTO and -fdeclone-ctor-dtor compiler flag. Use `-O3` as a baseline and add '-Os' compiler flags.
   '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code.
-  '-march=x86-64', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, and FXSR ISA support - SSE2 CPU required.
-  '-mtune=amdfam10', # Tuning for CX16, MMX, SSE, SSE2, SSE3, SSE4A, 3DNow!, enhanced 3DNow!, ABM and 64-bit ISA - better tuning, than 'x86-64/k8', even for Intel CPUs.
+  '-march=x86-64-v2', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, FXSR, CMPXCHG16B, LAHF/SAHF, POPCNT, SSE3, SSSE3, SSE4.1, SSE4.2 ISA support - SSE4.2 CPU required.
+  '-mtune=znver3', # Tuning for BMI, BMI2, CLWB, F16C, FMA, FSGSBASE, AVX, AVX2, ADCX, RDSEED, MWAITX, SHA, CLZERO, AES, PCLMUL, CX16, MOVBE, MMX, SSE, SSE2, SSE3, SSE4A, SSSE3, SSE4.1, SSE4.2, ABM, XSAVEC, XSAVES, CLFLUSHOPT, POPCNT, RDPID, WBNOINVD, PKU, VPCLMULQDQ, VAES, and 64-bit ISA - tuning for AMD Zen 3 CPUs and newer.
   '-msse', # Required for proper enabling '-mfpmath=sse'.
   '-msse2', # Required for proper enabling '-mfpmath=sse'.
   '-mfpmath=sse', # Use SSE FP-blocks, instead of x87.
+  '-mbmi', # LZCNT/TZCNT etc. Improves the speed of bit manipulation.
+  '-mbmi2', # PDEP/PEXT etc. Improves the speed of bit manipulation.
+  '-mmovbe', # Optimizes byte swapping of four and eight byte entities.
 
   '-mstackrealign', # Safeguard - Re-align the stack at the start of every function to guarantee the standard stack alignment.
   '-fwrapv', # Safeguard - Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior.
@@ -142,8 +145,9 @@ if platform == 'windows'
   else
     # Windows (MSVC) Compiler Options
     compiler_args += [
-      '/arch:SSE2', # MSVC default, SSE2 required
-      '/favor:blend', # MSVC default, designed to give the best performance across a broad range of x86 and x64 processors
+      '/arch:AVX2', # Primary benefit - generate VEX prefix versions of SSE instructions - helps reduce register scheduling pressure. Enables usage of BMI and BMI2
+      '/favor:AMD64', # Tuning for AMD64 CPUs
+      '/d2vzeroupper', # Optimizes behavior of vzeroupper instruction usage on AMD Zen2 and later AMD CPUs
       '/O1', # Minimizes Size, eqvivalent to - /Og /Os /Oy /Ob2 /GF /Gy. For out-of-order CPUs fitting a code segment into the instruction cache is preffered to fastest code
       '/Oi', # Replaces function calls with intrinsic or otherwise special forms of the function
       '/Ob3', # More aggressive inlining than /Ob2, but has the same restrictions
@@ -164,6 +168,7 @@ if platform == 'windows'
       '/LTCG', # Performs a Link-Time Code Generation
       '/INCREMENTAL:NO', # Performs a full link LTCG
       '/OPT:REF,ICF', # REF - eliminates functions and data that are never referenced; ICF - performs identical COMDAT folding
+      '/d2:-vzeroupper', # Required by LTCG for AMD Zen2 and later AMD CPUs, MSVC 2022 default, optimizes behavior of vzeroupper instruction usage on AMD Zen2 and later AMD CPUs
       '/GUARD:NO', # MSVC default, disables linker generation of Control Flow Guard security checks
       '/DEBUG:NONE', # Doesn't generate a PDB
       '-lsynchronization'
