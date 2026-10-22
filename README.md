@@ -28,33 +28,46 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 ## Major changes compared to [upstream DXVK](https://github.com/doitsujin/dxvk)
 
 1. Implemented Low Latency frame pacing mode that aims to greatly reduce latency with minimal impact in fps. Author - [netborg-afps](https://github.com/netborg-afps/dxvk/releases)
+
 2. Implemented Asynchronous pipeline compilation (Async) that aims to greatly reduce shader compilation stutter by not blocking the main thread when compiling async pipelines. Authors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack) and [Sporif](https://github.com/Sporif/dxvk-async)
+
 3. Implemented the ability to use both (together or separately) Graphics Pipeline Library (GPL) and Asynchronous pipeline compilation (Async) on DXVK 2.1 and later. Author - [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/). Contributor - [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
+
 4. Implemented State Cache for DXVK 2.7 starting from DXVK-GPLALL 2.7-3. Author - [Laitinlok](https://github.com/Digger1955/dxvk-gplall/pull/29)
-5. Implemented improved compared to upstream DXVK high-precision FPS Limiter starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
-6. Implemented improved compared to upstream DXVK high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
-5. Implemented all of aforementioned in one DXVK package. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
-7. Provided various GCC (for any OS) builds of DXVK-GPLALL:
 
-   a) optimized for `SSE2` (`-march=x86-64`) and tuned for older CPUs (`-mtune=x86-64`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+5. Implemented high-precision energy efficient FPS Limiter starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-   b) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for newer CPUs (`-mtune=generic`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+6. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-   c) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for newer Intel CPUs (`-mtune=intel`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level.
+7. Implemented `SSE2/SSE4.1` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+
+8. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
+
+9. Implemented changes that allow to detect HDR state per monitor. Author - [nanomatters](https://github.com/nanomatters/dxvk-salkim/)
+
+10. Implemented all of aforementioned in one DXVK package. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+
+11. Provided various GCC (for any OS) builds of DXVK-GPLALL:
+
+   a) optimized for `SSE2` (`-march=x86-64`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`-mtune=amdfam10`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+
+   b) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for AMD Zen 3 and newer AMD CPUs (`-mtune=znver3`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+
+   c) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for Intel Skylake and newer Intel CPUs (`-mtune=skylake`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level.
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-8. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-GPLALL:
+12. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-GPLALL:
 
-   a) optimized for `SSE2` (`/arch:SSE2`) and tuned for older CPUs (`/favor:blend`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
+   a) optimized for `SSE2` (`/arch:SSE2`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`/favor:blend`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
 
-   b) optimized for `AVX2` (`/arch:AVX2`) and tuned for newer AMD CPUs (`/favor:AMD64`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
+   b) optimized for `AVX2` (`/arch:AVX2`) and tuned for AMD Zen 3 and newer AMD CPUs (`/favor:AMD64`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
 
-   c) optimized for `SSE4.2` (`/arch:SSE4.2`) and tuned for newer Intel CPUs (`/favor:INTEL64` a.k.a. `/favor:EM64T`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level.
+   c) optimized for `SSE4.2` (`/arch:SSE4.2`) and tuned for Intel Skylake and newer Intel CPUs (`/favor:INTEL64` a.k.a. `/favor:EM64T`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level.
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-9. Backporting and adapting upstream DXVK and DXVK Low Latency improvements to DXVK 2.6.x codebase for GPUs/drivers that do not meet [DXVK 2.7 requirements](https://github.com/doitsujin/dxvk/releases/tag/v2.7), [DXVK 3.0 requirements](https://github.com/doitsujin/dxvk/releases/tag/v3.0) or have any issues with DXVK versions higher than 2.6.2. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+12. Backporting and adapting upstream DXVK, DXVK Low Latency and DXVK forks improvements to DXVK 2.6.x codebase for GPUs/drivers that do not meet [DXVK 2.7 requirements](https://github.com/doitsujin/dxvk/releases/tag/v2.7), [DXVK 3.0 requirements](https://github.com/doitsujin/dxvk/releases/tag/v3.0) or have any issues with DXVK versions higher than 2.6.2. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
 ## How to use (Windows 10/11)
 
@@ -158,6 +171,8 @@ The `DXVK_FRAME_RATE` environment variable can be used to limit the frame rate.
 Any positive value will limit rendering to the given number of frames per second. 
 
 A value of `-1` always disables the limiter.
+
+It is **STRONGLY RECOMMENDED** to disable any other in-game/third-party FPS Limiter and VSync for DXVK FPS Limiter to work properly.
 
 `DXVK_FRAME_RATE` environment variable represented in `dxvk.conf`:
 - For D3D8 and D3D9 - `d3d9.maxFrameRate`. Default value is `d3d9.maxFrameRate = -1`
