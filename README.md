@@ -39,7 +39,7 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 
 6. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-7. Implemented `SSE2/SSE4.1` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+7. Implemented `SSE2` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
 8. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
 

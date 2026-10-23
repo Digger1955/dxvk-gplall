@@ -4,11 +4,8 @@
 #include <cmath>
 #include <cstddef>
 
-#if defined(__SSE4_1__) || defined(__SSE2__)
+#if defined(__SSE2__)
   #include <emmintrin.h>
-#endif
-#if defined(__SSE4_1__)
-  #include <smmintrin.h> // _mm_dp_ps
 #endif
 
 #include "util_bit.h"
@@ -109,8 +106,8 @@ namespace dxvk {
   // SSE, which depends CPU support, or
   // scalar fallback.
 
-#if defined(__SSE2__) || defined(__SSE4_1__)
-  // SSE2/SSE4.1 implementation (uses unaligned loads/stores for safety)
+#if defined(__SSE2__)
+  // SSE2 implementation (uses unaligned loads/stores for safety)
   template <>
   struct Vector4Base<float> {
     union {
@@ -247,15 +244,8 @@ namespace dxvk {
     return vector * scalar;
   }
 
-  // Optimized dot product for float: prefer SSE4.1 dp, else SSE2 reduction, else scalar.
-#if defined(__SSE4_1__)
-  inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
-    __m128 res = _mm_dp_ps(_mm_loadu_ps(a.data), _mm_loadu_ps(b.data), 0xF1);
-    float out;
-    _mm_store_ss(&out, res);
-    return out;
-  }
-#elif defined(__SSE2__)
+  // Optimized dot product for float: SSE2 reduction, else scalar.
+#if defined(__SSE2__)
   inline float dot(const Vector4Base<float>& a, const Vector4Base<float>& b) {
     __m128 mul = _mm_mul_ps(_mm_loadu_ps(a.data), _mm_loadu_ps(b.data));
     __m128 shuf = _mm_shuffle_ps(mul, mul, _MM_SHUFFLE(1, 0, 3, 2));
@@ -294,7 +284,7 @@ namespace dxvk {
   static_assert(sizeof(Vector4i) == sizeof(int)   * 4);
 
   // replaceNaN: SSE2 implementation or scalar fallback
-#if defined(__SSE2__) || defined(__SSE4_1__)
+#if defined(__SSE2__)
   inline Vector4 replaceNaN(Vector4 a) {
     Vector4 result;
     __m128 value = _mm_loadu_ps(a.data);

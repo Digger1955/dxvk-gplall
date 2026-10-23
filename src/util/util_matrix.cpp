@@ -3,11 +3,8 @@
 #include <cmath>
 #include <limits>
 
-#if defined(__SSE4_1__) || defined(__SSE2__)
+#if defined(__SSE2__)
   #include <emmintrin.h> // SSE2
-#endif
-#if defined(__SSE4_1__)
-  #include <smmintrin.h> // SSE4.1 (for _mm_dp_ps)
 #endif
 
 namespace dxvk {
@@ -28,18 +25,6 @@ namespace dxvk {
   const Vector4& Matrix4::operator[](size_t index) const { return data[index]; }
 
   bool Matrix4::operator==(const Matrix4& m2) const {
-  #if defined(__SSE4_1__)
-    __m128i r0 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[0].x), _mm_loadu_ps(&m2.data[0].x)));
-    __m128i r1 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[1].x), _mm_loadu_ps(&m2.data[1].x)));
-    __m128i r2 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[2].x), _mm_loadu_ps(&m2.data[2].x)));
-    __m128i r3 = _mm_castps_si128(_mm_cmpeq_ps(_mm_loadu_ps(&data[3].x), _mm_loadu_ps(&m2.data[3].x)));
-
-    __m128i and01 = _mm_and_si128(r0, r1);
-    __m128i and23 = _mm_and_si128(r2, r3);
-    __m128i final_mask = _mm_and_si128(and01, and23);
-
-    return _mm_movemask_ps(_mm_castsi128_ps(final_mask)) == 0xF;
-  #else
     for (uint32_t i = 0; i < 4; i++) {
       __m128 r1 = _mm_loadu_ps(&data[i].x);
       __m128 r2 = _mm_loadu_ps(&m2.data[i].x);
@@ -47,7 +32,6 @@ namespace dxvk {
         return false;
     }
     return true;
-  #endif
   }
 
   bool Matrix4::operator!=(const Matrix4& m2) const { return !operator==(m2); }
@@ -103,19 +87,6 @@ namespace dxvk {
     Vector4 result;
     __m128 vec = _mm_loadu_ps(&v.x);
 
-  #if defined(__SSE4_1__)
-    __m128 row0 = _mm_loadu_ps(&data[0].x);
-    __m128 row1 = _mm_loadu_ps(&data[1].x);
-    __m128 row2 = _mm_loadu_ps(&data[2].x);
-    __m128 row3 = _mm_loadu_ps(&data[3].x);
-
-    float x = _mm_cvtss_f32(_mm_dp_ps(row0, vec, 0xF1));
-    float y = _mm_cvtss_f32(_mm_dp_ps(row1, vec, 0xF1));
-    float z = _mm_cvtss_f32(_mm_dp_ps(row2, vec, 0xF1));
-    float w = _mm_cvtss_f32(_mm_dp_ps(row3, vec, 0xF1));
-
-    result.x = x; result.y = y; result.z = z; result.w = w;
-  #else
     __m128 e0 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(0, 0, 0, 0));
     __m128 e1 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(1, 1, 1, 1));
     __m128 e2 = _mm_shuffle_ps(vec, vec, _MM_SHUFFLE(2, 2, 2, 2));
@@ -134,7 +105,6 @@ namespace dxvk {
     __m128 sum01 = _mm_add_ps(v0, v1);
     __m128 sum23 = _mm_add_ps(v2, v3);
     _mm_storeu_ps(&result.x, _mm_add_ps(sum01, sum23));
-  #endif
 
     return result;
   }
@@ -224,15 +194,12 @@ namespace dxvk {
     cofactors = _mm_add_ps(cofactors, _mm_mul_ps(r1_www_x, c3));
 
     __m128 det_vec;
-  #if defined(__SSE4_1__)
-    det_vec = _mm_dp_ps(r0, cofactors, 0xF1);
-  #else
+
     __m128 mul_rows = _mm_mul_ps(r0, cofactors);
     __m128 shuf = _mm_shuffle_ps(mul_rows, mul_rows, _MM_SHUFFLE(1, 0, 3, 2));
     __m128 sums = _mm_add_ps(mul_rows, shuf);
     shuf = _mm_shuffle_ps(sums, sums, _MM_SHUFFLE(2, 3, 0, 1));
     det_vec = _mm_add_ps(sums, shuf);
-  #endif
 
     float det;
     _mm_store_ss(&det, det_vec);
