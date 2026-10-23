@@ -12,11 +12,14 @@ dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
 compiler_args = [
   '-O3', # Optimizes for speed. -Os fails to compile due to interaction of LTO and -fdeclone-ctor-dtor compiler flag. Use `-O3` as a baseline and add '-Os' compiler flags.
   '-pipe', # Enables use of pipes instead of temporary files for communication between the various stages of compilation; faster compilation, uses more memory, no impact on code.
-  '-march=x86-64', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, and FXSR ISA support - SSE2 CPU required.
-  '-mtune=amdfam10', # Tuning for CX16, MMX, SSE, SSE2, SSE3, SSE4A, 3DNow!, enhanced 3DNow!, ABM and 64-bit ISA - better tuning, than 'x86-64/k8', even for Intel CPUs.
+  '-march=x86-64-v2', # Generic CPU with 64-bit extensions, MMX, SSE, SSE2, FXSR, CMPXCHG16B, LAHF/SAHF, POPCNT, SSE3, SSSE3, SSE4.1, SSE4.2 ISA support - SSE4.2 CPU required.
+  '-mtune=skylake', # Tuning for MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CX16, SAHF, FXSR, AVX, XSAVE, PCLMUL, FSGSBASE, RDRND, F16C, AVX2, BMI, BMI2, LZCNT, FMA, MOVBE, HLE, RDSEED, ADCX, PREFETCHW, AES, CLFLUSHOPT, XSAVEC, XSAVES, SGX and 64-bit ISA - tuning for Intel Skylake CPUs and newer.
   '-msse', # Required for proper enabling '-mfpmath=sse'.
   '-msse2', # Required for proper enabling '-mfpmath=sse'.
   '-mfpmath=sse', # Use SSE FP-blocks, instead of x87.
+  '-mbmi', # LZCNT/TZCNT etc. Improves the speed of bit manipulation.
+  '-mbmi2', # PDEP/PEXT etc. Improves the speed of bit manipulation.
+  '-mmovbe', # Optimizes byte swapping of four and eight byte entities.
 
   '-mstackrealign', # Safeguard - Re-align the stack at the start of every function to guarantee the standard stack alignment.
   '-fwrapv', # Safeguard - Treat signed integer overflow as predictable two's complement wraparound instead of undefined behavior.
@@ -142,8 +145,8 @@ if platform == 'windows'
   else
     # Windows (MSVC) Compiler Options
     compiler_args += [
-      '/arch:SSE2', # MSVC default, SSE2 required
-      '/favor:blend', # MSVC default, designed to give the best performance across a broad range of x86 and x64 processors
+      '/arch:SSE4.2', # SSE4.2 required. Enables POPCNT and LZCNT.
+      '/favor:INTEL64', # Tuning for INTEL64 CPUs
       '/O1', # Minimizes Size, eqvivalent to - /Og /Os /Oy /Ob2 /GF /Gy. For out-of-order CPUs fitting a code segment into the instruction cache is preffered to fastest code
       '/Oi', # Replaces function calls with intrinsic or otherwise special forms of the function
       '/Ob3', # More aggressive inlining than /Ob2, but has the same restrictions
