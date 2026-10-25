@@ -2,6 +2,7 @@
 
 namespace dxvk {
 
+    DxvkOptions::DxvkOptions(const Config& config) {
     enableAsync           = config.getOption<bool>    ("dxvk.enableAsync",            true);
     enableDebugUtils      = config.getOption<bool>    ("dxvk.enableDebugUtils",       false);
     enableStateCache      = config.getOption<bool>    ("dxvk.enableStateCache",       true);
