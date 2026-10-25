@@ -13,7 +13,6 @@
 namespace dxvk {
   
   class DxvkDevice;
-  class DxvkStateCache;
   class DxvkPipelineManager;
   class DxvkPipelineWorkers;
 
@@ -569,8 +568,7 @@ namespace dxvk {
      */
     DxvkGraphicsPipelineHandle getPipelineHandle(
       const DxvkGraphicsPipelineStateInfo&    state,
-            bool                              async,
-      const DxvkDepthStencilState&            dynDs = { });
+            bool                              async);
 
     
     /**
@@ -616,7 +614,6 @@ namespace dxvk {
     DxvkDevice*                 m_device;    
     DxvkPipelineManager*        m_manager;
     DxvkPipelineWorkers*        m_workers;
-    DxvkStateCache*             m_stateCache;
     DxvkPipelineStats*          m_stats;
 
     DxvkGraphicsPipelineShaders m_shaders;
@@ -640,8 +637,6 @@ namespace dxvk {
     dxvk::mutex                                   m_asyncMutex;
 
     bool                                          m_async = false;
-
-    bool                                          gplAsyncCache;
 
     DxvkPipelineVariantTable<
       DxvkGraphicsPipelineStateInfo,
@@ -702,10 +697,6 @@ namespace dxvk {
             bool                           trusted) const;
 
     DxvkPipelineLayoutBuilder buildPipelineLayout() const;
-
-    void writePipelineStateToCache(
-      const DxvkGraphicsPipelineStateInfo& state,
-      const DxvkDepthStencilState&         dynDs) const;
 
     void logPipelineState(
             LogLevel                       level,

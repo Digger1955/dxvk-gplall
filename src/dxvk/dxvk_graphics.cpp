@@ -5,7 +5,6 @@
 #include "dxvk_device.h"
 #include "dxvk_graphics.h"
 #include "dxvk_pipemanager.h"
-#include "dxvk_state_cache.h"
 
 namespace dxvk {
 
@@ -1024,7 +1023,6 @@ namespace dxvk {
   : m_device        (device),
     m_manager       (pipeMgr),
     m_workers       (&pipeMgr->m_workers),
-    m_stateCache    (&pipeMgr->m_stateCache),
     m_stats         (&pipeMgr->m_stats),
     m_shaders       (std::move(shaders)),
     m_layout        (pipeMgr, buildPipelineLayout()),
@@ -1035,7 +1033,6 @@ namespace dxvk {
     m_vsIn  = m_shaders.vs ? m_shaders.vs->info().inputMask  : 0;
     m_fsOut = m_shaders.fs ? m_shaders.fs->info().outputMask : 0;
     m_specConstantMask = this->computeSpecConstantMask();
-    gplAsyncCache = m_device->config().gplAsyncCache;
 
     if (m_shaders.gs) {
       if (m_shaders.gs->flags().test(DxvkShaderFlag::HasTransformFeedback)) {
@@ -1089,8 +1086,7 @@ namespace dxvk {
 
   DxvkGraphicsPipelineHandle DxvkGraphicsPipeline::getPipelineHandle(
         const DxvkGraphicsPipelineStateInfo& state,
-        const bool                           async,
-        const DxvkDepthStencilState&         dynDs) {
+        const bool                           async) {
     DxvkGraphicsPipelineInstance* instance = this->findInstance(state);
 
     if (unlikely(!instance)) {
@@ -1128,10 +1124,6 @@ namespace dxvk {
         if (!instance->fastHandle.load())
           m_workers->compileGraphicsPipeline(this, state, DxvkPipelinePriority::Low);
 
-        // Only store pipelines in the state cache that cannot benefit
-        // from pipeline libraries, or if that feature is disabled.
-        if (!canCreateBasePipeline)
-          this->writePipelineStateToCache(state, dynDs);
       }
     }
 
@@ -1153,7 +1145,7 @@ namespace dxvk {
 
       // Do not compile if this pipeline can be fast linked. This essentially
       // disables the state cache for pipelines that do not benefit from it.
-      if (!gplAsyncCache && !m_async && this->canCreateBasePipeline(state))
+      if (!m_async && this->canCreateBasePipeline(state))
         return;
 
       // Prevent other threads from adding new instances and check again
@@ -1178,10 +1170,6 @@ namespace dxvk {
       this->logPipelineState(LogLevel::Error, state);
       return;
     }
-
-    //Write pipeline to state cache
-    if (gplAsyncCache)
-       this->writePipelineStateToCache(state, { });
   }
 
 
@@ -1686,47 +1674,6 @@ namespace dxvk {
   }
 
 
-  void DxvkGraphicsPipeline::writePipelineStateToCache(
-    const DxvkGraphicsPipelineStateInfo& state,
-    const DxvkDepthStencilState&         dynDs) const {
-    DxvkStateCacheKey key;
-    if (m_shaders.vs  != nullptr) key.vs = m_shaders.vs->getShaderKey();
-    if (m_shaders.tcs != nullptr) key.tcs = m_shaders.tcs->getShaderKey();
-    if (m_shaders.tes != nullptr) key.tes = m_shaders.tes->getShaderKey();
-    if (m_shaders.gs  != nullptr) key.gs = m_shaders.gs->getShaderKey();
-    if (m_shaders.fs  != nullptr) key.fs = m_shaders.fs->getShaderKey();
-
-    // Normalise state for cache serialisation.
-    // ds/dsFront/dsBack removed from live DxvkGraphicsPipelineStateInfo;
-    // setDepthStencilState() only writes m_state.dyn.depthStencilState.
-    // Synthesise them here from the single authoritative source.
-    // ilBindings strides zeroed: dynamic vertex strides (v15+) must not
-    // vary the SHA-1 key across draw calls.
-    DxvkGraphicsPipelineStateInfo cacheState = state;
-    const uint32_t bindingCount = cacheState.il.bindingCount();
-    for (uint32_t i = 0; i < bindingCount && i < MaxNumVertexBindings; i++)
-      cacheState.ilBindings[i].setStride(0);
-
-    DxvkDsInfo dsInfo(
-      dynDs.depthTest(),
-      dynDs.depthWrite(),
-      VK_FALSE,
-      dynDs.stencilTest(),
-      dynDs.depthCompareOp());
-
-    auto makeStencilOp = [](const DxvkStencilOp& op) {
-      return DxvkDsStencilOp(
-        op.failOp(), op.passOp(), op.depthFailOp(),
-        op.compareOp(), op.compareMask(), op.writeMask());
-    };
-
-    m_stateCache->addGraphicsPipeline(key, cacheState,
-      dsInfo,
-      makeStencilOp(dynDs.stencilOpFront()),
-      makeStencilOp(dynDs.stencilOpBack()));
-  }
-  
-  
   void DxvkGraphicsPipeline::logPipelineState(
           LogLevel                       level,
     const DxvkGraphicsPipelineStateInfo& state) const {

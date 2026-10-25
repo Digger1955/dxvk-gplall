@@ -11,7 +11,6 @@
 namespace dxvk {
   
   class DxvkDevice;
-  class DxvkStateCache;
   class DxvkPipelineManager;
   struct DxvkPipelineStats;
 
@@ -121,9 +120,8 @@ namespace dxvk {
     }
 
   private:
-    
-    DxvkDevice*                 m_device;    
-    DxvkStateCache*             m_stateCache;
+
+    DxvkDevice*                 m_device;
     DxvkPipelineStats*          m_stats;
 
     DxvkShaderPipelineLibrary*  m_library;

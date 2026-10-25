@@ -42,8 +42,6 @@ namespace dxvk {
 
     /// Enable async pipelines
     bool enableAsync = true;
-    // Enable state cache with gpl and fixes for async
-    bool gplAsyncCache;
 
     /// Shader-related options
     Tristate useRawSsbo = Tristate::Auto;

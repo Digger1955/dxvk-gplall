@@ -112,7 +112,6 @@ dxvk_src = [
   'dxvk_signal.cpp',
   'dxvk_sparse.cpp',
   'dxvk_staging.cpp',
-  'dxvk_state_cache.cpp',
   'dxvk_stats.cpp',
   'dxvk_swapchain_blitter.cpp',
   'dxvk_unbound.cpp',
