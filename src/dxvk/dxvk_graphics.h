@@ -309,7 +309,7 @@ namespace dxvk {
       // Find a pipeline handle to use. If no optimized pipeline has
       // been compiled yet, use the slower base pipeline instead.
       DxvkGraphicsPipelineHandle result;
-      result.handle = handle.load(std::memory_order_acquire);
+      result.handle = handle;
       result.attachments = attachments;
       return result;
     }
