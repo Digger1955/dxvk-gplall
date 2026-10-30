@@ -121,54 +121,11 @@ namespace dxvk {
   }
 
 
-  bool DxvkDevice::canUseGraphicsPipelineLibrary() const {
-    // Without graphicsPipelineLibraryIndependentInterpolationDecoration, we
-    // cannot use this effectively in many games since no client API provides
-    // interpoation qualifiers in vertex shaders.
-    return m_features.extGraphicsPipelineLibrary.graphicsPipelineLibrary
-        && m_properties.extGraphicsPipelineLibrary.graphicsPipelineLibraryIndependentInterpolationDecoration
-        && m_options.enableGraphicsPipelineLibrary != Tristate::False;
-  }
-
-
-  bool DxvkDevice::canUsePipelineCacheControl() const {
-    // Don't bother with this unless the device also supports shader module
-    // identifiers, since decoding and hashing the shaders is slow otherwise
-    // and likely provides no benefit over linking pipeline libraries.
-    return m_features.vk13.pipelineCreationCacheControl
-        && m_features.extShaderModuleIdentifier.shaderModuleIdentifier
-        && m_options.enableGraphicsPipelineLibrary != Tristate::True;
-  }
-
-
   bool DxvkDevice::canUseSampleLocations(VkSampleCountFlags samples) const {
     return (m_features.extSampleLocations)
         && (m_features.extExtendedDynamicState3.extendedDynamicState3SampleLocationsEnable)
         && (m_properties.extSampleLocations.variableSampleLocations)
         && (m_properties.extSampleLocations.sampleLocationSampleCounts & samples) == samples;
-  }
-
-
-  bool DxvkDevice::mustTrackPipelineLifetime() const {
-    switch (m_options.trackPipelineLifetime) {
-      case Tristate::True:
-        return canUseGraphicsPipelineLibrary();
-
-      case Tristate::False:
-        return false;
-
-      default:
-      case Tristate::Auto:
-        if (!env::is32BitHostPlatform() || !canUseGraphicsPipelineLibrary())
-          return false;
-
-        // Disable lifetime tracking for drivers that do not have any
-        // significant issues with 32-bit address space to begin with
-        if (m_adapter->matchesDriver(VK_DRIVER_ID_MESA_RADV_KHR))
-          return false;
-
-        return true;
-    }
   }
 
 
@@ -477,14 +434,11 @@ namespace dxvk {
 
   DxvkStatCounters DxvkDevice::getStatCounters() {
     DxvkPipelineCount pipe = m_objects.pipelineManager().getPipelineCount();
-    DxvkPipelineWorkerStats workers = m_objects.pipelineManager().getWorkerStats();
     
     DxvkStatCounters result;
     result.setCtr(DxvkStatCounter::PipeCountGraphics, pipe.numGraphicsPipelines);
-    result.setCtr(DxvkStatCounter::PipeCountLibrary,  pipe.numGraphicsLibraries);
     result.setCtr(DxvkStatCounter::PipeCountCompute,  pipe.numComputePipelines);
-    result.setCtr(DxvkStatCounter::PipeTasksDone,     workers.tasksCompleted);
-    result.setCtr(DxvkStatCounter::PipeTasksTotal,    workers.tasksTotal);
+    result.setCtr(DxvkStatCounter::PipeCompilerBusy,  m_objects.pipelineManager().isCompilingShaders());
     result.setCtr(DxvkStatCounter::GpuIdleTicks,      m_submissionQueue.gpuIdleTicks());
 
     std::lock_guard<sync::Spinlock> lock(m_statLock);
@@ -529,12 +483,6 @@ namespace dxvk {
   
   void DxvkDevice::registerShader(const Rc<DxvkShader>& shader) {
     m_objects.pipelineManager().registerShader(shader);
-  }
-  
-  
-  void DxvkDevice::requestCompileShader(
-    const Rc<DxvkShader>&           shader) {
-    m_objects.pipelineManager().requestCompileShader(shader);
   }
 
 

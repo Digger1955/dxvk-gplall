@@ -14,12 +14,9 @@ namespace dxvk {
   DxvkComputePipeline::DxvkComputePipeline(
           DxvkDevice*                 device,
           DxvkPipelineManager*        pipeMgr,
-          DxvkComputePipelineShaders  shaders,
-          DxvkShaderPipelineLibrary*  library)
+          DxvkComputePipelineShaders  shaders)
   : m_device        (device),
     m_stats         (&pipeMgr->m_stats),
-    m_library       (library),
-    m_libraryHandle (VK_NULL_HANDLE),
     m_shaders       (std::move(shaders)),
     m_layout        (pipeMgr, m_shaders.cs->getLayout()),
     m_debugName     (createDebugName()) {
@@ -28,9 +25,6 @@ namespace dxvk {
   
   
   DxvkComputePipeline::~DxvkComputePipeline() {
-    if (m_libraryHandle)
-      m_library->releasePipelineHandle();
-
     m_pipelines.forEach([this] (const DxvkComputePipelineInstance& instance) {
       this->destroyPipeline(instance.handle);
     });
@@ -39,17 +33,6 @@ namespace dxvk {
   
   VkPipeline DxvkComputePipeline::getPipelineHandle(
     const DxvkComputePipelineStateInfo& state) {
-    if (m_libraryHandle) {
-      // Compute pipelines without spec constants are always
-      // pre-compiled, so we'll almost always hit this path
-      return m_libraryHandle;
-    } else if (m_library) {
-      // Retrieve actual pipeline handle on first use. This
-      // may wait for an ongoing compile job to finish, or
-      // compile the pipeline immediately on the calling thread.
-      m_libraryHandle = m_library->acquirePipelineHandle().handle;
-      return m_libraryHandle;
-    } else {
       // Slow path for compute shaders that do use spec constants
       DxvkComputePipelineInstance* instance = this->findInstance(state);
 
@@ -62,21 +45,19 @@ namespace dxvk {
       }
 
       return instance->handle;
-    }
+
   }
 
 
   void DxvkComputePipeline::compilePipeline(
     const DxvkComputePipelineStateInfo& state) {
-    if (!m_library) {
       std::lock_guard<dxvk::mutex> lock(m_mutex);
 
       if (!this->findInstance(state))
         this->createInstance(state);
-    }
   }
-  
-  
+
+
   DxvkComputePipelineInstance* DxvkComputePipeline::createInstance(
     const DxvkComputePipelineStateInfo& state) {
     VkPipeline newPipelineHandle = this->createPipeline(state);

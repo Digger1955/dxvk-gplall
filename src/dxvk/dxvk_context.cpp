@@ -42,11 +42,6 @@ namespace dxvk {
     if (m_device->features().extTransformFeedback.transformFeedback)
       m_renderPassBarrierDst.stages |= VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
-    // Store the lifetime tracking bit as a context feature so
-    // that we don't have to scan device features at draw time
-    if (m_device->mustTrackPipelineLifetime())
-      m_features.set(DxvkContextFeature::TrackGraphicsPipeline);
-
     // Variable multisample rate is needed to efficiently support
     // rendering without bound render targets, otherwise we may
     // have to interrupt the current render pass whenever the
@@ -6391,9 +6386,6 @@ namespace dxvk {
       return false;
     }
 
-    if (m_features.test(DxvkContextFeature::TrackGraphicsPipeline))
-      m_cmd->trackGraphicsPipeline(newPipeline);
-
     if (unlikely(newPipeline->getSpecConstantMask() != m_state.gp.constants.mask))
       this->resetSpecConstants<VK_PIPELINE_BIND_POINT_GRAPHICS>(newPipeline->getSpecConstantMask());
 
@@ -6449,9 +6441,13 @@ namespace dxvk {
       m_lastBoundGraphicsPipeline = pipelineInfo.handle;
     }
 
+/*
+
     // Independent pipeline layout affects all resource updates
     if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline)
       m_flags.set(DxvkContextFlag::GpIndependentSets);
+
+*/
 
     if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
       // Some state is aways dynamic when used
@@ -6462,6 +6458,8 @@ namespace dxvk {
       m_flags.set(m_state.gp.state.useDynamicBlendConstants()
         ? DxvkContextFlag::GpDynamicBlendConstants
         : DxvkContextFlag::GpDirtyBlendConstants);
+
+/*
 
       if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline) {
         // For pipelines created from graphics pipeline libraries, we need to
@@ -6485,7 +6483,11 @@ namespace dxvk {
 
         if (m_device->canUseSampleLocations(0u))
           m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
-      } else {
+      } 
+
+*/
+
+
         // Conditionally set up dynamic state based on pipeline state.
         // Must match DxvkGraphicsPipelineDynamicState behaviour exactly.
         if (m_device->features().core.features.depthBounds) {
@@ -6514,7 +6516,8 @@ namespace dxvk {
           m_flags.set(DxvkContextFlag::GpDirtyDepthClip);
 
         m_flags.set(DxvkContextFlag::GpDirtyMultisampleState);
-      }
+
+
     } else {
       // If rasterization is disabled, none of the raster-related
       // dynamic state is used either so mark all of that as dirty.

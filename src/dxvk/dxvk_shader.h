@@ -135,33 +135,13 @@ namespace dxvk {
     }
 
     /**
-     * \brief Tests whether this shader needs to be compiled
-     *
-     * If pipeline libraries are supported, this will return
-     * \c false once the pipeline library is being compiled.
-     * \returns \c true if compilation is still needed
-     */
-    bool needsLibraryCompile() const {
-      return m_needsLibraryCompile.load();
-    }
-
-    /**
-     * \brief Notifies library compile
-     *
-     * Called automatically when pipeline compilation begins.
-     * Subsequent calls to \ref needsLibraryCompile will return
-     * \c false.
-     */
-    void notifyLibraryCompile() {
-      m_needsLibraryCompile.store(false);
-    }
-
-    /**
      * \brief Gets raw code without modification
      */
     SpirvCodeBuffer getRawCode() const {
       return m_code.decompress();
     }
+
+// Library Parts ?
 
     /**
      * \brief Patches code using given info
@@ -172,21 +152,10 @@ namespace dxvk {
      * \param [in] state Pipeline state info
      * \returns Uncompressed SPIR-V code buffer
      */
+
     SpirvCodeBuffer getCode(
       const DxvkShaderBindingMap*       bindings,
       const DxvkShaderModuleCreateInfo& state) const;
-    
-    /**
-     * \brief Tests whether this shader supports pipeline libraries
-     *
-     * This is true for any vertex, fragment, or compute shader that does not
-     * require additional pipeline state to be compiled into something useful.
-     * \param [in] standalone Set to \c true to evaluate this in the context
-     *    of a single-shader pipeline library, or \c false for a pre-raster
-     *    shader library consisting of multiple shader stages.
-     * \returns \c true if this shader can be used with pipeline libraries
-     */
-    bool canUsePipelineLibrary(bool standalone) const;
 
     /**
      * \brief Dumps SPIR-V shader
@@ -195,7 +164,7 @@ namespace dxvk {
      * \param [in] outputStream Stream to write to 
      */
     void dump(std::ostream& outputStream) const;
-    
+
     /**
      * \brief Sets the shader key
      * \param [in] key Unique key
@@ -265,7 +234,6 @@ namespace dxvk {
     size_t                        m_o1LocOffset = 0;
 
     uint32_t                      m_specConstantMask = 0;
-    std::atomic<bool>             m_needsLibraryCompile = { true };
 
     std::vector<BindingOffsets>   m_bindingOffsets;
 
@@ -371,6 +339,7 @@ namespace dxvk {
 
   };
 
+// Library Parts ?
 
   /**
    * \brief Shader set
@@ -378,6 +347,8 @@ namespace dxvk {
    * Stores a set of shader pointers
    * for use in a pipeline library.
    */
+
+
   struct DxvkShaderSet {
     DxvkShader* vs = nullptr;
     DxvkShader* tcs = nullptr;
@@ -388,12 +359,16 @@ namespace dxvk {
   };
 
 
+// Library Parts ?
+
   /**
    * \brief Shader identifer set
    *
    * Stores a set of shader module identifiers
    * for use in a pipeline library.
    */
+
+
   struct DxvkShaderIdentifierSet {
     VkShaderModuleIdentifierEXT vs = { VK_STRUCTURE_TYPE_SHADER_MODULE_IDENTIFIER_EXT };
     VkShaderModuleIdentifierEXT tcs = { VK_STRUCTURE_TYPE_SHADER_MODULE_IDENTIFIER_EXT };
@@ -404,194 +379,4 @@ namespace dxvk {
   };
 
 
-  /**
-   * \brief Shader pipeline library key
-   */
-  class DxvkShaderPipelineLibraryKey {
-
-  public:
-
-    DxvkShaderPipelineLibraryKey();
-
-    ~DxvkShaderPipelineLibraryKey();
-
-    /**
-     * \brief Creates shader set from key
-     * \returns Shader set
-     */
-    DxvkShaderSet getShaderSet() const;
-
-    /**
-     * \brief Builds merged binding layout
-     * \returns Pipeline layout builder
-     */
-    DxvkPipelineLayoutBuilder getLayout() const;
-
-    /**
-     * \brief Adds a shader to the key
-     *
-     * Shaders must be added in stage order.
-     * \param [in] shader Shader to add
-     */
-    void addShader(
-      const Rc<DxvkShader>&               shader);
-
-    /**
-     * \brief Checks wether a pipeline library can be created
-     * \returns \c true if all added shaders are compatible
-     */
-    bool canUsePipelineLibrary() const;
-
-    /**
-     * \brief Checks for equality
-     *
-     * \param [in] other Key to compare to
-     * \returns \c true if the keys are equal
-     */
-    bool eq(
-      const DxvkShaderPipelineLibraryKey& other) const;
-
-    /**
-     * \brief Computes key hash
-     * \returns Key hash
-     */
-    size_t hash() const;
-
-  private:
-
-    uint32_t                      m_shaderCount   = 0;
-    VkShaderStageFlags            m_shaderStages  = 0;
-    std::array<Rc<DxvkShader>, 4> m_shaders;
-
-  };
-
-
-  /**
-   * \brief Pipeline library handle
-   *
-   * Stores a pipeline library handle and the necessary link flags.
-   */
-  struct DxvkShaderPipelineLibraryHandle {
-    VkPipeline            handle;
-    VkPipelineCreateFlags linkFlags;
-  };
-
-
-  /**
-   * \brief Shader pipeline library
-   *
-   * Stores a pipeline object for either a complete compute
-   * pipeline, a pre-rasterization pipeline library consisting
-   * of a single vertex shader, or a fragment shader pipeline
-   * library. All state unknown at shader compile time will
-   * be made dynamic.
-   */
-  class DxvkShaderPipelineLibrary {
-
-  public:
-
-    DxvkShaderPipelineLibrary(
-      const DxvkDevice*               device,
-            DxvkPipelineManager*      manager,
-      const DxvkShaderPipelineLibraryKey& key);
-
-    ~DxvkShaderPipelineLibrary();
-
-    /**
-     * \brief Queries shader module identifier
-     *
-     * Can be used to compile an optimized pipeline using the same
-     * shader code, but without having to wait for the pipeline
-     * library for this shader shader to compile first.
-     * \param [in] stage Shader stage to query
-     * \returns Shader module identifier
-     */
-    VkShaderModuleIdentifierEXT getModuleIdentifier(
-            VkShaderStageFlagBits                 stage);
-
-    /**
-     * \brief Acquires pipeline handle for the given set of arguments
-     *
-     * Either returns an already compiled pipeline library object, or
-     * performs the compilation step if that has not happened yet.
-     * Increments the use count by one.
-     * \returns Vulkan pipeline handle
-     */
-    DxvkShaderPipelineLibraryHandle acquirePipelineHandle();
-
-    /**
-     * \brief Releases pipeline
-     *
-     * Decrements the use count by 1. If the use count reaches 0,
-     * any previously compiled pipeline library object may be
-     * destroyed in order to save memory.
-     */
-    void releasePipelineHandle();
-
-    /**
-     * \brief Compiles the pipeline with default arguments
-     *
-     * This is meant to be called from a worker thread in
-     * order to reduce the amount of work done on the app's
-     * main thread.
-     */
-    void compilePipeline();
-
-  private:
-
-    const DxvkDevice*               m_device;
-
-    DxvkPipelineStats*              m_stats;
-    DxvkShaderSet                   m_shaders;
-
-    DxvkPipelineBindings            m_layout;
-
-    dxvk::mutex                     m_mutex;
-    DxvkShaderPipelineLibraryHandle m_pipeline      = { VK_NULL_HANDLE, 0 };
-    uint32_t                        m_useCount      = 0u;
-    bool                            m_compiledOnce  = false;
-
-    dxvk::mutex                     m_identifierMutex;
-    DxvkShaderIdentifierSet         m_identifiers;
-
-    void destroyShaderPipelineLocked();
-
-    DxvkShaderPipelineLibraryHandle compileShaderPipelineLocked();
-
-    DxvkShaderPipelineLibraryHandle compileShaderPipeline(
-            VkPipelineCreateFlags                 flags);
-
-    VkPipeline compileVertexShaderPipeline(
-      const DxvkShaderStageInfo&          stageInfo,
-            VkPipelineCreateFlags         flags);
-
-    VkPipeline compileFragmentShaderPipeline(
-      const DxvkShaderStageInfo&          stageInfo,
-            VkPipelineCreateFlags         flags);
-
-    VkPipeline compileComputeShaderPipeline(
-      const DxvkShaderStageInfo&          stageInfo,
-            VkPipelineCreateFlags         flags);
-
-    SpirvCodeBuffer getShaderCode(
-            VkShaderStageFlagBits         stage) const;
-
-    void generateModuleIdentifierLocked(
-            VkShaderModuleIdentifierEXT*  identifier,
-      const SpirvCodeBuffer&              spirvCode);
-
-    VkShaderStageFlags getShaderStages() const;
-
-    DxvkShader* getShader(
-            VkShaderStageFlagBits         stage) const;
-
-    VkShaderModuleIdentifierEXT* getShaderIdentifier(
-            VkShaderStageFlagBits         stage);
-
-    void notifyLibraryCompile() const;
-
-    bool canUsePipelineCacheControl() const;
-
-  };
-  
 }

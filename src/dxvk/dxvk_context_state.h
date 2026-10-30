@@ -80,7 +80,6 @@ namespace dxvk {
    * \brief Context feature bits
    */
   enum class DxvkContextFeature : uint32_t {
-    TrackGraphicsPipeline,
     VariableMultisampleRate,
     IndexBufferRobustness,
     DebugUtils,

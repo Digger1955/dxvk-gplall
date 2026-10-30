@@ -344,15 +344,6 @@ namespace dxvk {
     }
 
     /**
-     * \brief Tracks a graphics pipeline
-     * \param [in] pipeline Pipeline
-     */
-    void trackGraphicsPipeline(DxvkGraphicsPipeline* pipeline) {
-      pipeline->acquirePipeline();
-      m_pipelines.push_back(pipeline);
-    }
-
-    /**
      * \brief Queues signal
      * 
      * The signal will be notified once the command
@@ -1190,8 +1181,6 @@ namespace dxvk {
     std::vector<std::pair<
       Rc<DxvkDescriptorPool>,
       Rc<DxvkDescriptorPoolSet>>> m_descriptorPools;
-
-    std::vector<DxvkGraphicsPipeline*> m_pipelines;
 
     force_inline VkCommandBuffer getCmdBuffer() const {
       // Allocation logic will always provide an execution buffer

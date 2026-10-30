@@ -5,15 +5,12 @@ namespace dxvk {
     DxvkOptions::DxvkOptions(const Config& config) {
     enableAsync           = config.getOption<bool>    ("dxvk.enableAsync",            true);
     enableDebugUtils      = config.getOption<bool>    ("dxvk.enableDebugUtils",       false);
-    enableStateCache      = config.getOption<bool>    ("dxvk.enableStateCache",       true);
     enableMemoryDefrag    = config.getOption<Tristate>("dxvk.enableMemoryDefrag",     Tristate::Auto);
     numCompilerThreads    = config.getOption<int32_t> ("dxvk.numCompilerThreads",     0);
-    enableGraphicsPipelineLibrary = config.getOption<Tristate>("dxvk.enableGraphicsPipelineLibrary", Tristate::False);
     enableDescriptorUpdateTemplates = config.getOption<bool>("dxvk.enableDescriptorUpdateTemplates", true);
     enableUnifiedImageLayout = config.getOption<bool> ("dxvk.enableUnifiedImageLayouts", true);
     enableNvRawAccessChains = config.getOption<bool>  ("dxvk.enableNvRawAccessChains", true);
     enableNvCudaInterop   = config.getOption<bool>    ("dxvk.enableNvCudaInterop",    true);
-    trackPipelineLifetime = config.getOption<Tristate>("dxvk.trackPipelineLifetime",  Tristate::Auto);
     useRawSsbo            = config.getOption<Tristate>("dxvk.useRawSsbo",             Tristate::Auto);
     hud                   = config.getOption<std::string>("dxvk.hud", "");
     tearFree              = config.getOption<Tristate>("dxvk.tearFree",               Tristate::Auto);

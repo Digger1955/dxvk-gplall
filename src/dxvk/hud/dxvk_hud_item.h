@@ -580,7 +580,6 @@ namespace dxvk::hud {
     Rc<DxvkDevice> m_device;
 
     uint64_t m_graphicsPipelines  = 0;
-    uint64_t m_graphicsLibraries  = 0;
     uint64_t m_computePipelines   = 0;
 
   };
@@ -835,17 +834,10 @@ namespace dxvk::hud {
 
     Rc<DxvkDevice> m_device;
 
-    bool m_show           = false;
-    bool m_showPercentage = false;
+    bool m_show = false;
 
-    uint64_t m_tasksDone    = 0ull;
-    uint64_t m_tasksTotal   = 0ull;
-    uint64_t m_offset       = 0ull;
-
-    dxvk::high_resolution_clock::time_point m_timeShown = dxvk::high_resolution_clock::now();
-    dxvk::high_resolution_clock::time_point m_timeDone = dxvk::high_resolution_clock::now();
-
-    uint32_t computePercentage() const;
+    dxvk::high_resolution_clock::time_point m_timeShown
+      = dxvk::high_resolution_clock::now();
 
   };
 

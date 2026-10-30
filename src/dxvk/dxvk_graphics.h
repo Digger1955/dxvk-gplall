@@ -66,34 +66,6 @@ namespace dxvk {
 
 
   /**
-   * \brief Vertex input pipeline library
-   *
-   * Creates a Vulkan pipeline object for a
-   * given vertex input state vector.
-   */
-  class DxvkGraphicsPipelineVertexInputLibrary {
-
-  public:
-
-    DxvkGraphicsPipelineVertexInputLibrary(
-            DxvkDevice*                           device,
-      const DxvkGraphicsPipelineVertexInputState& state);
-
-    ~DxvkGraphicsPipelineVertexInputLibrary();
-
-    VkPipeline getHandle() const {
-      return m_pipeline;
-    }
-
-  private:
-
-    DxvkDevice* m_device;
-    VkPipeline  m_pipeline;
-
-  };
-
-
-  /**
    * \brief Fragment output info for graphics pipelines
    *
    * Can be used to compile dedicated pipeline objects for use
@@ -124,34 +96,6 @@ namespace dxvk {
     bool eq(const DxvkGraphicsPipelineFragmentOutputState& other) const;
 
     size_t hash() const;
-  };
-
-
-  /**
-   * \brief Vertex input pipeline library
-   *
-   * Creates a Vulkan pipeline object for a
-   * given vertex input state vector.
-   */
-  class DxvkGraphicsPipelineFragmentOutputLibrary {
-
-  public:
-
-    DxvkGraphicsPipelineFragmentOutputLibrary(
-            DxvkDevice*                               device,
-      const DxvkGraphicsPipelineFragmentOutputState&  state);
-
-    ~DxvkGraphicsPipelineFragmentOutputLibrary();
-
-    VkPipeline getHandle() const {
-      return m_pipeline;
-    }
-
-  private:
-
-    DxvkDevice* m_device;
-    VkPipeline  m_pipeline;
-
   };
 
 
@@ -332,25 +276,13 @@ namespace dxvk {
     }
   };
 
-
-  /**
-   * \brief Graphics pipeline type
-   */
-  enum class DxvkGraphicsPipelineType : uint32_t {
-    BasePipeline = 0, ///< Unoptimized pipeline using graphics pipeline libraries
-    FastPipeline = 1, ///< Monolithic pipeline with less dynamic state
-  };
-
-
   /**
    * \brief Graphics pipeline handle
    */
   struct DxvkGraphicsPipelineHandle {
     VkPipeline                handle      = VK_NULL_HANDLE;
-    DxvkGraphicsPipelineType  type        = DxvkGraphicsPipelineType::FastPipeline;
     DxvkAttachmentMask        attachments = { };
   };
-
 
   /**
    * \brief Graphics pipeline instance
@@ -361,57 +293,25 @@ namespace dxvk {
   struct DxvkGraphicsPipelineInstance {
     DxvkGraphicsPipelineInstance() { }
     DxvkGraphicsPipelineInstance(
-            VkPipeline                      baseHandle_,
-            VkPipeline                      fastHandle_,
+            VkPipeline                      handle_,
             DxvkAttachmentMask              attachments_)
-    : baseHandle  (baseHandle_),
-      fastHandle  (fastHandle_),
-      isCompiling (fastHandle_ != VK_NULL_HANDLE),
+    : handle      (handle_),
+// Library Part ?
+//       isCompiling (fastHandle_ != VK_NULL_HANDLE),
       attachments (attachments_) { }
 
-    std::atomic<VkPipeline>       baseHandle  = { VK_NULL_HANDLE };
-    std::atomic<VkPipeline>       fastHandle  = { VK_NULL_HANDLE };
-    std::atomic<VkBool32>         isCompiling = { VK_FALSE };
+    VkPipeline                    handle = VK_NULL_HANDLE;
+// Library Part ?
+//    std::atomic<VkBool32>         isCompiling = { VK_FALSE };
     DxvkAttachmentMask            attachments = { };
 
     DxvkGraphicsPipelineHandle getHandle() const {
       // Find a pipeline handle to use. If no optimized pipeline has
       // been compiled yet, use the slower base pipeline instead.
       DxvkGraphicsPipelineHandle result;
-      result.handle = fastHandle.load(std::memory_order_acquire);
-      result.type = DxvkGraphicsPipelineType::FastPipeline;
+      result.handle = handle.load(std::memory_order_acquire);
       result.attachments = attachments;
-
-      if (likely(fastHandle))
-        return result;
-
-      result.handle = baseHandle.load(std::memory_order_acquire);
-      result.type = DxvkGraphicsPipelineType::BasePipeline;
       return result;
-    }
-  };
-
-
-  /**
-   * \brief Base instance key
-   *
-   * Stores the libraries and arguments used to
-   * compile a base pipeline.
-   */
-  struct DxvkGraphicsPipelineBaseInstanceKey {
-    const DxvkGraphicsPipelineVertexInputLibrary*     viLibrary = nullptr;
-    const DxvkGraphicsPipelineFragmentOutputLibrary*  foLibrary = nullptr;
-
-    bool eq(const DxvkGraphicsPipelineBaseInstanceKey& other) const {
-      return viLibrary == other.viLibrary
-          && foLibrary == other.foLibrary;
-    }
-
-    size_t hash() const {
-      DxvkHashState hash;
-      hash.add(size_t(viLibrary));
-      hash.add(size_t(foLibrary));
-      return hash;
     }
   };
 
@@ -503,9 +403,7 @@ namespace dxvk {
     DxvkGraphicsPipeline(
             DxvkDevice*                 device,
             DxvkPipelineManager*        pipeMgr,
-            DxvkGraphicsPipelineShaders shaders,
-            DxvkShaderPipelineLibrary*  vsLibrary,
-            DxvkShaderPipelineLibrary*  fsLibrary);
+            DxvkGraphicsPipelineShaders shaders);
 
     ~DxvkGraphicsPipeline();
 
@@ -582,23 +480,6 @@ namespace dxvk {
       const DxvkGraphicsPipelineStateInfo&    state);
 
     /**
-     * \brief Acquires the pipeline
-     *
-     * Increments the use count by one and prevents any Vulkan
-     * pipelines from being destroyed. Must be called before
-     * \ref getPipelineHandle or \ref compilePipeline.
-     */
-    void acquirePipeline();
-
-    /**
-     * \brief Releases the pipeline
-     *
-     * Decrements the use count by one. If the counter reaches
-     * zero, any Vulkan pipeline objects may be destroyed.
-     */
-    void releasePipeline();
-
-    /**
      * \brief Queries debug name for the pipeline
      *
      * The pipeline debug name contains the debug name of
@@ -611,18 +492,13 @@ namespace dxvk {
 
   private:
 
-    DxvkDevice*                 m_device;    
-    DxvkPipelineManager*        m_manager;
-    DxvkPipelineWorkers*        m_workers;
+    DxvkDevice*                 m_device;
     DxvkPipelineStats*          m_stats;
 
     DxvkGraphicsPipelineShaders m_shaders;
     DxvkPipelineBindings        m_layout;
     DxvkGlobalPipelineBarrier   m_barrier;
     DxvkGraphicsPipelineFlags   m_flags;
-
-    DxvkShaderPipelineLibrary*  m_vsLibrary;
-    DxvkShaderPipelineLibrary*  m_fsLibrary;
 
     uint32_t m_vsIn  = 0;
     uint32_t m_fsOut = 0;
@@ -641,46 +517,25 @@ namespace dxvk {
     DxvkPipelineVariantTable<
       DxvkGraphicsPipelineStateInfo,
       DxvkGraphicsPipelineInstance>               m_pipelines;
-    uint32_t                                      m_useCount = 0;
-
-    std::unordered_map<
-      DxvkGraphicsPipelineBaseInstanceKey,
-      VkPipeline, DxvkHash, DxvkEq>               m_basePipelines;
 
     alignas(CACHE_LINE_SIZE)
     dxvk::mutex                                   m_fastMutex;
+
     std::unordered_map<
       DxvkGraphicsPipelineFastInstanceKey,
       DxvkGraphicsPipelineFastInstanceObject,
       DxvkHash, DxvkEq> m_fastPipelines;
 
     DxvkGraphicsPipelineInstance* createInstance(
-      const DxvkGraphicsPipelineStateInfo& state,
-            bool                           doCreateBasePipeline);
+      const DxvkGraphicsPipelineStateInfo& state);
     
     DxvkGraphicsPipelineInstance* findInstance(
       const DxvkGraphicsPipelineStateInfo& state);
 
-    bool canCreateBasePipeline(
-      const DxvkGraphicsPipelineStateInfo& state) const;
-
-    VkPipeline getBasePipeline(
-      const DxvkGraphicsPipelineStateInfo& state);
-
-    VkPipeline createBasePipeline(
-      const DxvkGraphicsPipelineBaseInstanceKey& key) const;
-    
-    VkPipeline getOptimizedPipeline(
-      const DxvkGraphicsPipelineStateInfo& state);
-
-    std::pair<VkResult, VkPipeline> createOptimizedPipeline(
+    std::pair<VkResult, VkPipeline> createPipeline(
       const DxvkGraphicsPipelineFastInstanceKey& key) const;
 
-    void destroyBasePipelines();
-
-    void destroyOptimizedPipelines();
-
-    void destroyVulkanPipeline(
+    void destroyPipeline(
             VkPipeline                     pipeline) const;
     
     SpirvCodeBuffer getShaderCode(

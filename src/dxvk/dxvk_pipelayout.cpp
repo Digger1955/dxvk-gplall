@@ -126,6 +126,8 @@ namespace dxvk {
         setLayouts[i] = m_setLayouts[i]->getSetLayout();
     }
 
+/* - Another option - if (false)
+
     // If we're creating a graphics pipeline layout, and if pipeline libraries are
     // supported by the implementation, create a set layout that is compatible with
     // pipeline libraries.
@@ -147,6 +149,8 @@ namespace dxvk {
       if (vk->vkCreatePipelineLayout(vk->device(), &layoutInfo, nullptr, &m_layoutIndependent))
         throw DxvkError("DxvkPipelineLayout: Failed to create independent pipeline layout");
     }
+
+*/
 
     // If all descriptor set layouts are defined, create a pipeline layout object
     // that is optimal for monolithic pipelines and discards unused push constants.

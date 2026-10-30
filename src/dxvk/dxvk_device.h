@@ -263,28 +263,10 @@ namespace dxvk {
     bool isUnifiedMemoryArchitecture() const;
 
     /**
-     * \brief Checks whether graphics pipeline libraries can be used
-     * \returns \c true if all required features are supported.
-     */
-    bool canUseGraphicsPipelineLibrary() const;
-
-    /**
-     * \brief Checks whether pipeline creation cache control can be used
-     * \returns \c true if all required features are supported.
-     */
-    bool canUsePipelineCacheControl() const;
-
-    /**
      * \brief Checks whether sample locations can be used
      * \returns \c true if sample locations are supported for any of the given sample counts
      */
     bool canUseSampleLocations(VkSampleCountFlags samples) const;
-
-    /**
-     * \brief Checks whether pipelines should be tracked
-     * \returns \c true if pipelines need to be tracked
-     */
-    bool mustTrackPipelineLifetime() const;
 
     /**
      * \brief Queries default framebuffer size
@@ -526,13 +508,6 @@ namespace dxvk {
      * \param [in] shader Newly compiled shader
      */
     void registerShader(
-      const Rc<DxvkShader>&         shader);
-    
-    /**
-     * \brief Prioritizes compilation of a given shader
-     * \param [in] shader Shader to start compiling
-     */
-    void requestCompileShader(
       const Rc<DxvkShader>&         shader);
 
     /**

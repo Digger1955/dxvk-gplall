@@ -15,18 +15,11 @@ namespace dxvk {
     /// Enable debug utils
     bool enableDebugUtils = false;
 
-    /// Enable state cache
-    bool enableStateCache = true;
-
     /// Enable memory defragmentation
     Tristate enableMemoryDefrag = Tristate::Auto;
 
-    /// Number of compiler threads
-    /// when using the state cache
+    /// Number of compiler threads for synchronous pipeline compilation
     int32_t numCompilerThreads = 0;
-
-    /// Enable graphics pipeline library
-    Tristate enableGraphicsPipelineLibrary = Tristate::False;
 
     /// Enable unified image layout path
     bool enableUnifiedImageLayout = true;
@@ -36,9 +29,6 @@ namespace dxvk {
 
     /// Enables CUDA interop extensions if available
     bool enableNvCudaInterop = true;
-
-    /// Enables pipeline lifetime tracking
-    Tristate trackPipelineLifetime = Tristate::Auto;
 
     /// Enable async pipelines
     bool enableAsync = true;
