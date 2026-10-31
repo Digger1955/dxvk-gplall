@@ -479,11 +479,6 @@ namespace dxvk {
   uint32_t DxvkDevice::getCurrentFrameId() const {
     return m_statCounters.getCtr(DxvkStatCounter::QueuePresentCount);
   }
-  
-  
-  void DxvkDevice::registerShader(const Rc<DxvkShader>& shader) {
-    m_objects.pipelineManager().registerShader(shader);
-  }
 
 
   Rc<DxvkLatencyTracker> DxvkDevice::createLatencyTracker(

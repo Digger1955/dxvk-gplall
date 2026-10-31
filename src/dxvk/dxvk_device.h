@@ -504,13 +504,6 @@ namespace dxvk {
     }
 
     /**
-     * \brief Registers a shader
-     * \param [in] shader Newly compiled shader
-     */
-    void registerShader(
-      const Rc<DxvkShader>&         shader);
-
-    /**
      * \brief Creates latency tracker for a presenter
      *
      * The specicfic implementation and parameters used

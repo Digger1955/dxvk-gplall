@@ -82,8 +82,6 @@ namespace dxvk {
       pDevice->InitShaderIcb(this, icb.size, icb.data);
     }
 
-    pDevice->GetDXVKDevice()->registerShader(m_shader);
-
     // Write back binding mask
     auto bindings = module.bindings();
 
