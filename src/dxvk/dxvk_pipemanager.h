@@ -174,6 +174,14 @@ namespace dxvk {
     DxvkPipelineCount getPipelineCount() const;
 
     /**
+     * \brief Checks whether async compiler is busy
+     * \returns \c true if shaders are being compiled
+     */
+    bool isCompilingShaders() const {
+      return m_workers.isBusy();
+    }
+
+    /**
      * \brief Stops async compiler threads
      */
     void stopWorkerThreads();
