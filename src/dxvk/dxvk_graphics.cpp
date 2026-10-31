@@ -574,30 +574,14 @@ namespace dxvk {
   DxvkGraphicsPipelineFragmentShaderState::DxvkGraphicsPipelineFragmentShaderState(
     const DxvkDevice*                     device,
     const DxvkGraphicsPipelineStateInfo&  state) {
-    dsInfo.depthTestEnable       = state.ds.depthTestEnable();
-    dsInfo.depthWriteEnable      = state.ds.depthWriteEnable();
+    dsInfo.depthTestEnable       = state.ds.enableDepthTest();
+    dsInfo.depthWriteEnable      = state.ds.enableDepthWrite();
     dsInfo.depthCompareOp        = state.ds.depthCompareOp();
-    dsInfo.depthBoundsTestEnable = state.ds.depthBoundsTestEnable();
-    dsInfo.stencilTestEnable     = state.ds.stencilTestEnable();
+    dsInfo.depthBoundsTestEnable = VK_FALSE;
+    dsInfo.stencilTestEnable     = state.ds.enableStencilTest();
 
-    if (state.ds.depthBoundsTestEnable()) {
-      dsInfo.minDepthBounds = state.ds.minDepthBounds();
-      dsInfo.maxDepthBounds = state.ds.maxDepthBounds();
-    }
-
-    dsInfo.front.failOp      = state.ds.front.failOp();
-    dsInfo.front.passOp      = state.ds.front.passOp();
-    dsInfo.front.depthFailOp = state.ds.front.depthFailOp();
-    dsInfo.front.compareOp   = state.ds.front.compareOp();
-    dsInfo.front.compareMask = state.ds.front.compareMask();
-    dsInfo.front.writeMask   = state.ds.front.writeMask();
-
-    dsInfo.back.failOp       = state.ds.back.failOp();
-    dsInfo.back.passOp       = state.ds.back.passOp();
-    dsInfo.back.depthFailOp  = state.ds.back.depthFailOp();
-    dsInfo.back.compareOp    = state.ds.back.compareOp();
-    dsInfo.back.compareMask  = state.ds.back.compareMask();
-    dsInfo.back.writeMask    = state.ds.back.writeMask();
+    dsInfo.front = state.dsFront.state(true);
+    dsInfo.back  = state.dsBack.state(true);
   }
 
 
@@ -1032,7 +1016,10 @@ DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
 
   DxvkGraphicsPipelineInstance* DxvkGraphicsPipeline::createInstance(
     const DxvkGraphicsPipelineStateInfo& state) {
-    VkPipeline pipeline = this->createPipeline(state);
+    auto [vr, pipeline] = this->createPipeline(state);
+
+    if (vr != VK_SUCCESS || pipeline == VK_NULL_HANDLE)
+      return nullptr;
 
     m_stats->numGraphicsPipelines += 1;
     return m_pipelines.add(state, pipeline, computeAttachmentMask(state));
