@@ -48,6 +48,9 @@ namespace dxvk {
     /**
      * \brief Compiles an optimized compute pipeline
      *
+     * The common case is asynchronous. If the single slot is already
+     * occupied, we fall back to synchronous compilation instead of
+     * dropping the task or blocking forever in a spin loop.
      * \param [in] pipeline Compute pipeline
      * \param [in] state Pipeline state
      */
@@ -58,6 +61,9 @@ namespace dxvk {
     /**
      * \brief Compiles an optimized graphics pipeline
      *
+     * The common case is asynchronous. If the single slot is already
+     * occupied, we fall back to synchronous compilation instead of
+     * dropping the task or blocking forever in a spin loop.
      * \param [in] pipeline Compute pipeline
      * \param [in] state Pipeline state
      */
@@ -88,16 +94,15 @@ namespace dxvk {
       DxvkGraphicsPipelineStateInfo graphicsState;
     };
 
-    std::atomic<uint64_t>             m_pendingTasks = { 0ull };
+    std::atomic<uint64_t> m_pendingTasks = { 0ull };
+    std::atomic<bool>     m_workersRunning = { false };
+    std::atomic<bool>     m_hasTask = { false };
 
-    dxvk::mutex                       m_queueLock;
-    dxvk::condition_variable          m_queueCond;
+    dxvk::thread          m_worker;
+    uint32_t              m_workerCount = 1;
 
-    std::queue<PipelineEntry>         m_queuedPipelines;
-
-    uint32_t                          m_workerCount = 0;
-    bool                              m_workersRunning = false;
-    std::vector<dxvk::thread>         m_workers;
+    // Single pending task slot. No queue, no mutex, no condition variable.
+    std::aligned_storage_t<sizeof(PipelineEntry), alignof(PipelineEntry)> m_taskStorage;
 
     void startWorkers();
 
