@@ -966,11 +966,20 @@ namespace dxvk {
 
 
 
-  DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
-    for (const auto& instance : m_pipelines)
-// ? library -  instance->getHandle()
-      this->destroyPipeline(instance.handle);
+DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
+  // Destroy optimized/fast pipelines
+  for (auto& entry : m_fastPipelines) {
+    if (entry.second.pipeline != VK_NULL_HANDLE)
+      this->destroyPipeline(entry.second.pipeline);
   }
+  m_fastPipelines.clear();
+
+  // Destroy regular pipeline variants through DxvkPipelineVariantTable API
+  m_pipelines.forEach([this](const DxvkGraphicsPipelineInstance& instance) {
+    if (instance.handle != VK_NULL_HANDLE)
+      this->destroyPipeline(instance.handle);
+  });
+}
   
   
   DxvkGlobalPipelineBarrier DxvkGraphicsPipeline::getGlobalBarrier(
@@ -984,8 +993,6 @@ namespace dxvk {
 
     return barrier;
   }
-
-//Library Part ?
 
   DxvkGraphicsPipelineHandle DxvkGraphicsPipeline::getPipelineHandle(
         const DxvkGraphicsPipelineStateInfo& state,
@@ -1003,15 +1010,6 @@ namespace dxvk {
 
       if (!instance)
         instance = this->createInstance(state);
-/*
-// Original with Library Part
-      if (!instance) {
-        // Keep pipeline object locked, at worst we're going to stall
-        // a state cache worker and the current thread needs priority.
-        bool canCreateBasePipeline = this->canCreateBasePipeline(state);
-        instance = this->createInstance(state, canCreateBasePipeline);
-      }
-*/
     }
 
     return instance->getHandle();
