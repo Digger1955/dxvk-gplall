@@ -533,6 +533,9 @@ namespace dxvk {
       const DxvkGraphicsPipelineStateInfo& state);
 
     std::pair<VkResult, VkPipeline> createPipeline(
+      const DxvkGraphicsPipelineStateInfo& state) const;
+
+    std::pair<VkResult, VkPipeline> createPipeline(
       const DxvkGraphicsPipelineFastInstanceKey& key) const;
 
     void destroyPipeline(

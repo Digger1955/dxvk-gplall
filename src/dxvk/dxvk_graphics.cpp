@@ -574,6 +574,30 @@ namespace dxvk {
   DxvkGraphicsPipelineFragmentShaderState::DxvkGraphicsPipelineFragmentShaderState(
     const DxvkDevice*                     device,
     const DxvkGraphicsPipelineStateInfo&  state) {
+    dsInfo.depthTestEnable       = state.ds.depthTestEnable();
+    dsInfo.depthWriteEnable      = state.ds.depthWriteEnable();
+    dsInfo.depthCompareOp        = state.ds.depthCompareOp();
+    dsInfo.depthBoundsTestEnable = state.ds.depthBoundsTestEnable();
+    dsInfo.stencilTestEnable     = state.ds.stencilTestEnable();
+
+    if (state.ds.depthBoundsTestEnable()) {
+      dsInfo.minDepthBounds = state.ds.minDepthBounds();
+      dsInfo.maxDepthBounds = state.ds.maxDepthBounds();
+    }
+
+    dsInfo.front.failOp      = state.ds.front.failOp();
+    dsInfo.front.passOp      = state.ds.front.passOp();
+    dsInfo.front.depthFailOp = state.ds.front.depthFailOp();
+    dsInfo.front.compareOp   = state.ds.front.compareOp();
+    dsInfo.front.compareMask = state.ds.front.compareMask();
+    dsInfo.front.writeMask   = state.ds.front.writeMask();
+
+    dsInfo.back.failOp       = state.ds.back.failOp();
+    dsInfo.back.passOp       = state.ds.back.passOp();
+    dsInfo.back.depthFailOp  = state.ds.back.depthFailOp();
+    dsInfo.back.compareOp    = state.ds.back.compareOp();
+    dsInfo.back.compareMask  = state.ds.back.compareMask();
+    dsInfo.back.writeMask    = state.ds.back.writeMask();
   }
 
 
@@ -585,6 +609,11 @@ namespace dxvk {
     if (eq && dsInfo.depthTestEnable) {
       eq = dsInfo.depthWriteEnable == other.dsInfo.depthWriteEnable
         && dsInfo.depthCompareOp   == other.dsInfo.depthCompareOp;
+    }
+
+    if (eq && dsInfo.depthBoundsTestEnable) {
+      eq = dsInfo.minDepthBounds == other.dsInfo.minDepthBounds
+        && dsInfo.maxDepthBounds == other.dsInfo.maxDepthBounds;
     }
 
     if (eq && dsInfo.stencilTestEnable) {
@@ -615,6 +644,11 @@ namespace dxvk {
     if (dsInfo.depthTestEnable) {
       hash.add(dsInfo.depthWriteEnable);
       hash.add(dsInfo.depthCompareOp);
+    }
+
+    if (dsInfo.depthBoundsTestEnable) {
+      hash.add(bit::cast<uint32_t>(dsInfo.minDepthBounds));
+      hash.add(bit::cast<uint32_t>(dsInfo.maxDepthBounds));
     }
 
     if (dsInfo.stencilTestEnable) {
@@ -1012,6 +1046,11 @@ namespace dxvk {
     return m_pipelines.find(state);
   }
 
+  std::pair<VkResult, VkPipeline> DxvkGraphicsPipeline::createPipeline(
+    const DxvkGraphicsPipelineStateInfo& state) const {
+    DxvkGraphicsPipelineFastInstanceKey key(m_device, m_shaders, state, m_flags, m_specConstantMask);
+    return this->createPipeline(key);
+  }
 
   std::pair<VkResult, VkPipeline> DxvkGraphicsPipeline::createPipeline(
     const DxvkGraphicsPipelineFastInstanceKey& key) const {
