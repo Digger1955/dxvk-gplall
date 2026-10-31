@@ -3615,9 +3615,6 @@ namespace dxvk {
       auto buffer = pShaderModule->GetIcb();
       auto shader = pShaderModule->GetShader();
 
-      if (unlikely(shader->needsLibraryCompile()))
-        m_device->requestCompileShader(shader);
-
       // If this shader activates any bindings that have not yet been applied,
       // mark the shader stage as dirty so it gets applied on the next draw.
       // Don't apply it right away since any dirty bindings are likely redundant.
