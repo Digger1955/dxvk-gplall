@@ -994,7 +994,7 @@ namespace dxvk {
 
       if (!instance){
         if (async && m_manager->m_compiler != nullptr)
-          m_manager->m_compiler->slotCompilation(this, state);
+          m_manager->m_compiler->queueCompilation(this, state);
         else {
           instance = this->createInstance(state);
         }
