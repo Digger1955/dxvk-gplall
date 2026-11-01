@@ -59,6 +59,10 @@ namespace dxvk {
           m_compilerQueue.pop();
         }
       }
+
+      if (entry.pipeline != nullptr) {
+          entry.pipeline->compilePipeline(entry.state);
+      }
     }
   }
 
