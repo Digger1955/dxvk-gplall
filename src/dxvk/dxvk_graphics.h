@@ -472,7 +472,7 @@ namespace dxvk {
      * and stores the result for future use.
      * \param [in] state Pipeline state vector
      */
-    void compilePipeline(
+    bool compilePipeline(
       const DxvkGraphicsPipelineStateInfo&    state);
 
     /**
@@ -489,8 +489,8 @@ namespace dxvk {
   private:
 
     DxvkDevice*                 m_device;
+    DxvkPipelineManager*        m_manager;
     DxvkPipelineStats*          m_stats;
-
     DxvkGraphicsPipelineShaders m_shaders;
     DxvkPipelineBindings        m_layout;
     DxvkGlobalPipelineBarrier   m_barrier;
@@ -505,17 +505,13 @@ namespace dxvk {
 
     alignas(CACHE_LINE_SIZE)
     dxvk::mutex                                   m_mutex;
-    alignas(CACHE_LINE_SIZE)
-    dxvk::mutex                                   m_asyncMutex;
 
-    bool                                          m_async = false;
+    alignas(CACHE_LINE_SIZE)
+    dxvk::mutex                                   m_mutex2;
 
     DxvkPipelineVariantTable<
       DxvkGraphicsPipelineStateInfo,
       DxvkGraphicsPipelineInstance>               m_pipelines;
-
-    alignas(CACHE_LINE_SIZE)
-    dxvk::mutex                                   m_fastMutex;
 
     std::unordered_map<
       DxvkGraphicsPipelineFastInstanceKey,

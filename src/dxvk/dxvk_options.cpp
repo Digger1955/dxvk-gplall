@@ -6,7 +6,6 @@ namespace dxvk {
     enableAsync           = config.getOption<bool>    ("dxvk.enableAsync",            true);
     enableDebugUtils      = config.getOption<bool>    ("dxvk.enableDebugUtils",       false);
     enableMemoryDefrag    = config.getOption<Tristate>("dxvk.enableMemoryDefrag",     Tristate::Auto);
-    numCompilerThreads    = config.getOption<int32_t> ("dxvk.numCompilerThreads",     0);
     enableDescriptorUpdateTemplates = config.getOption<bool>("dxvk.enableDescriptorUpdateTemplates", true);
     enableUnifiedImageLayout = config.getOption<bool> ("dxvk.enableUnifiedImageLayouts", true);
     enableNvRawAccessChains = config.getOption<bool>  ("dxvk.enableNvRawAccessChains", true);

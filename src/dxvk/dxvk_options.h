@@ -18,9 +18,6 @@ namespace dxvk {
     /// Enable memory defragmentation
     Tristate enableMemoryDefrag = Tristate::Auto;
 
-    /// Number of compiler threads for synchronous pipeline compilation
-    int32_t numCompilerThreads = 0;
-
     /// Enable unified image layout path
     bool enableUnifiedImageLayout = true;
 
@@ -30,7 +27,7 @@ namespace dxvk {
     /// Enables CUDA interop extensions if available
     bool enableNvCudaInterop = true;
 
-    /// Enable async pipelines
+    /// Enable asynchronous pipeline compilation
     bool enableAsync = true;
 
     /// Shader-related options

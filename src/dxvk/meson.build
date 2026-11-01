@@ -99,6 +99,7 @@ dxvk_src = [
   'dxvk_meta_mipgen.cpp',
   'dxvk_meta_resolve.cpp',
   'dxvk_options.cpp',
+  'dxvk_pipecompiler.cpp',
   'dxvk_pipelayout.cpp',
   'dxvk_pipemanager.cpp',
   'dxvk_platform_exts.cpp',

@@ -6,6 +6,7 @@
 
 #include "dxvk_compute.h"
 #include "dxvk_graphics.h"
+#include "dxvk_pipecompiler.h"
 
 namespace dxvk {
 
@@ -95,7 +96,7 @@ namespace dxvk {
 
     std::queue<PipelineEntry>         m_queuedPipelines;
 
-    uint32_t                          m_workerCount = 0;
+    uint32_t                          m_workerCount = 2;
     bool                              m_workersRunning = false;
     std::vector<dxvk::thread>         m_workers;
 
@@ -190,6 +191,7 @@ namespace dxvk {
     
     DxvkDevice*               m_device;
     DxvkPipelineWorkers       m_workers;
+    Rc<DxvkPipelineCompiler>  m_compiler;
     DxvkPipelineStats         m_stats;
 
     dxvk::mutex m_mutex;

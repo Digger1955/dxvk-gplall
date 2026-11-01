@@ -909,6 +909,7 @@ namespace dxvk {
           DxvkPipelineManager*        pipeMgr,
           DxvkGraphicsPipelineShaders shaders)
   : m_device        (device),
+    m_manager       (pipeMgr),
     m_stats         (&pipeMgr->m_stats),
     m_shaders       (std::move(shaders)),
     m_layout        (pipeMgr, buildPipelineLayout()),
@@ -988,28 +989,36 @@ namespace dxvk {
         return DxvkGraphicsPipelineHandle();
 
       // Prevent other threads from adding new instances and check again
-      std::lock_guard<dxvk::mutex> lock(m_mutex);
+      // std::lock_guard<dxvk::mutex> lock(m_mutex); - Async 
       instance = this->findInstance(state);
 
-      if (!instance)
-        instance = this->createInstance(state);
+      if (!instance){
+        if (async && m_manager->m_compiler != nullptr)
+          m_manager->m_compiler->slotCompilation(this, state);
+        else {
+          instance = this->createInstance(state);
+        }
+      }
     }
+
+    if (!instance)
+      return DxvkGraphicsPipelineHandle();
 
     return instance->getHandle();
   }
 
-  void DxvkGraphicsPipeline::compilePipeline(
+  bool DxvkGraphicsPipeline::compilePipeline(
     const DxvkGraphicsPipelineStateInfo& state) {
     // Exit early if the state vector is invalid
     if (!this->validatePipelineState(state, false))
-      return;
+      return false;
 
     // Keep the object locked while compiling a pipeline since compiling
     // similar pipelines concurrently is fragile on some drivers
     std::lock_guard<dxvk::mutex> lock(m_mutex);
 
-    if (!this->findInstance(state))
-      this->createInstance(state);
+    return (this->findInstance(state) == nullptr) &&
+           (this->createInstance(state) != nullptr);
   }
 
 
@@ -1020,6 +1029,7 @@ namespace dxvk {
     if (vr != VK_SUCCESS || pipeline == VK_NULL_HANDLE)
       return nullptr;
 
+    std::lock_guard<dxvk::mutex> lock(m_mutex2);
     m_stats->numGraphicsPipelines += 1;
     return m_pipelines.add(state, pipeline, computeAttachmentMask(state));
   }
@@ -1027,6 +1037,8 @@ namespace dxvk {
 
   DxvkGraphicsPipelineInstance* DxvkGraphicsPipeline::findInstance(
     const DxvkGraphicsPipelineStateInfo& state) {
+
+    std::lock_guard<dxvk::mutex> lock(m_mutex2);
     return m_pipelines.find(state);
   }
 

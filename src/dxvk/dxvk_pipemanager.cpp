@@ -8,16 +8,10 @@ namespace dxvk {
   
   DxvkPipelineWorkers::DxvkPipelineWorkers(
           DxvkDevice*                     device) {
-    // Use a reasonably large number of threads for compiling, but
-    // leave some cores to the application to avoid excessive stutter
-    uint32_t numCpuCores = dxvk::thread::hardware_concurrency();
-    m_workerCount = ((std::max(1u, numCpuCores) - 1) * 5) / 7;
 
-    if (m_workerCount <  1) m_workerCount =  1;
-    if (m_workerCount > 32) m_workerCount = 32;
+    m_workerCount=2;
 
-    if (device->config().numCompilerThreads > 0)
-      m_workerCount = device->config().numCompilerThreads;
+    Logger::info(str::format("DXVK: Using ", m_workerCount, " compiler threads"));
   }
 
 
@@ -86,7 +80,6 @@ namespace dxvk {
     if (!m_workersRunning) {
       m_workersRunning = true;
 
-      Logger::info(str::format("DXVK: Using ", m_workerCount, " compiler threads"));
       m_workers.resize(m_workerCount);
 
       for (auto& worker : m_workers) {
@@ -135,6 +128,8 @@ namespace dxvk {
           DxvkDevice*         device)
   : m_device    (device),
     m_workers   (device) {
+    if (device->config().enableAsync)
+      m_compiler = new DxvkPipelineCompiler(device);
 
   }
 
@@ -190,6 +185,8 @@ namespace dxvk {
 
 
   void DxvkPipelineManager::stopWorkerThreads() {
+    if (m_compiler != nullptr)
+      m_compiler->stopWorkerThreads();
     m_workers.stopWorkers();
   }
 
