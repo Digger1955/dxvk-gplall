@@ -141,7 +141,6 @@ namespace dxvk {
       return m_code.decompress();
     }
 
-// Library Parts ?
 
     /**
      * \brief Patches code using given info
@@ -339,7 +338,6 @@ namespace dxvk {
 
   };
 
-// Library Parts ?
 
   /**
    * \brief Shader set
@@ -358,8 +356,6 @@ namespace dxvk {
     DxvkShader* cs = nullptr;
   };
 
-
-// Library Parts ?
 
   /**
    * \brief Shader identifer set

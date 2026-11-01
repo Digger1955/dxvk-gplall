@@ -6441,14 +6441,6 @@ namespace dxvk {
       m_lastBoundGraphicsPipeline = pipelineInfo.handle;
     }
 
-/*
-
-    // Independent pipeline layout affects all resource updates
-    if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline)
-      m_flags.set(DxvkContextFlag::GpIndependentSets);
-
-*/
-
     if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
       // Some state is aways dynamic when used
       m_flags.set(DxvkContextFlag::GpDynamicRasterizerState,
@@ -6458,35 +6450,6 @@ namespace dxvk {
       m_flags.set(m_state.gp.state.useDynamicBlendConstants()
         ? DxvkContextFlag::GpDynamicBlendConstants
         : DxvkContextFlag::GpDirtyBlendConstants);
-
-/*
-
-      if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline) {
-        // For pipelines created from graphics pipeline libraries, we need to
-        // apply a bunch of dynamic state that is otherwise static or unused
-        m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
-                    DxvkContextFlag::GpDynamicDepthTest,
-                    DxvkContextFlag::GpDynamicStencilTest);
-
-        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
-          m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
-
-        if (m_device->features().core.features.depthBounds)
-          m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
-
-        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
-         && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask) {
-          m_flags.set(m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading)
-            ? DxvkContextFlag::GpDynamicMultisampleState
-            : DxvkContextFlag::GpDirtyMultisampleState);
-        }
-
-        if (m_device->canUseSampleLocations(0u))
-          m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
-      } 
-
-*/
-
 
         // Conditionally set up dynamic state based on pipeline state.
         // Must match DxvkGraphicsPipelineDynamicState behaviour exactly.

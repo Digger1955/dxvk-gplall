@@ -296,13 +296,9 @@ namespace dxvk {
             VkPipeline                      handle_,
             DxvkAttachmentMask              attachments_)
     : handle      (handle_),
-// Library Part ?
-//       isCompiling (fastHandle_ != VK_NULL_HANDLE),
       attachments (attachments_) { }
 
     VkPipeline                    handle = VK_NULL_HANDLE;
-// Library Part ?
-//    std::atomic<VkBool32>         isCompiling = { VK_FALSE };
     DxvkAttachmentMask            attachments = { };
 
     DxvkGraphicsPipelineHandle getHandle() const {

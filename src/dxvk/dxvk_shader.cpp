@@ -169,7 +169,6 @@ namespace dxvk {
     
   }
 
-// Library Parts ?
 
   SpirvCodeBuffer DxvkShader::getCode(
     const DxvkShaderBindingMap*       bindings,

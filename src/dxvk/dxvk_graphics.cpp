@@ -949,23 +949,22 @@ namespace dxvk {
   }
 
 
+  DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
+    // Destroy optimized/fast pipelines
+    for (auto& entry : m_fastPipelines) {
+      if (entry.second.pipeline != VK_NULL_HANDLE)
+        this->destroyPipeline(entry.second.pipeline);
+    }
+    m_fastPipelines.clear();
 
-DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
-  // Destroy optimized/fast pipelines
-  for (auto& entry : m_fastPipelines) {
-    if (entry.second.pipeline != VK_NULL_HANDLE)
-      this->destroyPipeline(entry.second.pipeline);
+    // Destroy regular pipeline variants through DxvkPipelineVariantTable API
+    m_pipelines.forEach([this](const DxvkGraphicsPipelineInstance& instance) {
+      if (instance.handle != VK_NULL_HANDLE)
+        this->destroyPipeline(instance.handle);
+    });
   }
-  m_fastPipelines.clear();
 
-  // Destroy regular pipeline variants through DxvkPipelineVariantTable API
-  m_pipelines.forEach([this](const DxvkGraphicsPipelineInstance& instance) {
-    if (instance.handle != VK_NULL_HANDLE)
-      this->destroyPipeline(instance.handle);
-  });
-}
-  
-  
+
   DxvkGlobalPipelineBarrier DxvkGraphicsPipeline::getGlobalBarrier(
     const DxvkGraphicsPipelineStateInfo&    state) const {
     DxvkGlobalPipelineBarrier barrier = m_barrier;
