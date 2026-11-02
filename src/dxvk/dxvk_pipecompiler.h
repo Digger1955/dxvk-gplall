@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
+#include <vector>
 
 #include "../util/thread.h"
 #include "dxvk_include.h"
@@ -18,6 +19,8 @@ namespace dxvk {
    * \brief Pipeline compiler
    *
    * Asynchronous pipeline compiler
+   * Uses a queue and drains multiple tasks in one lock hold,
+   * which reduces contention and improves throughput.
    */
   class DxvkPipelineCompiler : public RcObject {
 
