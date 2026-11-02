@@ -11,7 +11,7 @@ namespace dxvk {
 
     m_workerCount=2;
 
-    Logger::info(str::format("DXVK: Using ", m_workerCount, " threads for synchonous pipeline compilation."));
+    Logger::info(str::format("DXVK: Using ", m_workerCount, " threads for synchronous pipeline compilation."));
   }
 
 

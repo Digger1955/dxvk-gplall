@@ -13,17 +13,17 @@ namespace dxvk {
       uint32_t coreCount = dxvk::thread::hardware_concurrency();
 
       // Use ((number of CPU logical threads/2) - 2) CPU logical threads.
-      // Less stuttering when compiling shaders while playing,
+      // Less stuttering when compiling pipelines at runtime,
       // in comparison to using all CPU logical threads.
       coreCount = (coreCount/2) - 2;
 
-      // Minimum amount of threads for asynchonous pipeline compilation is 2.
-      // Maximum amount of threads for asynchonous pipeline compilation is 8.
+      // Minimum amount of threads for asynchronous pipeline compilation is 2.
+      // Maximum amount of threads for asynchronous pipeline compilation is 8.
       coreCount = std::clamp(coreCount, 2u, 8u);
 
       uint32_t numWorkers = coreCount;
 
-    Logger::info(str::format("DXVK: Using ", numWorkers, " threads for asynchonous pipeline compilation."));
+    Logger::info(str::format("DXVK: Using ", numWorkers, " threads for asynchronous pipeline compilation."));
 
     // Start the compiler threads
     m_compilerThreads.resize(numWorkers);
