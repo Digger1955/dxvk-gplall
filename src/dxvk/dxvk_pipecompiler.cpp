@@ -10,16 +10,14 @@ namespace dxvk {
       // Determine number of available CPU logical threads, and clamp to a useful
       // range. DXVK is not tested on extremely high core counts, and
       // parallelism may be limited past a certain point.
+      // Since application thread is always used by the asynchronous pipeline compilation,
+      // there is no reason to limit the amount of used threads - 
+      // by doing that we are lowering load on application thread and potentially reduce stutters.
       uint32_t coreCount = dxvk::thread::hardware_concurrency();
 
-      // Use half CPU logical threads (number of CPU logical threads/2).
-      // Less stuttering when compiling pipelines at runtime,
-      // in comparison to using all CPU logical threads.
-      coreCount = coreCount/2;
-
       // Minimum amount of threads for asynchronous pipeline compilation is 2.
-      // Maximum amount of threads for asynchronous pipeline compilation is 8.
-      coreCount = std::clamp(coreCount, 2u, 8u);
+      // Maximum amount of threads for asynchronous pipeline compilation is 64.
+      coreCount = std::clamp(coreCount, 2u, 64u);
 
       uint32_t numWorkers = coreCount;
 
@@ -76,7 +74,7 @@ namespace dxvk {
     env::setThreadName("dxvk-pcompiler");
 
     std::vector<PipelineEntry> tasks;
-    const size_t MAX_BATCH_PER_THREAD = 64;
+    const size_t MAX_BATCH_PER_THREAD = 2;
     tasks.reserve(MAX_BATCH_PER_THREAD);
 
     while (true) {
@@ -106,7 +104,10 @@ namespace dxvk {
           targetBatchSize = currentQueueSize / m_compilerThreads.size();
           
           // Clamp to keep lock contention low during massive loading sequences
-          // Clamp boundaries. Minimum bulk chunk is 1, Max is 64.
+          // Clamp boundaries. Minimum bulk chunk is 1, Max is 2.
+          // It is more efficient to give each thread a small part of queue, 
+          // than to load a bigger part of queue, into less amount of threads, 
+          // in order to avoid stuttering.
           targetBatchSize = std::clamp(targetBatchSize, size_t(1), MAX_BATCH_PER_THREAD);
         }
         // ----------------------------------
