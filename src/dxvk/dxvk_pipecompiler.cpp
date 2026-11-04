@@ -69,7 +69,7 @@ namespace dxvk {
         return;
 
     // Constructs the PipelineEntry directly inside the queue container slot.
-    m_queuedPipelines.emplace(PipelineEntry{ pipeline, state });
+    m_compilerQueue.emplace(PipelineEntry{ pipeline, state });
     }
 
     // Wake up one thread, let him take his part of queue,
