@@ -27,8 +27,8 @@ namespace dxvk {
     m_compilerThreads.resize(numWorkers);
 
     for (uint32_t i = 0; i < numWorkers; i++) {
-      m_compilerThreads.at(i) = dxvk::thread(
-        [this] { this->runCompilerThread(); });
+      m_compilerThreads.at(i) = dxvk::thread([this] { this->runCompilerThread(); });
+      m_compilerThreads.at(i).set_priority(ThreadPriority::Lowest); // Keeps background work from choking the game
     }
   }
 
