@@ -23,13 +23,20 @@ namespace dxvk {
 
     Logger::info(str::format("DXVK: Using ", numWorkers, " threads for asynchronous pipeline compilation."));
 
-    // Start the compiler threads
+    // Resize the vector safely first while no child threads are active
     m_compilerThreads.resize(numWorkers);
 
+    // Spawn the threads completely
     for (uint32_t i = 0; i < numWorkers; i++) {
       m_compilerThreads.at(i) = dxvk::thread([this] { this->runCompilerThread(); });
-      m_compilerThreads.at(i).set_priority(ThreadPriority::Lowest); // Keeps background work from choking the game
     }
+
+    // Set priorities only after all handles are registered in the vector
+    // Keeps background work from choking the application
+    for (uint32_t i = 0; i < numWorkers; i++) {
+      m_compilerThreads.at(i).set_priority(ThreadPriority::Lowest); 
+    }
+
   }
 
 
@@ -61,8 +68,8 @@ namespace dxvk {
       if (m_compilerStop.load(std::memory_order_acquire))
         return;
 
-      m_compilerQueue.emplace(PipelineEntry{ pipeline, state });
-    }
+    // Constructs the PipelineEntry directly inside the queue container slot.
+    m_queuedPipelines.emplace(PipelineEntry{ pipeline, state });
 
     // Wake up one thread, let him take his part of queue,
     // then, if queue is not empty - wake up another (any) thread.

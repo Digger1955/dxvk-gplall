@@ -76,7 +76,7 @@ namespace dxvk {
      * \brief Stops all worker threads
      *
      * Stops threads and waits for their current work
-     * to complete. Queued work will be discarded.
+     * to complete. Queued work is completed before return..
      */
     void stopWorkers();
 

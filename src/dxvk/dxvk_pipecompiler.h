@@ -19,8 +19,7 @@ namespace dxvk {
    * \brief Pipeline compiler
    *
    * Asynchronous pipeline compiler
-   * Uses a queue and drains multiple tasks in one lock hold,
-   * which reduces contention and improves throughput.
+   * Uses a queue and batches work between threads as much as possible
    */
   class DxvkPipelineCompiler : public RcObject {
 
