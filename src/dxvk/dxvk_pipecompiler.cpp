@@ -12,10 +12,10 @@ namespace dxvk {
       // parallelism may be limited past a certain point.
       uint32_t coreCount = dxvk::thread::hardware_concurrency();
 
-      // Use ((number of CPU logical threads/2) - 2) CPU logical threads.
+      // Use half CPU logical threads (number of CPU logical threads/2).
       // Less stuttering when compiling pipelines at runtime,
       // in comparison to using all CPU logical threads.
-      coreCount = (coreCount/2) - 2;
+      coreCount = coreCount/2;
 
       // Minimum amount of threads for asynchronous pipeline compilation is 2.
       // Maximum amount of threads for asynchronous pipeline compilation is 8.
@@ -66,6 +66,8 @@ namespace dxvk {
       m_compilerQueue.emplace(PipelineEntry{ pipeline, state });
     }
 
+    // Wake up one thread, let him take his part of queue,
+    // then, if queue is not empty - wake up another (any) thread.
     m_compilerCond.notify_one();
   }
 
@@ -73,8 +75,9 @@ namespace dxvk {
   void DxvkPipelineCompiler::runCompilerThread() {
     env::setThreadName("dxvk-pcompiler");
 
-      std::vector<PipelineEntry> tasks;
-      tasks.reserve(1024);
+    std::vector<PipelineEntry> tasks;
+    const size_t MAX_BATCH_PER_THREAD = 64;
+    tasks.reserve(MAX_BATCH_PER_THREAD);
 
     while (true) {
       {
@@ -89,14 +92,40 @@ namespace dxvk {
         if (m_compilerStop.load(std::memory_order_acquire) && m_compilerQueue.empty())
           break;
 
-        // Drain the queue to minimize lock time and reduce contention.
-        while (!m_compilerQueue.empty()) {
+        // --- DYNAMIC BATCH CALCULATION ---
+        size_t currentQueueSize = m_compilerQueue.size();
+
+        // Default fallback for small bursts
+        // Spreads shader compilation load evenly
+        size_t targetBatchSize = 1; 
+
+        if (currentQueueSize > 1) {
+          // Distribute work proportionally among available threads
+          // IMPORTANT: does not guarantee that each worker gets an equal share. 
+          // It only computes a chunk size based on the queue size at the moment a worker wakes and locks.
+          targetBatchSize = currentQueueSize / m_compilerThreads.size();
+          
+          // Clamp to keep lock contention low during massive loading sequences
+          // Clamp boundaries. Minimum bulk chunk is 1, Max is 64.
+          targetBatchSize = std::clamp(targetBatchSize, size_t(1), MAX_BATCH_PER_THREAD);
+        }
+        // ----------------------------------
+
+        // Pull the dynamically calculated number of tasks from the queue
+        while (!m_compilerQueue.empty() && tasks.size() < targetBatchSize) {
           tasks.push_back(std::move(m_compilerQueue.front()));
           m_compilerQueue.pop();
         }
-      }
 
-      // Compile outside the lock.
+        // Notify the next thread WHILE HOLDING the lock. 
+        // This ensures the OS readies Thread 2 immediately, preventing Thread 1 
+        // from looping around and stealing the work again.
+        if (!m_compilerQueue.empty()) {
+          m_compilerCond.notify_one();
+        }
+      } // Lock is cleanly released here
+
+      // Compile safely outside the mutex lock
       for (auto& entry : tasks) {
         if (entry.pipeline != nullptr)
           entry.pipeline->compilePipeline(entry.state);
