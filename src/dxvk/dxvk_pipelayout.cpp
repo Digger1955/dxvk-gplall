@@ -151,7 +151,6 @@ namespace dxvk {
   DxvkPipelineLayout::~DxvkPipelineLayout() {
     auto vk = m_device->vkd();
 
-    vk->vkDestroyPipelineLayout(vk->device(), m_layoutIndependent, nullptr);
     vk->vkDestroyPipelineLayout(vk->device(), m_layoutComplete, nullptr);
   }
 

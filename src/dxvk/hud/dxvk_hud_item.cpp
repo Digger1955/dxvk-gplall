@@ -301,7 +301,7 @@ namespace dxvk::hud {
     ctx.cmd->cmdPipelineBarrier(DxvkCmdBuffer::InitBuffer, &depInfo);
 
     // Process contents of the buffer and write out text draws
-    VkPipelineLayout pipelineLayout = m_computePipelineLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_computePipelineLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_computePipelineLayout->getDescriptorSetLayout(0));
 
     auto bufferLayout = computeBufferLayout();
@@ -387,7 +387,7 @@ namespace dxvk::hud {
     ctx.cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, getPipeline(renderer, key));
 
-    auto pipelineLayout = m_gfxPipelineLayout->getPipelineLayout(false);
+    auto pipelineLayout = m_gfxPipelineLayout->getPipelineLayout();
     auto set = ctx.descriptorPool->alloc(m_gfxPipelineLayout->getDescriptorSetLayout(0));
 
     VkDescriptorBufferInfo bufferDescriptor = m_gpuBuffer->getDescriptor(0,
@@ -1008,7 +1008,7 @@ namespace dxvk::hud {
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.background);
 
     // Bind resources
-    VkPipelineLayout pipelineLayout = m_pipelineLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_pipelineLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_pipelineLayout->getDescriptorSetLayout(0));
 
     VkDescriptorBufferInfo drawDescriptor = { };

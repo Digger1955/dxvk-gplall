@@ -356,7 +356,7 @@ namespace dxvk {
     // Create a descriptor set pointing to the view
     VkBufferView viewObject = bufferView->handle();
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     VkWriteDescriptorSet descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -810,7 +810,7 @@ namespace dxvk {
 
     auto pipeInfo = m_common->metaCopy().getCopyFormattedBufferPipeline();
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkWriteDescriptorSet, 2> descriptorWrites;
@@ -1405,7 +1405,7 @@ namespace dxvk {
       mipGenerator.getSrcViewType(), imageView->info().format,
       VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT, resolveMode);
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
 
     for (uint32_t i = 0; i < mipGenerator.getPassCount(); i++) {
       // Width, height and layer count for the current pass
@@ -3551,7 +3551,7 @@ namespace dxvk {
       srcView->image()->info().sampleCount,
       dstView->image()->info().sampleCount, resolveMode);
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
 
     m_cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeInfo.pipeline);
@@ -4021,7 +4021,7 @@ namespace dxvk {
     DxvkMetaCopyPipeline pipeline = m_common->metaCopy().getCopyBufferToImagePipeline(
       image->info().format, bufferFormat, imageSubresource.aspectMask);
 
-    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout();
 
     VkWriteDescriptorSet descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
     descriptorWrite.dstSet = m_descriptorPool->alloc(pipeline.layout->getDescriptorSetLayout(0));
@@ -4290,7 +4290,7 @@ namespace dxvk {
       stencilDescriptor.imageLayout = imageLayout;
     }
 
-    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout();
     VkDescriptorSet set = m_descriptorPool->alloc(pipeline.layout->getDescriptorSetLayout(0));
 
     std::array<VkWriteDescriptorSet, 3> descriptorWrites = {{
@@ -4525,7 +4525,7 @@ namespace dxvk {
       imageView->type(), lookupFormatInfo(imageView->info().format)->flags);
 
     // Create a descriptor set pointing to the view
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
     
     VkDescriptorImageInfo viewInfo;
@@ -4778,7 +4778,7 @@ namespace dxvk {
       views.srcImageView->info().viewType, viewFormats.dstFormat, dstImage->info().sampleCount);
 
     // Create and initialize descriptor set
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkDescriptorImageInfo, 2> descriptorImages = {{
@@ -5349,7 +5349,7 @@ namespace dxvk {
       dstFormat, srcImage->info().sampleCount, depthMode, stencilMode);
 
     // Create and initialize descriptor set
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkDescriptorImageInfo, 2> descriptorImages = {{
@@ -6861,7 +6861,7 @@ namespace dxvk {
         dirtySetMask &= (~1u) << setIndex;
 
         m_cmd->cmdBindDescriptorSets(DxvkCmdBuffer::ExecBuffer,
-          BindPoint, layout->getLayout()->getPipelineLayout(independentSets),
+          BindPoint, layout->getLayout()->getPipelineLayout(),
           firstSet, setIndex - firstSet + 1, &sets[firstSet],
           0, nullptr);
       }
@@ -7553,7 +7553,7 @@ namespace dxvk {
       return;
 
     m_cmd->cmdPushConstants(DxvkCmdBuffer::ExecBuffer,
-      bindings->getLayout()->getPipelineLayout(independentSets),
+      bindings->getLayout()->getPipelineLayout(),
       pushConstRange.stageFlags,
       pushConstRange.offset,
       pushConstRange.size,

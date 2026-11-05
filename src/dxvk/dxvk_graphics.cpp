@@ -1071,7 +1071,7 @@ namespace dxvk {
     info.pInputAssemblyState      = &key.viState.iaInfo;
     info.pRasterizationState      = &key.prState.rsInfo;
     info.pDynamicState            = &key.dyState.dyInfo;
-    info.layout                   = m_layout.getLayout()->getPipelineLayout(false);
+    info.layout                   = m_layout.getLayout()->getPipelineLayout();
     info.basePipelineIndex        = -1;
 
     if (key.prState.tsInfo.patchControlPoints)
