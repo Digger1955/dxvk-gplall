@@ -6599,8 +6599,12 @@ namespace dxvk {
     if (unlikely(layout->getDescriptorCount() > m_descriptorInfos.size()))
       this->resizeDescriptorArrays(layout->getDescriptorCount());
 
+/*  Part of code that was used by GPL
+
     bool independentSets = BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
                         && m_flags.test(DxvkContextFlag::GpIndependentSets);
+
+*/
 
     uint32_t dirtySetMask = BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
       ? m_descriptorState.getDirtyGraphicsSets()
