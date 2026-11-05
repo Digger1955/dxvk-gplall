@@ -147,10 +147,6 @@ namespace dxvk {
     void destroyPipeline(
             VkPipeline                    pipeline);
 
-    void logPipelineState(
-            LogLevel                      level,
-      const DxvkComputePipelineStateInfo& state) const;
-
     std::string createDebugName() const;
 
   };

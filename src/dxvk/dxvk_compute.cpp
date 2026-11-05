@@ -95,7 +95,6 @@ namespace dxvk {
 
     if (vr != VK_SUCCESS) {
       Logger::err(str::format("DxvkComputePipeline: Failed to compile pipeline: ", vr));
-      this->logPipelineState(LogLevel::Error, state);
       return VK_NULL_HANDLE;
     }
 
@@ -107,29 +106,6 @@ namespace dxvk {
     auto vk = m_device->vkd();
 
     vk->vkDestroyPipeline(vk->device(), pipeline, nullptr);
-  }
-  
-  
-  void DxvkComputePipeline::logPipelineState(
-          LogLevel                      level,
-    const DxvkComputePipelineStateInfo& state) const {
-    std::stringstream sstr;
-    sstr << "  cs  : " << m_shaders.cs->debugName() << std::endl;
-
-    bool hasSpecConstants = false;
-
-    for (uint32_t i = 0; i < MaxNumSpecConstants; i++) {
-      if (state.sc.specConstants[i]) {
-        if (!hasSpecConstants) {
-          sstr << "Specialization constants:" << std::endl;
-          hasSpecConstants = true;
-        }
-
-        sstr << "  " << i << ": 0x" << std::hex << std::setw(8) << std::setfill('0') << state.sc.specConstants[i] << std::dec << std::endl;
-      }
-    }
-
-    Logger::log(level, sstr.str());
   }
 
 

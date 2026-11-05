@@ -548,10 +548,6 @@ namespace dxvk {
 
     DxvkPipelineLayoutBuilder buildPipelineLayout() const;
 
-    void logPipelineState(
-            LogLevel                       level,
-      const DxvkGraphicsPipelineStateInfo& state) const;
-
     std::string createDebugName() const;
 
   };
