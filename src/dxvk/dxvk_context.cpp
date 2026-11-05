@@ -7561,11 +7561,15 @@ namespace dxvk {
   }
 
   bool DxvkContext::checkAsyncCompilationCompat() const {
+    const uint32_t frameCountThreshold = uint32_t(m_device->config().asyncCompileThreshold);
+
     for (uint32_t i = 0; i < m_state.om.framebufferInfo.numAttachments(); i++) {
       const auto& attachment = m_state.om.framebufferInfo.getAttachment(i);
-      if (!attachment.view->getRtBindingAsyncCompilationCompat())
+
+      if (!attachment.view->getRtBindingAsyncCompilationCompat(frameCountThreshold))
         return false;
     }
+
     return true;
   }
 

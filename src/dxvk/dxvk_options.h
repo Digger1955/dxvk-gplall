@@ -30,6 +30,12 @@ namespace dxvk {
     /// Enable asynchronous pipeline compilation
     bool enableAsync = true;
 
+    /// Controls the amount of pipelines, which will be compiled asynchronously.
+    /// Value specifies required number of previous frames, 
+    /// in which there were draw calls to the render target, 
+    /// to trigger asynchronous pipeline compilation.
+    int32_t asyncCompileThreshold = 2;
+
     /// Shader-related options
     Tristate useRawSsbo = Tristate::Auto;
 
