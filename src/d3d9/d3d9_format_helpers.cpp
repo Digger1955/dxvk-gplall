@@ -99,7 +99,7 @@ namespace dxvk {
     bufferViewInfo.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
     auto tmpBufferView = srcSlice.buffer()->createView(bufferViewInfo);
 
-    VkPipelineLayout pipelineLayout = m_layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_layout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_layout->getDescriptorSetLayout(0));
 
     VkDescriptorImageInfo imageDescriptor = { };
