@@ -447,12 +447,6 @@ namespace dxvk {
 
     m_descriptorPools.clear();
 
-    // Release pipelines
-    for (auto pipeline : m_pipelines)
-      pipeline->releasePipeline();
-
-    m_pipelines.clear();
-
     m_waitSemaphores.clear();
     m_signalSemaphores.clear();
 

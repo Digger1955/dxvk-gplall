@@ -219,45 +219,6 @@ namespace dxvk {
   }
 
 
-  DxvkGraphicsPipelineVertexInputLibrary::DxvkGraphicsPipelineVertexInputLibrary(
-          DxvkDevice*                           device,
-    const DxvkGraphicsPipelineVertexInputState& state)
-  : m_device(device) {
-    auto vk = m_device->vkd();
-
-    VkDynamicState dynamicState = VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE;
-    VkPipelineDynamicStateCreateInfo dyInfo = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-
-    if (state.viUseDynamicVertexStrides) {
-      dyInfo.dynamicStateCount = 1;
-      dyInfo.pDynamicStates = &dynamicState;
-    }
-
-    VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT };
-    libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT;
-
-    VkGraphicsPipelineCreateInfo info = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &libInfo };
-    info.flags                = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
-    info.pVertexInputState    = &state.viInfo;
-    info.pInputAssemblyState  = &state.iaInfo;
-    info.pDynamicState        = &dyInfo;
-    info.basePipelineIndex    = -1;
-
-    VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(),
-      VK_NULL_HANDLE, 1, &info, nullptr, &m_pipeline);
-
-    if (vr)
-      throw DxvkError("Failed to create vertex input pipeline library");
-  }
-
-
-  DxvkGraphicsPipelineVertexInputLibrary::~DxvkGraphicsPipelineVertexInputLibrary() {
-    auto vk = m_device->vkd();
-
-    vk->vkDestroyPipeline(vk->device(), m_pipeline, nullptr);
-  }
-
-
   DxvkGraphicsPipelineFragmentOutputState::DxvkGraphicsPipelineFragmentOutputState() {
 
   }
@@ -461,97 +422,8 @@ namespace dxvk {
   }
 
 
-  DxvkGraphicsPipelineFragmentOutputLibrary::DxvkGraphicsPipelineFragmentOutputLibrary(
-          DxvkDevice*                               device,
-    const DxvkGraphicsPipelineFragmentOutputState&  state)
-  : m_device(device) {
-    auto vk = m_device->vkd();
-
-    small_vector<VkDynamicState, 8> dynamicStates = { };
-
-    bool hasDynamicMultisampleState = state.msInfo.sampleShadingEnable
-      && m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
-      && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask;
-
-    bool hasDynamicAlphaToCoverage = hasDynamicMultisampleState && state.cbUseDynamicAlphaToCoverage
-      && device->features().extExtendedDynamicState3.extendedDynamicState3AlphaToCoverageEnable;
-
-    bool hasDynamicSampleLocations = m_device->canUseSampleLocations(0u);
-
-    if (hasDynamicMultisampleState) {
-      dynamicStates.push_back(VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT);
-      dynamicStates.push_back(VK_DYNAMIC_STATE_SAMPLE_MASK_EXT);
-    }
-
-    if (hasDynamicAlphaToCoverage)
-      dynamicStates.push_back(VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT);
-
-    if (hasDynamicSampleLocations) {
-      dynamicStates.push_back(VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT);
-      dynamicStates.push_back(VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT);
-    }
-
-    if (state.cbUseDynamicBlendConstants)
-      dynamicStates.push_back(VK_DYNAMIC_STATE_BLEND_CONSTANTS);
-
-    VkPipelineDynamicStateCreateInfo dyInfo = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-
-    if (!dynamicStates.empty()) {
-      dyInfo.dynamicStateCount = dynamicStates.size();
-      dyInfo.pDynamicStates = dynamicStates.data();
-    }
-
-    VkPipelineCreateFlags flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR;
-    if (state.feedbackLoop & VK_IMAGE_ASPECT_COLOR_BIT)
-      flags |= VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-
-    if (state.feedbackLoop & VK_IMAGE_ASPECT_DEPTH_BIT)
-      flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-
-    // Fix up multisample state based on dynamic state. Needed to
-    // silence validation errors in case we hit the full EDS3 path.
-    VkPipelineMultisampleStateCreateInfo msInfo = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-    msInfo.sampleShadingEnable = state.msInfo.sampleShadingEnable;
-    msInfo.minSampleShading = state.msInfo.minSampleShading;
-
-    if (!hasDynamicMultisampleState) {
-      msInfo.rasterizationSamples = state.msInfo.rasterizationSamples;
-      msInfo.pSampleMask = state.msInfo.pSampleMask;
-    }
-
-    if (!hasDynamicAlphaToCoverage)
-      msInfo.alphaToCoverageEnable = state.msInfo.alphaToCoverageEnable;
-
-    // pNext is non-const for some reason, but this is only an input
-    // structure, so we should be able to safely use const_cast.
-    VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT };
-    libInfo.pNext             = const_cast<VkPipelineRenderingCreateInfo*>(&state.rtInfo);
-    libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
-
-    VkGraphicsPipelineCreateInfo info = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &libInfo };
-    info.flags                = flags;
-    info.pColorBlendState     = &state.cbInfo;
-    info.pMultisampleState    = &msInfo;
-    info.pDynamicState        = &dyInfo;
-    info.basePipelineIndex    = -1;
-
-    VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(),
-      VK_NULL_HANDLE, 1, &info, nullptr, &m_pipeline);
-
-    if (vr)
-      throw DxvkError("Failed to create vertex input pipeline library");
-  }
-
-
-  DxvkGraphicsPipelineFragmentOutputLibrary::~DxvkGraphicsPipelineFragmentOutputLibrary() {
-    auto vk = m_device->vkd();
-
-    vk->vkDestroyPipeline(vk->device(), m_pipeline, nullptr);
-  }
-
-
   DxvkGraphicsPipelinePreRasterizationState::DxvkGraphicsPipelinePreRasterizationState() {
-    
+
   }
 
 
@@ -702,6 +574,14 @@ namespace dxvk {
   DxvkGraphicsPipelineFragmentShaderState::DxvkGraphicsPipelineFragmentShaderState(
     const DxvkDevice*                     device,
     const DxvkGraphicsPipelineStateInfo&  state) {
+    dsInfo.depthTestEnable       = state.ds.enableDepthTest();
+    dsInfo.depthWriteEnable      = state.ds.enableDepthWrite();
+    dsInfo.depthCompareOp        = state.ds.depthCompareOp();
+    dsInfo.depthBoundsTestEnable = VK_FALSE;
+    dsInfo.stencilTestEnable     = state.ds.enableStencilTest();
+
+    dsInfo.front = state.dsFront.state(true);
+    dsInfo.back  = state.dsBack.state(true);
   }
 
 
@@ -713,6 +593,11 @@ namespace dxvk {
     if (eq && dsInfo.depthTestEnable) {
       eq = dsInfo.depthWriteEnable == other.dsInfo.depthWriteEnable
         && dsInfo.depthCompareOp   == other.dsInfo.depthCompareOp;
+    }
+
+    if (eq && dsInfo.depthBoundsTestEnable) {
+      eq = dsInfo.minDepthBounds == other.dsInfo.minDepthBounds
+        && dsInfo.maxDepthBounds == other.dsInfo.maxDepthBounds;
     }
 
     if (eq && dsInfo.stencilTestEnable) {
@@ -743,6 +628,11 @@ namespace dxvk {
     if (dsInfo.depthTestEnable) {
       hash.add(dsInfo.depthWriteEnable);
       hash.add(dsInfo.depthCompareOp);
+    }
+
+    if (dsInfo.depthBoundsTestEnable) {
+      hash.add(bit::cast<uint32_t>(dsInfo.minDepthBounds));
+      hash.add(bit::cast<uint32_t>(dsInfo.maxDepthBounds));
     }
 
     if (dsInfo.stencilTestEnable) {
@@ -1017,18 +907,13 @@ namespace dxvk {
   DxvkGraphicsPipeline::DxvkGraphicsPipeline(
           DxvkDevice*                 device,
           DxvkPipelineManager*        pipeMgr,
-          DxvkGraphicsPipelineShaders shaders,
-          DxvkShaderPipelineLibrary*  vsLibrary,
-          DxvkShaderPipelineLibrary*  fsLibrary)
+          DxvkGraphicsPipelineShaders shaders)
   : m_device        (device),
     m_manager       (pipeMgr),
-    m_workers       (&pipeMgr->m_workers),
     m_stats         (&pipeMgr->m_stats),
     m_shaders       (std::move(shaders)),
     m_layout        (pipeMgr, buildPipelineLayout()),
     m_barrier       (m_layout.getGlobalBarrier()),
-    m_vsLibrary     (vsLibrary),
-    m_fsLibrary     (fsLibrary),
     m_debugName     (createDebugName()) {
     m_vsIn  = m_shaders.vs ? m_shaders.vs->info().inputMask  : 0;
     m_fsOut = m_shaders.fs ? m_shaders.fs->info().outputMask : 0;
@@ -1063,14 +948,24 @@ namespace dxvk {
         m_flags.set(DxvkGraphicsPipelineFlag::HasSampleMaskExport);
     }
   }
-  
-  
+
+
   DxvkGraphicsPipeline::~DxvkGraphicsPipeline() {
-    this->destroyBasePipelines();
-    this->destroyOptimizedPipelines();
+    // Destroy optimized/fast pipelines
+    for (auto& entry : m_fastPipelines) {
+      if (entry.second.pipeline != VK_NULL_HANDLE)
+        this->destroyPipeline(entry.second.pipeline);
+    }
+    m_fastPipelines.clear();
+
+    // Destroy regular pipeline variants through DxvkPipelineVariantTable API
+    m_pipelines.forEach([this](const DxvkGraphicsPipelineInstance& instance) {
+      if (instance.handle != VK_NULL_HANDLE)
+        this->destroyPipeline(instance.handle);
+    });
   }
-  
-  
+
+
   DxvkGlobalPipelineBarrier DxvkGraphicsPipeline::getGlobalBarrier(
     const DxvkGraphicsPipelineStateInfo&    state) const {
     DxvkGlobalPipelineBarrier barrier = m_barrier;
@@ -1083,7 +978,6 @@ namespace dxvk {
     return barrier;
   }
 
-
   DxvkGraphicsPipelineHandle DxvkGraphicsPipeline::getPipelineHandle(
         const DxvkGraphicsPipelineStateInfo& state,
         const bool                           async) {
@@ -1094,348 +988,67 @@ namespace dxvk {
       if (!this->validatePipelineState(state, true))
         return DxvkGraphicsPipelineHandle();
 
-      const bool useAsync = async && m_device->config().enableAsync && env::getEnvVar("DXVK_ASYNC") != "0";
-
-    // Prevent other threads from adding new instances and check again
-      std::unique_lock<dxvk::mutex> lock(useAsync ? m_asyncMutex : m_mutex);
+      // Prevent other threads from adding new instances and check again
+      // std::lock_guard<dxvk::mutex> lock(m_mutex); - Async 
       instance = this->findInstance(state);
 
-       if (!instance) {
-        if (useAsync) {
-          m_async = true;
-          lock.unlock();
-
-          m_workers->compileGraphicsPipeline(this, state, DxvkPipelinePriority::High);
-
-          return DxvkGraphicsPipelineHandle();
+      if (!instance){
+        if (async && m_manager->m_compiler != nullptr)
+          m_manager->m_compiler->queueCompilation(this, state);
+        else {
+          instance = this->createInstance(state);
         }
-
-
-        // Keep pipeline object locked, at worst we're going to stall
-        // a state cache worker and the current thread needs priority.
-        bool canCreateBasePipeline = this->canCreateBasePipeline(state);
-        instance = this->createInstance(state, canCreateBasePipeline);
-
-        // Unlock here since we may dispatch the pipeline to a worker,
-        // which will then acquire it to increment the use counter.
-        lock.unlock();
-
-        // If necessary, compile an optimized pipeline variant
-        if (!instance->fastHandle.load())
-          m_workers->compileGraphicsPipeline(this, state, DxvkPipelinePriority::Low);
-
       }
     }
+
+    if (!instance)
+      return DxvkGraphicsPipelineHandle();
 
     return instance->getHandle();
   }
 
-  void DxvkGraphicsPipeline::compilePipeline(
+  bool DxvkGraphicsPipeline::compilePipeline(
     const DxvkGraphicsPipelineStateInfo& state) {
-    if (m_device->config().enableGraphicsPipelineLibrary == Tristate::True)
-      return;
+    // Exit early if the state vector is invalid
+    if (!this->validatePipelineState(state, false))
+      return false;
 
-    // Try to find an existing instance that contains a base pipeline
-    DxvkGraphicsPipelineInstance* instance = this->findInstance(state);
+    // Keep the object locked while compiling a pipeline since compiling
+    // similar pipelines concurrently is fragile on some drivers
+    std::lock_guard<dxvk::mutex> lock(m_mutex);
 
-    if (!instance) {
-      // Exit early if the state vector is invalid
-      if (!this->validatePipelineState(state, false))
-        return;
-
-      // Do not compile if this pipeline can be fast linked. This essentially
-      // disables the state cache for pipelines that do not benefit from it.
-      if (!m_async && this->canCreateBasePipeline(state))
-        return;
-
-      // Prevent other threads from adding new instances and check again
-      std::unique_lock<dxvk::mutex> lock(m_mutex);
-      instance = this->findInstance(state);
-
-      if (!instance)
-        instance = this->createInstance(state, false);
-    }
-
-    // Exit if another thread is already compiling
-    // an optimized version of this pipeline
-    if (instance->isCompiling.load()
-     || instance->isCompiling.exchange(VK_TRUE, std::memory_order_acquire))
-      return;
-
-    VkPipeline pipeline = this->getOptimizedPipeline(state);
-    instance->fastHandle.store(pipeline, std::memory_order_release);
-
-    // Log pipeline state on error
-    if (!pipeline) {
-      this->logPipelineState(LogLevel::Error, state);
-      return;
-    }
-  }
-
-
-  void DxvkGraphicsPipeline::acquirePipeline() {
-    if (!m_device->mustTrackPipelineLifetime())
-      return;
-
-    // We need to lock here to make sure that any ongoing pipeline
-    // destruction finishes before the calling thread can access the
-    // pipeline, and that no pipelines get destroyed afterwards.
-    std::unique_lock<dxvk::mutex> lock(m_mutex);
-    m_useCount += 1;
-  }
-
-
-  void DxvkGraphicsPipeline::releasePipeline() {
-    if (!m_device->mustTrackPipelineLifetime())
-      return;
-
-    std::unique_lock<dxvk::mutex> lock(m_mutex);
-
-    if (!(--m_useCount)) {
-      // Don't destroy base pipelines if that's all we're going to
-      // use, since that would pretty much ruin the experience.
-      if (m_device->config().enableGraphicsPipelineLibrary == Tristate::True)
-        return;
-
-      // Exit early if there's nothing to do
-      if (m_basePipelines.empty())
-        return;
-
-      // Remove any base pipeline references, but
-      // keep the optimized pipelines around.
-      m_pipelines.forEach([] (DxvkGraphicsPipelineInstance& e) {
-        e.baseHandle.store(VK_NULL_HANDLE);
-      });
-
-      // Destroy the actual Vulkan pipelines
-      this->destroyBasePipelines();
-    }
+    return (this->findInstance(state) == nullptr) &&
+           (this->createInstance(state) != nullptr);
   }
 
 
   DxvkGraphicsPipelineInstance* DxvkGraphicsPipeline::createInstance(
-    const DxvkGraphicsPipelineStateInfo& state,
-          bool                           doCreateBasePipeline) {
-    VkPipeline baseHandle = VK_NULL_HANDLE;
-    VkPipeline fastHandle = VK_NULL_HANDLE;
+    const DxvkGraphicsPipelineStateInfo& state) {
+    auto [vr, pipeline] = this->createPipeline(state);
 
-    if (doCreateBasePipeline)
-      baseHandle = this->getBasePipeline(state);
+    if (vr != VK_SUCCESS || pipeline == VK_NULL_HANDLE)
+      return nullptr;
 
-    // Fast-linking may fail in some situations
-    if (!baseHandle)
-      fastHandle = this->getOptimizedPipeline(state);
-
-    // Log pipeline state if requested, or on failure
-    if (!fastHandle && !baseHandle)
-      this->logPipelineState(LogLevel::Error, state);
-
+    std::lock_guard<dxvk::mutex> lock(m_mutex2);
     m_stats->numGraphicsPipelines += 1;
-    return m_pipelines.add(state, baseHandle, fastHandle, computeAttachmentMask(state));
+    return m_pipelines.add(state, pipeline, computeAttachmentMask(state));
   }
-  
-  
+
+
   DxvkGraphicsPipelineInstance* DxvkGraphicsPipeline::findInstance(
     const DxvkGraphicsPipelineStateInfo& state) {
+
+    std::lock_guard<dxvk::mutex> lock(m_mutex2);
     return m_pipelines.find(state);
   }
-  
-  
-  bool DxvkGraphicsPipeline::canCreateBasePipeline(
+
+  std::pair<VkResult, VkPipeline> DxvkGraphicsPipeline::createPipeline(
     const DxvkGraphicsPipelineStateInfo& state) const {
-    if (!m_vsLibrary || !m_fsLibrary)
-      return false;
-
-    // We do not implement setting certain rarely used render
-    // states dynamically since they are generally not used
-    bool isLineRendering = DxvkGraphicsPipelinePreRasterizationState::isLineRendering(m_shaders, state);
-
-    if (state.rs.polygonMode() != VK_POLYGON_MODE_FILL
-     || state.rs.conservativeMode() != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT
-     || (state.rs.lineMode() != VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT && isLineRendering))
-      return false;
-
-    // Depth clip is assumed to be enabled. If the driver does not
-    // support dynamic depth clip, we'd have to late-compile anyway
-    // unless the pipeline is used multiple times.
-    if (!m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable
-     && !state.rs.depthClipEnable())
-      return false;
-
-    // If the vertex shader uses any input locations not provided by
-    // the input layout, we need to patch the shader.
-    uint32_t vsInputMask = m_shaders.vs->info().inputMask;
-    uint32_t ilAttributeMask = 0u;
-
-    for (uint32_t i = 0; i < state.il.attributeCount(); i++)
-      ilAttributeMask |= 1u << state.ilAttributes[i].location();
-
-    if ((vsInputMask & ilAttributeMask) != vsInputMask)
-      return false;
-
-    if (m_shaders.gs != nullptr) {
-      // If the geometry shader's input topology is not compatible with
-      // the topology set to the pipeline, we need to patch the GS.
-      VkPrimitiveTopology iaTopology = determinePreGsTopology(m_shaders, state);
-      VkPrimitiveTopology gsTopology = m_shaders.gs->info().inputTopology;
-
-      if (determineGsInputTopology(gsTopology, iaTopology) != gsTopology)
-        return false;
-    }
-
-    if (m_shaders.tcs != nullptr) {
-      // If tessellation shaders are present, the input patch
-      // vertex count must match the shader's definition.
-      if (m_shaders.tcs->info().patchVertexCount != state.ia.patchVertexCount())
-        return false;
-    }
-
-    if (m_shaders.fs != nullptr) {
-      // If the fragment shader has inputs not produced by the last
-      // pre-rasterization stage, we need to patch the fragment shader
-      uint32_t fsIoMask = m_shaders.fs->info().inputMask;
-      uint32_t vsIoMask = m_shaders.vs->info().outputMask;
-
-      if (m_shaders.gs != nullptr)
-        vsIoMask = m_shaders.gs->info().outputMask;
-      else if (m_shaders.tes != nullptr)
-        vsIoMask = m_shaders.tes->info().outputMask;
-
-      if ((vsIoMask & fsIoMask) != fsIoMask)
-        return false;
-
-      // Dual-source blending requires patching the fragment shader
-      if (state.useDualSourceBlending())
-        return false;
-
-      // Flat shading requires patching the fragment shader
-      if (state.rs.flatShading() && m_shaders.fs->info().flatShadingInputs)
-        return false;
-
-      // If dynamic multisample state is not supported and sample shading
-      // is enabled, the library is compiled with a sample count of 1.
-      if (m_shaders.fs->flags().test(DxvkShaderFlag::HasSampleRateShading)) {
-        bool canUseDynamicMultisampleState =
-          m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples &&
-          m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask;
-
-        bool canUseDynamicAlphaToCoverage = canUseDynamicMultisampleState &&
-          m_device->features().extExtendedDynamicState3.extendedDynamicState3AlphaToCoverageEnable;
-
-        if (!canUseDynamicMultisampleState
-         && (state.ms.sampleCount() != VK_SAMPLE_COUNT_1_BIT
-          || state.ms.sampleMask() == 0))
-          return false;
-
-        if (!canUseDynamicAlphaToCoverage
-         && (state.ms.enableAlphaToCoverage())
-         && !m_shaders.fs->flags().test(DxvkShaderFlag::ExportsSampleMask))
-          return false;
-      }
-    }
-
-    // Remapping fragment shader outputs would require spec constants
-    for (uint32_t i = 0; i < MaxNumRenderTargets; i++) {
-      if ((m_fsOut & (1u << i)) && state.writesRenderTarget(i)
-       && !util::isIdentityMapping(state.omSwizzle[i].mapping()))
-        return false;
-    }
-
-    return true;
+    DxvkGraphicsPipelineFastInstanceKey key(m_device, m_shaders, state, m_flags, m_specConstantMask);
+    return this->createPipeline(key);
   }
 
-
-  VkPipeline DxvkGraphicsPipeline::getBasePipeline(
-    const DxvkGraphicsPipelineStateInfo& state) {
-    DxvkGraphicsPipelineVertexInputState    viState(m_device, state, m_shaders);
-    DxvkGraphicsPipelineFragmentOutputState foState(m_device, state, m_shaders);
-
-    DxvkGraphicsPipelineBaseInstanceKey key;
-    key.viLibrary = m_manager->createVertexInputLibrary(viState);
-    key.foLibrary = m_manager->createFragmentOutputLibrary(foState);
-
-    auto entry = m_basePipelines.find(key);
-    if (entry != m_basePipelines.end())
-      return entry->second;
-
-    VkPipeline handle = createBasePipeline(key);
-    m_basePipelines.insert({ key, handle });
-    return handle;
-  }
-
-
-  VkPipeline DxvkGraphicsPipeline::createBasePipeline(
-    const DxvkGraphicsPipelineBaseInstanceKey& key) const {
-    auto vk = m_device->vkd();
-
-    DxvkShaderPipelineLibraryHandle vs = m_vsLibrary->acquirePipelineHandle();
-    DxvkShaderPipelineLibraryHandle fs = m_fsLibrary->acquirePipelineHandle();
-
-    std::array<VkPipeline, 4> libraries = {{
-      key.viLibrary->getHandle(), vs.handle, fs.handle,
-      key.foLibrary->getHandle(),
-    }};
-
-    VkPipelineLibraryCreateInfoKHR libInfo = { VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR };
-    libInfo.libraryCount    = libraries.size();
-    libInfo.pLibraries      = libraries.data();
-
-    VkGraphicsPipelineCreateInfo info = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &libInfo };
-    info.flags              = vs.linkFlags | fs.linkFlags;
-    info.layout             = m_layout.getLayout()->getPipelineLayout(true);
-    info.basePipelineIndex  = -1;
-
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
-
-    if (vr && vr != VK_PIPELINE_COMPILE_REQUIRED_EXT)
-      Logger::err(str::format("DxvkGraphicsPipeline: Failed to create base pipeline: ", vr));
-
-    return pipeline;
-  }
-
-
-  VkPipeline DxvkGraphicsPipeline::getOptimizedPipeline(
-    const DxvkGraphicsPipelineStateInfo& state) {
-    DxvkGraphicsPipelineFastInstanceKey key(m_device,
-      m_shaders, state, m_flags, m_specConstantMask);
-
-    // Only need to hold the lock to look up or create the instance object.
-    std::unique_lock lock(m_fastMutex);
-
-    auto entry = m_fastPipelines.emplace(std::piecewise_construct,
-      std::tuple(key),
-      std::tuple(VK_NOT_READY, VK_NULL_HANDLE));
-
-    lock.unlock();
-
-    if (entry.second) {
-      // Pipeline doesn't exist yet. Compile it and write the status back last
-      // so that other threads can safely read the pipeline handle.
-      auto [status, handle] = createOptimizedPipeline(key);
-
-      entry.first->second.pipeline = handle;
-      entry.first->second.status.store(status, std::memory_order_release);
-
-      m_async = false;
-
-      return handle;
-    } else {
-      // Pipeline already exists. Busy-wait until status becomes something
-      // other than VK_NOT_READY in order to avoid compiling the same pipeline
-      // on multiple threads in parallel, which is problematic on some drivers.
-      // This should be quite rare anyway.
-      sync::spin(1000u, [&entry] {
-        auto status = entry.first->second.status.load(std::memory_order_acquire);
-        return status != VK_NOT_READY;
-      });
-
-      return entry.first->second.pipeline;
-    }
-  }
-
-
-  std::pair<VkResult, VkPipeline> DxvkGraphicsPipeline::createOptimizedPipeline(
+  std::pair<VkResult, VkPipeline> DxvkGraphicsPipeline::createPipeline(
     const DxvkGraphicsPipelineFastInstanceKey& key) const {
     auto vk = m_device->vkd();
 
@@ -1458,7 +1071,7 @@ namespace dxvk {
     info.pInputAssemblyState      = &key.viState.iaInfo;
     info.pRasterizationState      = &key.prState.rsInfo;
     info.pDynamicState            = &key.dyState.dyInfo;
-    info.layout                   = m_layout.getLayout()->getPipelineLayout(false);
+    info.layout                   = m_layout.getLayout()->getPipelineLayout();
     info.basePipelineIndex        = -1;
 
     if (key.prState.tsInfo.patchControlPoints)
@@ -1490,29 +1103,8 @@ namespace dxvk {
 
     return std::make_pair(vr, pipeline);
   }
-  
-  
-  void DxvkGraphicsPipeline::destroyBasePipelines() {
-    for (const auto& instance : m_basePipelines) {
-      this->destroyVulkanPipeline(instance.second);
 
-      m_vsLibrary->releasePipelineHandle();
-      m_fsLibrary->releasePipelineHandle();
-    }
-
-    m_basePipelines.clear();
-  }
-
-
-  void DxvkGraphicsPipeline::destroyOptimizedPipelines() {
-    for (const auto& instance : m_fastPipelines)
-      this->destroyVulkanPipeline(instance.second.pipeline);
-
-    m_fastPipelines.clear();
-  }
-
-
-  void DxvkGraphicsPipeline::destroyVulkanPipeline(VkPipeline pipeline) const {
+  void DxvkGraphicsPipeline::destroyPipeline(VkPipeline pipeline) const {
     auto vk = m_device->vkd();
 
     vk->vkDestroyPipeline(vk->device(), pipeline, nullptr);
@@ -1671,132 +1263,6 @@ namespace dxvk {
     if (m_shaders.fs)  builder.addLayout(m_shaders.fs->getLayout());
 
     return builder;
-  }
-
-
-  void DxvkGraphicsPipeline::logPipelineState(
-          LogLevel                       level,
-    const DxvkGraphicsPipelineStateInfo& state) const {
-    std::stringstream sstr;
-    sstr << "Shader stages:" << std::endl;
-    if (m_shaders.vs  != nullptr) sstr << "  vs  : " << m_shaders.vs ->debugName() << std::endl;
-    if (m_shaders.tcs != nullptr) sstr << "  tcs : " << m_shaders.tcs->debugName() << std::endl;
-    if (m_shaders.tes != nullptr) sstr << "  tes : " << m_shaders.tes->debugName() << std::endl;
-    if (m_shaders.gs  != nullptr) sstr << "  gs  : " << m_shaders.gs ->debugName() << std::endl;
-    if (m_shaders.fs  != nullptr) sstr << "  fs  : " << m_shaders.fs ->debugName() << std::endl;
-
-    // Log input assembly state
-    VkPrimitiveTopology topology = state.ia.primitiveTopology();
-    sstr << std::dec << "Primitive topology: " << topology;
-
-    if (topology == VK_PRIMITIVE_TOPOLOGY_PATCH_LIST)
-      sstr << " [" << state.ia.patchVertexCount() << "]" << std::endl;
-    else
-      sstr << " [restart: " << (state.ia.primitiveRestart() ? "yes]" : "no]") << std::endl;
-
-    // Log vertex input state
-    for (uint32_t i = 0; i < state.il.bindingCount(); i++) {
-      const auto& binding = state.ilBindings[i];
-      sstr << "Vertex binding " << binding.binding() << " [" << binding.stride() << "]" << std::endl;
-
-      for (uint32_t j = 0; j < state.il.attributeCount(); j++) {
-        const auto& attribute = state.ilAttributes[j];
-
-        if (attribute.binding() == binding.binding())
-          sstr << "  " << attribute.location() << " [" << attribute.offset() << "]: " << attribute.format() << std::endl;
-      }
-    }
-
-    // Log rasterizer state
-    sstr << "Rasterizer state:" << std::endl
-         << "  depth clip:      " << (state.rs.depthClipEnable() ? "yes" : "no") << std::endl
-         << "  polygon mode:    " << state.rs.polygonMode() << std::endl
-         << "  conservative:    " << (state.rs.conservativeMode() == VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT ? "no" : "yes") << std::endl;
-
-    // Log multisample state
-    VkSampleCountFlags sampleCount = VK_SAMPLE_COUNT_1_BIT;
-
-    if (state.ms.sampleCount())
-      sampleCount = state.ms.sampleCount();
-    else if (state.rs.sampleCount())
-      sampleCount = state.rs.sampleCount();
-
-    sstr << "Sample count: " << sampleCount << " [0x" << std::hex << state.ms.sampleMask() << std::dec << "]" << std::endl
-         << "  alphaToCoverage: " << (state.ms.enableAlphaToCoverage() ? "yes" : "no") << std::endl;
-
-    // Log logic op state
-    sstr << "Logic op:          ";
-
-    if (state.om.enableLogicOp())
-      sstr << "yes [" << state.om.logicOp() << "]" << std::endl;
-    else
-      sstr << "no" << std::endl;
-
-    // Log render target and blend state
-    auto depthFormat = state.rt.getDepthStencilFormat();
-    auto depthFormatInfo = lookupFormatInfo(depthFormat);
-
-    VkImageAspectFlags writableAspects = depthFormat
-      ? (depthFormatInfo->aspectMask & ~state.rt.getDepthStencilReadOnlyAspects())
-      : 0u;
-
-    sstr << "Depth attachment: " << depthFormat;
-
-    if (depthFormat) {
-      sstr << " ["
-        << ((writableAspects & VK_IMAGE_ASPECT_DEPTH_BIT) ? "d" : " ")
-        << ((writableAspects & VK_IMAGE_ASPECT_STENCIL_BIT) ? "s" : " ")
-        << "]" << std::endl;
-    } else {
-      sstr << std::endl;
-    }
-
-    bool hasColorAttachments = false;
-
-    for (uint32_t i = 0; i < MaxNumRenderTargets; i++) {
-      auto format = state.rt.getColorFormat(i);
-
-      if (format) {
-        if (!hasColorAttachments) {
-          sstr << "Color attachments:" << std::endl;
-          hasColorAttachments = true;
-        }
-
-        const char* components = "rgba";
-        const auto& blend = state.omBlend[i];
-        const auto& swizzle = state.omSwizzle[i];
-
-        VkColorComponentFlags writeMask = blend.colorWriteMask();
-        char r = (writeMask & (1u << swizzle.rIndex())) ? components[swizzle.rIndex()] : ' ';
-        char g = (writeMask & (1u << swizzle.gIndex())) ? components[swizzle.gIndex()] : ' ';
-        char b = (writeMask & (1u << swizzle.bIndex())) ? components[swizzle.bIndex()] : ' ';
-        char a = (writeMask & (1u << swizzle.aIndex())) ? components[swizzle.aIndex()] : ' ';
-
-        sstr << "  " << i << ": " << format << " [" << r << g << b << a << "] blend: ";
-
-        if (blend.blendEnable())
-          sstr << "yes (c:" << blend.srcColorBlendFactor() << "," << blend.dstColorBlendFactor() << "," << blend.colorBlendOp()
-               <<     ";a:" << blend.srcAlphaBlendFactor() << "," << blend.dstAlphaBlendFactor() << "," << blend.alphaBlendOp() << ")" << std::endl;
-        else
-          sstr << "no" << std::endl;
-      }
-    }
-
-    // Log spec constants
-    bool hasSpecConstants = false;
-
-    for (uint32_t i = 0; i < MaxNumSpecConstants; i++) {
-      if (state.sc.specConstants[i]) {
-        if (!hasSpecConstants) {
-          sstr << "Specialization constants:" << std::endl;
-          hasSpecConstants = true;
-        }
-
-        sstr << "  " << i << ": 0x" << std::hex << std::setw(8) << std::setfill('0') << state.sc.specConstants[i] << std::dec << std::endl;
-      }
-    }
-
-    Logger::log(level, sstr.str());
   }
 
 

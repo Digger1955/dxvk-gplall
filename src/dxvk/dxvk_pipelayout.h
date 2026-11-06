@@ -766,14 +766,10 @@ namespace dxvk {
     /**
      * \brief Queries Vulkan pipeline layout
      *
-     * \param [in] independent Whether to return a pipeline
-     *    layout that can be used with pipeline libraries.
      * \returns Pipeline layout handle
      */
-    VkPipelineLayout getPipelineLayout(bool independent) const {
-      return independent
-        ? m_layoutIndependent
-        : m_layoutComplete;
+    VkPipelineLayout getPipelineLayout() const {
+      return m_layoutComplete;
     }
 
     /**
@@ -790,7 +786,6 @@ namespace dxvk {
 
     DxvkDevice*       m_device;
 
-    VkPipelineLayout  m_layoutIndependent = VK_NULL_HANDLE;
     VkPipelineLayout  m_layoutComplete    = VK_NULL_HANDLE;
 
     std::array<const DxvkDescriptorSetLayout*, DxvkPipelineLayoutKey::MaxSets> m_setLayouts = { };

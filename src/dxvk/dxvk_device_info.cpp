@@ -27,7 +27,6 @@ namespace dxvk {
     HANDLE_EXT(extExtendedDynamicState3);          \
     HANDLE_EXT(extFragmentShaderInterlock);        \
     HANDLE_EXT(extFullScreenExclusive);            \
-    HANDLE_EXT(extGraphicsPipelineLibrary);        \
     HANDLE_EXT(extHdrMetadata);                    \
     HANDLE_EXT(extLineRasterization);              \
     HANDLE_EXT(extMemoryBudget);                   \
@@ -53,7 +52,6 @@ namespace dxvk {
     HANDLE_EXT(khrMaintenance8);                   \
     HANDLE_EXT(khrMaintenance9);                   \
     HANDLE_EXT(khrMaintenance10);                  \
-    HANDLE_EXT(khrPipelineLibrary);                \
     HANDLE_EXT(khrPresentId);                      \
     HANDLE_EXT(khrPresentId2);                     \
     HANDLE_EXT(khrPresentWait);                    \
@@ -78,7 +76,6 @@ namespace dxvk {
     HANDLE_EXT(extConservativeRasterization);      \
     HANDLE_EXT(extCustomBorderColor);              \
     HANDLE_EXT(extExtendedDynamicState3);          \
-    HANDLE_EXT(extGraphicsPipelineLibrary);        \
     HANDLE_EXT(extLineRasterization);              \
     HANDLE_EXT(extMultiDraw);                      \
     HANDLE_EXT(extRobustness2);                    \
@@ -585,11 +582,6 @@ namespace dxvk {
     if (m_properties.vk12.driverID == VK_DRIVER_ID_QUALCOMM_PROPRIETARY)
       m_featuresSupported.extMultiDraw.multiDraw = VK_FALSE;
 
-    // Intel drivers on Windows throw OUT_OF_POOL_MEMORY errors with inline uniform
-    // blocks for some reason. Disable GPL as a workaround if legacy binding is used.
-    if (m_properties.vk12.driverID == VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS)
-      m_featuresSupported.extGraphicsPipelineLibrary.graphicsPipelineLibrary = VK_FALSE;
-
     // If we're running off a device without a sparse binding queue,
     // disable all the sparse binding features as well
     uint32_t sparseQueue = findQueueFamily(VK_QUEUE_SPARSE_BINDING_BIT, VK_QUEUE_SPARSE_BINDING_BIT);
@@ -947,7 +939,6 @@ namespace dxvk {
       ENABLE_FEATURE(vk13, dynamicRendering, true),
       ENABLE_FEATURE(vk13, maintenance4, false),
       ENABLE_FEATURE(vk13, robustImageAccess, false),
-      ENABLE_FEATURE(vk13, pipelineCreationCacheControl, false),
       ENABLE_FEATURE(vk13, shaderDemoteToHelperInvocation, false),
       ENABLE_FEATURE(vk13, shaderZeroInitializeWorkgroupMemory, false),
       ENABLE_FEATURE(vk13, subgroupSizeControl, false),
@@ -1004,9 +995,6 @@ namespace dxvk {
 
       /* Windows-only extension to work around driver-side FSE issues */
       ENABLE_EXT(extFullScreenExclusive, false),
-
-      /* Graphics pipeline libraries for stutter-free gameplay */
-      ENABLE_EXT_FEATURE(extGraphicsPipelineLibrary, graphicsPipelineLibrary, false),
 
       /* HDR metadata */
       ENABLE_EXT(extHdrMetadata, false),
@@ -1095,9 +1083,6 @@ namespace dxvk {
       Requires Vulkan 1.4.350
       ENABLE_EXT_FEATURE(khrMaintenance11, maintenance11, false),
 */
-
-      /* Dependency for graphics pipeline library */
-      ENABLE_EXT(khrPipelineLibrary, false),
 
       /* Present wait, used for frame pacing and statistics */
       ENABLE_EXT_FEATURE(khrPresentId, presentId, false),

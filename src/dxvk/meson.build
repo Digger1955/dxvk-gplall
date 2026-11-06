@@ -32,8 +32,6 @@ dxvk_shaders = files([
   'shaders/dxvk_cursor_vert.vert',
   'shaders/dxvk_cursor_frag.frag',
 
-  'shaders/dxvk_dummy_frag.frag',
-
   'shaders/dxvk_fullscreen_geom.geom',
   'shaders/dxvk_fullscreen_vert.vert',
   'shaders/dxvk_fullscreen_layer_vert.vert',
@@ -101,6 +99,7 @@ dxvk_src = [
   'dxvk_meta_mipgen.cpp',
   'dxvk_meta_resolve.cpp',
   'dxvk_options.cpp',
+  'dxvk_pipecompiler.cpp',
   'dxvk_pipelayout.cpp',
   'dxvk_pipemanager.cpp',
   'dxvk_platform_exts.cpp',

@@ -301,7 +301,7 @@ namespace dxvk::hud {
     ctx.cmd->cmdPipelineBarrier(DxvkCmdBuffer::InitBuffer, &depInfo);
 
     // Process contents of the buffer and write out text draws
-    VkPipelineLayout pipelineLayout = m_computePipelineLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_computePipelineLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_computePipelineLayout->getDescriptorSetLayout(0));
 
     auto bufferLayout = computeBufferLayout();
@@ -387,7 +387,7 @@ namespace dxvk::hud {
     ctx.cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, getPipeline(renderer, key));
 
-    auto pipelineLayout = m_gfxPipelineLayout->getPipelineLayout(false);
+    auto pipelineLayout = m_gfxPipelineLayout->getPipelineLayout();
     auto set = ctx.descriptorPool->alloc(m_gfxPipelineLayout->getDescriptorSetLayout(0));
 
     VkDescriptorBufferInfo bufferDescriptor = m_gpuBuffer->getDescriptor(0,
@@ -723,7 +723,6 @@ namespace dxvk::hud {
     DxvkStatCounters counters = m_device->getStatCounters();
 
     m_graphicsPipelines = counters.getCtr(DxvkStatCounter::PipeCountGraphics);
-    m_graphicsLibraries = counters.getCtr(DxvkStatCounter::PipeCountLibrary);
     m_computePipelines  = counters.getCtr(DxvkStatCounter::PipeCountCompute);
   }
 
@@ -737,12 +736,6 @@ namespace dxvk::hud {
     position.y += 16;
     renderer.drawText(16, position, 0xffff40ff, "Graphics pipelines:");
     renderer.drawText(16, { position.x + 240, position.y }, 0xffffffffu, str::format(m_graphicsPipelines));
-
-    if (m_graphicsLibraries) {
-      position.y += 20;
-      renderer.drawText(16, position, 0xffff40ff, "Graphics shaders:");
-      renderer.drawText(16, { position.x + 240, position.y }, 0xffffffffu, str::format(m_graphicsLibraries));
-    }
 
     position.y += 20;
     renderer.drawText(16, position, 0xffff40ff, "Compute shaders:");
@@ -1015,7 +1008,7 @@ namespace dxvk::hud {
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.background);
 
     // Bind resources
-    VkPipelineLayout pipelineLayout = m_pipelineLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_pipelineLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_pipelineLayout->getDescriptorSetLayout(0));
 
     VkDescriptorBufferInfo drawDescriptor = { };
@@ -1314,36 +1307,15 @@ namespace dxvk::hud {
 
   void HudCompilerActivityItem::update(dxvk::high_resolution_clock::time_point time) {
     DxvkStatCounters counters = m_device->getStatCounters();
+    bool doShow = counters.getCtr(DxvkStatCounter::PipeCompilerBusy);
 
-    m_tasksDone = counters.getCtr(DxvkStatCounter::PipeTasksDone);
-    m_tasksTotal = counters.getCtr(DxvkStatCounter::PipeTasksTotal);
-
-    bool doShow = m_tasksDone < m_tasksTotal;
-
-    if (!doShow)
-      m_timeDone = time;
-
-    if (!m_show) {
-      m_timeShown = time;
-      m_showPercentage = false;
-    } else {
-      auto durationShown = std::chrono::duration_cast<std::chrono::milliseconds>(time - m_timeShown);
-      auto durationWorking = std::chrono::duration_cast<std::chrono::milliseconds>(time - m_timeDone);
-
-      if (!doShow) {
-        m_offset = m_tasksTotal;
-
-        // Ensure the item stays up long enough to be legible
-        doShow = durationShown.count() <= MinShowDuration;
-      }
-
-      if (!m_showPercentage) {
-        // Don't show percentage if it's just going to be stuck at 99%
-        // because the workers are not being fed tasks fast enough
-        m_showPercentage = durationWorking.count() >= (MinShowDuration / 5)
-                        && (computePercentage() < 50);
-      }
+    if (!doShow) {
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time - m_timeShown);
+      doShow = elapsed.count() <= MinShowDuration;
     }
+
+    if (doShow && !m_show)
+      m_timeShown = time;
 
     m_show = doShow;
   }
@@ -1356,26 +1328,12 @@ namespace dxvk::hud {
           HudRenderer&        renderer,
           HudPos              position) {
     if (m_show) {
-      std::string string = "Compiling shaders...";
 
-      if (m_showPercentage)
-        string = str::format(string, " (", computePercentage(), "%)");
-
-      renderer.drawText(16, { position.x, -20 }, 0xffffffffu, string);
+      renderer.drawText(16, { position.x, -20 }, 0xffffffffu, "Compiling shaders...");
     }
 
     return position;
   }
-
-
-  uint32_t HudCompilerActivityItem::computePercentage() const {
-    if (m_offset == m_tasksTotal)
-      return 100;
-
-    return (uint32_t(m_tasksDone - m_offset) * 100)
-         / (uint32_t(m_tasksTotal - m_offset));
-  }
-
 
 
   HudLatencyItem::HudLatencyItem() {

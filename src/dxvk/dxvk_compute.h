@@ -58,8 +58,7 @@ namespace dxvk {
     DxvkComputePipeline(
             DxvkDevice*                 device,
             DxvkPipelineManager*        pipeMgr,
-            DxvkComputePipelineShaders  shaders,
-            DxvkShaderPipelineLibrary*  library);
+            DxvkComputePipelineShaders  shaders);
 
     ~DxvkComputePipeline();
     
@@ -124,9 +123,6 @@ namespace dxvk {
     DxvkDevice*                 m_device;
     DxvkPipelineStats*          m_stats;
 
-    DxvkShaderPipelineLibrary*  m_library;
-    VkPipeline                  m_libraryHandle;
-
     DxvkComputePipelineShaders  m_shaders;
 
     DxvkPipelineBindings        m_layout;
@@ -150,10 +146,6 @@ namespace dxvk {
 
     void destroyPipeline(
             VkPipeline                    pipeline);
-
-    void logPipelineState(
-            LogLevel                      level,
-      const DxvkComputePipelineStateInfo& state) const;
 
     std::string createDebugName() const;
 

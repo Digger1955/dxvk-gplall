@@ -3,33 +3,29 @@
 namespace dxvk {
 
     DxvkOptions::DxvkOptions(const Config& config) {
-    enableAsync           = config.getOption<bool>    ("dxvk.enableAsync",            true);
-    enableDebugUtils      = config.getOption<bool>    ("dxvk.enableDebugUtils",       false);
-    enableStateCache      = config.getOption<bool>    ("dxvk.enableStateCache",       true);
-    enableMemoryDefrag    = config.getOption<Tristate>("dxvk.enableMemoryDefrag",     Tristate::Auto);
-    numCompilerThreads    = config.getOption<int32_t> ("dxvk.numCompilerThreads",     0);
-    enableGraphicsPipelineLibrary = config.getOption<Tristate>("dxvk.enableGraphicsPipelineLibrary", Tristate::False);
-    enableDescriptorUpdateTemplates = config.getOption<bool>("dxvk.enableDescriptorUpdateTemplates", true);
-    enableUnifiedImageLayout = config.getOption<bool> ("dxvk.enableUnifiedImageLayouts", true);
-    enableNvRawAccessChains = config.getOption<bool>  ("dxvk.enableNvRawAccessChains", true);
-    enableNvCudaInterop   = config.getOption<bool>    ("dxvk.enableNvCudaInterop",    true);
-    trackPipelineLifetime = config.getOption<Tristate>("dxvk.trackPipelineLifetime",  Tristate::Auto);
-    useRawSsbo            = config.getOption<Tristate>("dxvk.useRawSsbo",             Tristate::Auto);
-    hud                   = config.getOption<std::string>("dxvk.hud", "");
-    tearFree              = config.getOption<Tristate>("dxvk.tearFree",               Tristate::Auto);
-    latencySleep          = config.getOption<Tristate>("dxvk.latencySleep",           Tristate::True);
-    latencyTolerance      = config.getOption<int32_t> ("dxvk.latencyTolerance",       1000);
-    disableNvLowLatency2  = config.getOption<Tristate>("dxvk.disableNvLowLatency2",   Tristate::Auto);
-    hideIntegratedGraphics = config.getOption<bool>   ("dxvk.hideIntegratedGraphics", false);
-    zeroMappedMemory      = config.getOption<bool>    ("dxvk.zeroMappedMemory",       false);
-    allowFse              = config.getOption<bool>    ("dxvk.allowFse",               true);
-    framePace             = config.getOption<std::string>("dxvk.framePace",           "max-frame-latency");
-    lowLatencyOffset      = config.getOption<int32_t> ("dxvk.lowLatencyOffset",       0);
-    lowLatencyAllowCpuFramesOverlap
-                          = config.getOption<bool>    ("dxvk.lowLatencyAllowCpuFramesOverlap", true);
-    deviceFilter          = config.getOption<std::string>("dxvk.deviceFilter",        "");
-    tilerMode             = config.getOption<Tristate>("dxvk.tilerMode",              Tristate::Auto);
-    minSwapchainLatency   = config.getOption<bool>    ("dxvk.minSwapchainLatency",    false);
+    enableAsync                           = config.getOption<bool>               ("dxvk.enableAsync",                              true);
+    asyncCompileThreshold                 = config.getOption<int32_t>            ("dxvk.asyncCompileThreshold",                    2);
+    enableDebugUtils                      = config.getOption<bool>               ("dxvk.enableDebugUtils",                         false);
+    enableMemoryDefrag                    = config.getOption<Tristate>           ("dxvk.enableMemoryDefrag",                       Tristate::Auto);
+    enableDescriptorUpdateTemplates       = config.getOption<bool>               ("dxvk.enableDescriptorUpdateTemplates",          true);
+    enableUnifiedImageLayout              = config.getOption<bool>               ("dxvk.enableUnifiedImageLayouts",                true);
+    enableNvRawAccessChains               = config.getOption<bool>               ("dxvk.enableNvRawAccessChains",                  true);
+    enableNvCudaInterop                   = config.getOption<bool>               ("dxvk.enableNvCudaInterop",                      true);
+    useRawSsbo                            = config.getOption<Tristate>           ("dxvk.useRawSsbo",                               Tristate::Auto);
+    hud                                   = config.getOption<std::string>        ("dxvk.hud",                                      "");
+    tearFree                              = config.getOption<Tristate>           ("dxvk.tearFree",                                 Tristate::Auto);
+    latencySleep                          = config.getOption<Tristate>           ("dxvk.latencySleep",                             Tristate::True);
+    latencyTolerance                      = config.getOption<int32_t>            ("dxvk.latencyTolerance",                         1000);
+    disableNvLowLatency2                  = config.getOption<Tristate>           ("dxvk.disableNvLowLatency2",                     Tristate::Auto);
+    hideIntegratedGraphics                = config.getOption<bool>               ("dxvk.hideIntegratedGraphics",                   false);
+    zeroMappedMemory                      = config.getOption<bool>               ("dxvk.zeroMappedMemory",                         false);
+    allowFse                              = config.getOption<bool>               ("dxvk.allowFse",                                 true);
+    framePace                             = config.getOption<std::string>        ("dxvk.framePace",                                "max-frame-latency");
+    lowLatencyOffset                      = config.getOption<int32_t>            ("dxvk.lowLatencyOffset",                         0);
+    lowLatencyAllowCpuFramesOverlap       = config.getOption<bool>               ("dxvk.lowLatencyAllowCpuFramesOverlap",          true);
+    deviceFilter                          = config.getOption<std::string>        ("dxvk.deviceFilter",                             "");
+    tilerMode                             = config.getOption<Tristate>           ("dxvk.tilerMode",                                Tristate::Auto);
+    minSwapchainLatency                   = config.getOption<bool>               ("dxvk.minSwapchainLatency",                      false);
 
     auto budget = config.getOption<int32_t>("dxvk.maxMemoryBudget", 0);
     maxMemoryBudget = VkDeviceSize(std::max(budget, 0)) << 20u;

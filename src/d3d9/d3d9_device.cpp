@@ -133,9 +133,6 @@ namespace dxvk {
 
     }
 
-    // Check for VK_EXT_graphics_pipeline_libraries
-    m_usingGraphicsPipelines = dxvkDevice->features().extGraphicsPipelineLibrary.graphicsPipelineLibrary;
-
     // Check for VK_EXT_depth_bias_control and set up initial state
     m_depthBiasRepresentation = { VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORMAT_EXT, false };
     if (dxvkDevice->features().extDepthBiasControl.depthBiasControl) {
@@ -7861,9 +7858,6 @@ namespace dxvk {
   void D3D9DeviceEx::BindShader(
   const D3D9CommonShader*                 pShaderModule) {
     auto shader = pShaderModule->GetShader();
-
-    if (unlikely(shader->needsLibraryCompile()))
-      m_dxvkDevice->requestCompileShader(shader);
 
     EmitCs([
       cShader = std::move(shader)
