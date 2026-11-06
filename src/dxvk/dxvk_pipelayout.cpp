@@ -126,28 +126,6 @@ namespace dxvk {
         setLayouts[i] = m_setLayouts[i]->getSetLayout();
     }
 
-    // If we're creating a graphics pipeline layout, and if pipeline libraries are
-    // supported by the implementation, create a set layout that is compatible with
-    // pipeline libraries.
-    if (device->canUseGraphicsPipelineLibrary() && (key.getStageMask() & VK_SHADER_STAGE_ALL_GRAPHICS)) {
-      VkPushConstantRange pushConstants = key.getPushConstantRange().getPushConstantRange(true);
-
-      VkPipelineLayoutCreateInfo layoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-      layoutInfo.flags = VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT;
-      layoutInfo.setLayoutCount = key.getDescriptorSetCount();
-
-      if (layoutInfo.setLayoutCount)
-        layoutInfo.pSetLayouts = setLayouts.data();
-
-      if (pushConstants.size) {
-        layoutInfo.pushConstantRangeCount = 1u;
-        layoutInfo.pPushConstantRanges = &pushConstants;
-      }
-
-      if (vk->vkCreatePipelineLayout(vk->device(), &layoutInfo, nullptr, &m_layoutIndependent))
-        throw DxvkError("DxvkPipelineLayout: Failed to create independent pipeline layout");
-    }
-
     // If all descriptor set layouts are defined, create a pipeline layout object
     // that is optimal for monolithic pipelines and discards unused push constants.
     if (key.isComplete()) {
@@ -173,7 +151,6 @@ namespace dxvk {
   DxvkPipelineLayout::~DxvkPipelineLayout() {
     auto vk = m_device->vkd();
 
-    vk->vkDestroyPipelineLayout(vk->device(), m_layoutIndependent, nullptr);
     vk->vkDestroyPipelineLayout(vk->device(), m_layoutComplete, nullptr);
   }
 

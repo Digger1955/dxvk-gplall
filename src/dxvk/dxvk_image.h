@@ -296,13 +296,15 @@ namespace dxvk {
     /**
      * \brief Checks for async pipeline compatibility
      *
-     * Asynchronous pipeline compilation may be enabled if the
-     * render target has been drawn to in the previous frames.
-     * \param [in] frameId Current frame ID
-     * \returns \c true if async compilation is supported
+     * Asynchronous pipeline compilation may be enabled if the render target
+     * has been drawn to in the specified number of previous frames.
+     * \param [in] frameCountThreshold Minimum frame count to trigger async
+     * \returns \c true if threshold requirement is met
      */
-    [[nodiscard]] bool getRtBindingAsyncCompilationCompat() const {
-      return m_rtBindingFrameCount >= 6;
+      bool getRtBindingAsyncCompilationCompat(
+        uint32_t                        frameCountThreshold) const {
+
+        return m_rtBindingFrameCount >= frameCountThreshold;
     }
 
 

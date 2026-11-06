@@ -1,4 +1,4 @@
-# DXVK-GPLALL (DXVK GPLAsync-LowLatency)
+# DXVK-GPLALL (DXVK-General-Program-Level-Async-LowLatency)
 
 A Vulkan 1.3-based translation layer for Direct3D 8/9/10/11 which allows running 3D applications on: 
 
@@ -27,27 +27,23 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 
 ## Major changes compared to [upstream DXVK](https://github.com/doitsujin/dxvk)
 
-1. Implemented Low Latency frame pacing mode that aims to greatly reduce latency with minimal impact in fps. Author - [netborg-afps](https://github.com/netborg-afps/dxvk/releases)
+1. Implemented `DXVK-Async 1.10.3-style`, highly-parallelizable asynchronous pipeline compilation (Async) for the DXVK 2.6.x codebase, which replaces upstream DXVK's Graphics Pipeline Library (GPL) and State Cache implementations, starting from DXVK-GPLALL 2.6.10-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases). Contributors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack), [Sporif](https://github.com/Sporif/dxvk-async), [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/), [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
 
-2. Implemented Asynchronous pipeline compilation (Async) that aims to greatly reduce shader compilation stutter by not blocking the main thread when compiling async pipelines. Authors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack) and [Sporif](https://github.com/Sporif/dxvk-async)
+2. Implemented Low Latency frame pacing mode that aims to greatly reduce latency with minimal impact in fps. Author - [netborg-afps](https://github.com/netborg-afps/dxvk/releases)
 
-3. Implemented the ability to use both (together or separately) Graphics Pipeline Library (GPL) and Asynchronous pipeline compilation (Async) on DXVK 2.1 and later. Author - [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/). Contributor - [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
+3. Implemented high-precision energy efficient FPS Limiter starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-4. Implemented State Cache for DXVK 2.7 starting from DXVK-GPLALL 2.7-3. Author - [Laitinlok](https://github.com/Digger1955/dxvk-gplall/pull/29)
+4. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-5. Implemented high-precision energy efficient FPS Limiter starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+5. Implemented `SSE2` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-6. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+6. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows starting from DXVK-GPLALL 2.6.9-1. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
 
-7. Implemented `SSE2` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+7. Implemented changes that allow to detect HDR state per monitor starting from DXVK-GPLALL 2.6.9-1. Author - [nanomatters](https://github.com/nanomatters/dxvk-salkim/)
 
-8. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
+8. Implemented all of aforementioned in one DXVK package. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-9. Implemented changes that allow to detect HDR state per monitor. Author - [nanomatters](https://github.com/nanomatters/dxvk-salkim/)
-
-10. Implemented all of aforementioned in one DXVK package. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
-
-11. Provided various GCC (for any OS) builds of DXVK-GPLALL:
+9. Provided various GCC (for any OS) builds of DXVK-GPLALL:
 
    a) optimized for `SSE2` (`-march=x86-64`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`-mtune=amdfam10`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
 
@@ -57,7 +53,7 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-12. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-GPLALL:
+10. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-GPLALL:
 
    a) optimized for `SSE2` (`/arch:SSE2`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`/favor:blend`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
 
@@ -67,7 +63,7 @@ Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-12. Backporting and adapting upstream DXVK, DXVK Low Latency and DXVK forks improvements to DXVK 2.6.x codebase for GPUs/drivers that do not meet [DXVK 2.7 requirements](https://github.com/doitsujin/dxvk/releases/tag/v2.7), [DXVK 3.0 requirements](https://github.com/doitsujin/dxvk/releases/tag/v3.0) or have any issues with DXVK versions higher than 2.6.2. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+11. Backporting and adapting upstream DXVK, DXVK Low Latency and DXVK forks improvements to DXVK 2.6.x codebase for GPUs/drivers that do not meet [DXVK 2.7 requirements](https://github.com/doitsujin/dxvk/releases/tag/v2.7), [DXVK 3.0 requirements](https://github.com/doitsujin/dxvk/releases/tag/v3.0) or have any issues with DXVK versions higher than 2.6.2. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
 ## How to use (Windows 10/11)
 
@@ -110,14 +106,6 @@ Listed below are the DLL requirements for using DXVK with any single API.
 - d3d9: `d3d9.dll`
 - d3d10: `d3d10core.dll`, `d3d11.dll` and `dxgi.dll`
 - d3d11: `d3d11.dll` and `dxgi.dll`
-
-## Notes on Vulkan drivers
-Before reporting an issue, please check the [Wiki](https://github.com/doitsujin/dxvk/wiki/Driver-support) page on the current driver status and make sure you run a recent enough driver version for your hardware.
-
-## Online multiplayer games
-Manipulation of Direct3D libraries in multiplayer games may be considered cheating and can get your account **banned**. This may also apply to singleplayer games with an embedded or dedicated multiplayer portion. 
-
-Async could theoretically trigger client-side anti-cheats, and as such, may be risky to use inside of multiplayer games. There is no information about someone getting banned for using DXVK or DXVK with Async, but - **Use at your own risk.**
 
 ## `dxvk.conf` Config File Location
 
@@ -178,59 +166,35 @@ It is **STRONGLY RECOMMENDED** to disable any other in-game/third-party FPS Limi
 - For D3D8 and D3D9 - `d3d9.maxFrameRate`. Default value is `d3d9.maxFrameRate = -1`
 - For D3D10 and D3D11 - `dxgi.maxFrameRate` . Default value is `dxgi.maxFrameRate = -1`
 
-## Device filter
-Some applications do not provide a method to select a different GPU. In that case, DXVK can be forced to use a given device:
-- `DXVK_FILTER_DEVICE_NAME="Device Name"` Selects devices with a matching Vulkan device name, which can be retrieved with tools such as `vulkaninfo`. Matches on substrings, so "VEGA" or "AMD RADV VEGA10" is supported if the full device name is "AMD RADV VEGA10 (LLVM 9.0.0)", for example. If the substring matches more than one device, the first device matched will be used.
-- `DXVK_FILTER_DEVICE_UUID="00000000000000000000000000000001"` Selects a device by matching its Vulkan device UUID, which can also be retrieved using tools such as vulkaninfo. The UUID must be a 32-character hexadecimal string with no dashes. This method provides more precise selection, especially when using multiple identical GPUs.
-
-**Note:** If the device filter is configured incorrectly, it may filter out all devices and applications will be unable to create a D3D device.
-
-## Debugging
-The following environment variables can be used for **debugging** purposes.
-- `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` Enables Vulkan debug layers. Highly recommended for troubleshooting rendering issues and driver crashes. Requires the Vulkan SDK to be installed on the host system.
-- `DXVK_LOG_LEVEL=none|error|warn|info|debug` Controls message logging.
-- `DXVK_LOG_PATH=/some/directory` Changes path where log files are stored. Set to `none` to disable log file creation entirely, without disabling logging.
-- `DXVK_DEBUG=markers|validation` Enables use of the `VK_EXT_debug_utils` extension for translating performance event markers, or to enable Vulkan validation, respecticely.
-
-## Graphics Pipeline Library (GPL)
-On drivers which support `VK_EXT_graphics_pipeline_library` Vulkan shaders will be compiled at the time the game loads its D3D shaders, rather than at draw time. This reduces or eliminates shader compile stutter in many games when compared to the previous system.
-
-In games that load their shaders during loading screens or in the menu, this can lead to prolonged periods of very high CPU utilization, especially on weaker CPUs. For affected games it is recommended to wait for shader compilation to finish before starting the game to avoid stutter and low performance. Shader compiler activity can be monitored with `DXVK_HUD=compiler`.
-
-**Note:** Games which only load their D3D shaders at draw time (e.g. most Unreal Engine games) will still exhibit some stutter, although it should still be less severe than without this feature.
-
-**IMPORTANT**: Disabled by default since DXVK-GPLALL 2.6.1-4. Reasons have been specified in [Wiki](https://github.com/Digger1955/dxvk-gplall/wiki/dxvk.conf-Options-Guide#dxvkenablegraphicspipelinelibrary).
-
-## State cache
-DXVK-GPLALL caches pipeline state by default, so that shaders can be recompiled ahead of time on subsequent runs of an application, even if the driver's own shader cache got invalidated in the meantime. This cache is enabled by default, and generally reduces stuttering.
-
-State cache can be used together with GPL that is not possible on upstream DXVK, but it can be useful depending on game.
-
-The following environment variables can be used to control the cache:
-- `DXVK_STATE_CACHE`: Controls the state cache. The following values are supported:
-  - `disable`: Disables the cache entirely.
-  - `reset`: Clears the cache file.
-- `DXVK_STATE_CACHE_PATH=/some/directory` Specifies a directory where to put the cache files. Defaults to the current working directory of the application.
-
-**Important**: The state cache has been removed from the [upstream DXVK since version 2.7](https://github.com/doitsujin/dxvk/releases/tag/v2.7). DXVK-GPLALL 2.6.x branch is not affected. State cache is available in DXVK-GPLALL 2.7-3 and later. 
-
 ## Asynchronous pipeline compilation (Async)
 
 Originally started as hacky solution for shader compilation stutter in dxvk. Similar solution was later added to dxvk itself and promptly removed.
 
-Enabling this solution results in a lot less shader compilation stuttering by not blocking the main thread when compiling async pipelines and (not necessarily) miscellaneous graphical issues while shaders are compiling for the first time.
+Enabling this solution results in a lot less shader compilation stuttering by preparing pipelines asynchronously, which means not blocking the main thread. Miscellaneous graphical issues (not necessarily) may occur, while shaders are compiling for the first time.
 
-Asynchronous pipeline compilation is enabled with `DXVK_ASYNC=1` environment variable and is equivalent to `dxvk.enableAsync = True` in `dxvk.conf`. It is enabled by default.
+### Usage
 
-Asynchronous pipeline compilation is disabled with `DXVK_ASYNC=0` environment variable and is equivalent to `dxvk.enableAsync = False` in `dxvk.conf`.
+Asynchronous pipeline compilation is enabled with `dxvk.enableAsync = True` in `dxvk.conf`. It is enabled by default.
 
-## GPLAsync and State cache
+Asynchronous pipeline compilation is disabled with `dxvk.enableAsync = False` in `dxvk.conf`.
 
-State cache fixes for GPL and Async are enabled with `DXVK_GPLASYNCCACHE=1` environment variable and is equivalent to `dxvk.gplAsyncCache = True` in `dxvk.conf`. It is enabled by default.
+**Important**: After a few (3-5) application's sessions, in which most of the shaders (models, effects, etc.) will be captured (seen) and the GPU's shader cache will be created, Async can be disabled, but pipeline's (not shader's) compilation may produce stuttering (depends on GPU Vendor/Driver).
 
-State cache fixes for GPL and Async are disabled with `DXVK_GPLASYNCCACHE=0` environment variable and is equivalent to `dxvk.gplAsyncCache = False` in `dxvk.conf`.
+`dxvk.asyncCompileThreshold` option in `dxvk.conf` controls the amount of pipelines, which will be compiled asynchronously. Value specifies required number of previous frames, in which there were draw calls to the render target, to trigger asynchronous pipeline compilation.
 
-**Important**: The state cache has been removed from the [upstream DXVK since version 2.7](https://github.com/doitsujin/dxvk/releases/tag/v2.7). DXVK-GPLALL 2.6.x branch is not affected. State cache is available in DXVK-GPLALL 2.7-3 and later. 
+The lower this value is, the more pipelines will be compiled asynchronously, the less amount of stutters from pipeline compilation will be happening, but the more graphical issues (not necessarily) may occur.
+
+**Common rule is**: the older the game - the lower the value can be set, in order to get the best performance, without any critical rendering issues.
+
+Based on testing, for the vast majority of applications:
+
+ - **D3D8/D3D9**-applications: `dxvk.asyncCompileThreshold = 0`
+ - **D3D10/D3D11**-applications and **Unity Engine** applications: `dxvk.asyncCompileThreshold = 1`
+ - **D3D10/D3D11**-applications and **Unreal Engine 4** applications: `dxvk.asyncCompileThreshold = 2`
+
+**Default** value: `dxvk.asyncCompileThreshold = 2`
+
+**Note:** **DO NOT** report any issues with this option set to 0 or 1.
 
 ## Low Latency frame pacing
 
@@ -257,6 +221,25 @@ Optimized for Variable Refresh Rate (VRR) displays, `VK_PRESENT_MODE_IMMEDIATE_K
 `dxvk.lowLatencyOffset` option in `dxvk.conf` allows for fine-tuning `"low-latency"` and `"low-latency-vrr-x"` frame pacing modes. Values are in microseconds. Positive values might improve responsiveness even further, although only very slightly, this may be relevant for edge cases. Negative values might improve fps. Default is `dxvk.lowLatencyOffset = 0`
 
 `dxvk.lowLatencyAllowCpuFramesOverlap` option in `dxvk.conf` controls whether a frame is allowed to begin before finishing processing the cpu-part of the previous one, when low-latency frame pacing is used. Snappiness may be improved when disallowing overlap. On the other hand, this might also decrease fps in certain cases. Default is `dxvk.lowLatencyAllowCpuFramesOverlap = True`
+
+## Online multiplayer games
+Manipulation of Direct3D libraries in multiplayer games may be considered cheating and can get your account **banned**. This may also apply to singleplayer games with an embedded or dedicated multiplayer portion. 
+
+Async could theoretically trigger client-side anti-cheats, and as such, may be risky to use inside of multiplayer games. There is no information about someone getting banned for using DXVK or DXVK with Async, but - **Use at your own risk.**
+
+## Device filter
+Some applications do not provide a method to select a different GPU. In that case, DXVK can be forced to use a given device:
+- `DXVK_FILTER_DEVICE_NAME="Device Name"` Selects devices with a matching Vulkan device name, which can be retrieved with tools such as `vulkaninfo`. Matches on substrings, so "VEGA" or "AMD RADV VEGA10" is supported if the full device name is "AMD RADV VEGA10 (LLVM 9.0.0)", for example. If the substring matches more than one device, the first device matched will be used.
+- `DXVK_FILTER_DEVICE_UUID="00000000000000000000000000000001"` Selects a device by matching its Vulkan device UUID, which can also be retrieved using tools such as vulkaninfo. The UUID must be a 32-character hexadecimal string with no dashes. This method provides more precise selection, especially when using multiple identical GPUs.
+
+**Note:** If the device filter is configured incorrectly, it may filter out all devices and applications will be unable to create a D3D device.
+
+## Debugging
+The following environment variables can be used for **debugging** purposes.
+- `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` Enables Vulkan debug layers. Highly recommended for troubleshooting rendering issues and driver crashes. Requires the Vulkan SDK to be installed on the host system.
+- `DXVK_LOG_LEVEL=none|error|warn|info|debug` Controls message logging.
+- `DXVK_LOG_PATH=/some/directory` Changes path where log files are stored. Set to `none` to disable log file creation entirely, without disabling logging.
+- `DXVK_DEBUG=markers|validation` Enables use of the `VK_EXT_debug_utils` extension for translating performance event markers, or to enable Vulkan validation, respecticely.
 
 ## Build instructions
 

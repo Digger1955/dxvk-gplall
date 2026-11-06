@@ -3,15 +3,34 @@
 
 #include "dxvk_device.h"
 #include "dxvk_pipemanager.h"
-#include "dxvk_state_cache.h"
 
 namespace dxvk {
-  
-  DxvkPipelineWorkers::DxvkPipelineWorkers(
-          DxvkDevice*                     device)
-  : m_device(device) {
 
-  }
+  DxvkPipelineWorkers::DxvkPipelineWorkers(
+          DxvkDevice*                     device) {
+    // Determine number of available CPU logical threads, and clamp to a useful
+    // range. DXVK is not tested on extremely high core counts, and
+    // parallelism may be limited past a certain point.
+    // Since application thread is always used by the synchronous pipeline compilation,
+    // we can at least try to change a thread on which it happens - 
+    // by doing that we are lowering load on application thread and potentially reduce stutters.
+    uint32_t coreCount = dxvk::thread::hardware_concurrency();
+
+    // Use up to half of CPU logical threads
+    // The only reason not to leave synchronous pipeline compilation single-threaded -
+    // Is to win the time which one thread spends compiling one pipeline,
+    // and tell another thread to go for another pipeline.
+    // Also, there are internal Vulkan driver locks exist which are limiting too.
+    coreCount = coreCount/2;
+
+    // Minimum amount of threads for synchronous pipeline compilation is 2.
+    // Maximum amount of threads for synchronous pipeline compilation is 16.
+    coreCount = std::clamp(coreCount, 2u, 16u);
+
+    m_workerCount = coreCount;
+
+    Logger::info(str::format("DXVK: Using ", m_workerCount, " threads for synchronous pipeline compilation."));
+    }
 
 
   DxvkPipelineWorkers::~DxvkPipelineWorkers() {
@@ -19,44 +38,66 @@ namespace dxvk {
   }
 
 
-  void DxvkPipelineWorkers::compilePipelineLibrary(
-          DxvkShaderPipelineLibrary*      library,
-          DxvkPipelinePriority            priority) {
-    std::unique_lock lock(m_lock);
+  void DxvkPipelineWorkers::compileComputePipeline(
+          DxvkComputePipeline*            pipeline,
+    const DxvkComputePipelineStateInfo&   state) {
+    if (pipeline == nullptr)
+      return;
+
+    std::unique_lock lock(m_queueLock);
     this->startWorkers();
 
-    m_tasksTotal += 1;
+    // Constructs the PipelineEntry directly inside the queue container slot.
+    m_queuedPipelines.emplace(PipelineEntry{
+      pipeline,  // computePipeline
+      nullptr,   // graphicsPipeline
+      state,     // computeState
+      {}         // graphicsState (Default empty constructor)
+  });
 
-    m_buckets[uint32_t(priority)].queue.emplace(library);
-    notifyWorkers(priority);
+    m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
+
+    m_queueCond.notify_one();
   }
 
 
   void DxvkPipelineWorkers::compileGraphicsPipeline(
           DxvkGraphicsPipeline*           pipeline,
-    const DxvkGraphicsPipelineStateInfo&  state,
-          DxvkPipelinePriority            priority) {
-    std::unique_lock lock(m_lock);
+    const DxvkGraphicsPipelineStateInfo&  state) {
+    if (pipeline == nullptr)
+      return;
+
+    std::unique_lock lock(m_queueLock);
     this->startWorkers();
 
-    pipeline->acquirePipeline();
-    m_tasksTotal += 1;
+    // Constructs the PipelineEntry directly inside the queue container slot.
+     m_queuedPipelines.emplace(PipelineEntry{
+       nullptr,   // computePipeline
+       pipeline,  // graphicsPipeline
+       {},        // computeState (Default empty constructor)
+       state      // graphicsState
+  });
 
-    m_buckets[uint32_t(priority)].queue.emplace(pipeline, state);
-    notifyWorkers(priority);
+    m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
+
+    m_queueCond.notify_one();
+  }
+
+
+  bool DxvkPipelineWorkers::isBusy() const {
+    return m_pendingTasks.load(std::memory_order_relaxed) != 0ull;
   }
 
 
   void DxvkPipelineWorkers::stopWorkers() {
-    { std::unique_lock lock(m_lock);
+    { std::unique_lock lock(m_queueLock);
 
       if (!m_workersRunning)
         return;
 
+      // Workers will finish queued tasks before exiting.
       m_workersRunning = false;
-
-      for (uint32_t i = 0; i < m_buckets.size(); i++)
-        m_buckets[i].cond.notify_all();
+      m_queueCond.notify_all();
     }
 
     for (auto& worker : m_workers)
@@ -66,119 +107,65 @@ namespace dxvk {
   }
 
 
-  void DxvkPipelineWorkers::notifyWorkers(DxvkPipelinePriority priority) {
-    uint32_t index = uint32_t(priority);
-
-    // If any workers are idle in a suitable set, notify the corresponding
-    // condition variable. If all workers are busy anyway, we know that the
-    // job is going to be picked up at some point anyway.
-    for (uint32_t i = index; i < m_buckets.size(); i++) {
-      if (m_buckets[i].idleWorkers) {
-        m_buckets[i].cond.notify_one();
-        break;
-      }
-    }
-  }
-
-
   void DxvkPipelineWorkers::startWorkers() {
-    if (!std::exchange(m_workersRunning, true)) {
-      // Determine number of available CPU logical threads, and clamp to a useful
-      // range. DXVK is not tested on extremely high core counts, and
-      // parallelism may be limited past a certain point.
-      uint32_t coreCount = dxvk::thread::hardware_concurrency();
+    if (!m_workersRunning) {
+      m_workersRunning = true;
 
-      // Use (number of CPU logical threads - 2) CPU logical threads.
-      // Less stuttering when compiling shaders while playing,
-      // in comparison to using all CPU logical threads.
-      coreCount = coreCount - 2;
+      // Resize the vector safely first while no child threads are active
+      m_workers.resize(m_workerCount);
 
-      coreCount = std::clamp(coreCount, 1u, 64u);
-
-      if (m_device->config().numCompilerThreads > 0)
-        coreCount = m_device->config().numCompilerThreads;
-
-      // Reduce worker count on 32-bit to save adderss space
-      uint32_t workerCount = coreCount;
-
-      if (env::is32BitHostPlatform())
-        workerCount = std::min(workerCount, 12u);
-
-      // Number of workers that can process pipeline pipelines with normal
-      // priority. Any other workers can only build high-priority pipelines.
-      // Base this on the available core count, not the worker count, since
-      // that is what determines the impact of having multiple threads do
-      // heavy CPU work.
-      uint32_t npWorkerCount = std::clamp(((coreCount - 1) * 5) / 7, 1u, workerCount);
-      uint32_t lpWorkerCount = std::clamp(((coreCount - 1) * 2) / 7, 1u, workerCount);
-
-      m_workers.reserve(workerCount);
-
-      for (size_t i = 0; i < workerCount; i++) {
-        DxvkPipelinePriority priority = DxvkPipelinePriority::Normal;
-
-        if (m_device->canUseGraphicsPipelineLibrary()) {
-          if (i >= npWorkerCount)
-            priority = DxvkPipelinePriority::High;
-          else if (i < lpWorkerCount)
-            priority = DxvkPipelinePriority::Low;
-        }
-
-        auto& worker = m_workers.emplace_back([this, priority] {
-          runWorker(priority);
-        });
-        
-        worker.set_priority(ThreadPriority::Lowest);
+      // Spawn the threads completely
+      for (uint32_t i = 0; i < m_workerCount; i++) {
+        m_workers[i] = dxvk::thread([this] { runWorker(); });
       }
 
-      Logger::info(str::format("DXVK: Using ", workerCount, " compiler threads"));
+      // Set priorities only after all handles are registered in the vector
+      // Keeps background work from choking the application
+      for (uint32_t i = 0; i < m_workerCount; i++) {
+        m_workers[i].set_priority(ThreadPriority::Lowest);
+      }
     }
   }
 
-
-  void DxvkPipelineWorkers::runWorker(DxvkPipelinePriority maxPriority) {
-    static const std::array<char, 3> suffixes = { 'h', 'n', 'l' };
-
-    const uint32_t maxPriorityIndex = uint32_t(maxPriority);
-    env::setThreadName(str::format("dxvk-shader-", suffixes.at(maxPriorityIndex)));
+  void DxvkPipelineWorkers::runWorker() {
+    env::setThreadName("dxvk-shader");
 
     while (true) {
-      PipelineEntry entry;
+      std::optional<PipelineEntry> p;
 
-      { std::unique_lock lock(m_lock);
-        auto& bucket = m_buckets[maxPriorityIndex];
+      { std::unique_lock lock(m_queueLock);
 
-        bucket.idleWorkers += 1;
-        bucket.cond.wait(lock, [this, maxPriorityIndex, &entry] {
-          // Attempt to fetch a work item from the
-          // highest-priority queue that is not empty
-          for (uint32_t i = 0; i <= maxPriorityIndex; i++) {
-            if (!m_buckets[i].queue.empty()) {
-              entry = m_buckets[i].queue.front();
-              m_buckets[i].queue.pop();
-              return true;
-            }
-          }
-
-          return !m_workersRunning;
+        m_queueCond.wait(lock, [this] {
+          return !m_workersRunning
+              || !m_queuedPipelines.empty();
         });
 
-        bucket.idleWorkers -= 1;
-
-        // Skip pending work, exiting early is
-        // more important in this case.
-        if (!m_workersRunning)
+        // During shutdown, finish queued work before exiting.
+        if (!m_workersRunning && m_queuedPipelines.empty())
           break;
-      }
 
-      if (entry.pipelineLibrary) {
-        entry.pipelineLibrary->compilePipeline();
-      } else if (entry.graphicsPipeline) {
-        entry.graphicsPipeline->compilePipeline(entry.graphicsState);
-        entry.graphicsPipeline->releasePipeline();
-      }
+        // Direct 1-by-1 retrieval, std::move casts the item to an rvalue reference,
+        // moving a few raw pointer addresses around, 
+        // which is faster than copying, i.e. without std::move
+        p = std::move(m_queuedPipelines.front());
+        m_queuedPipelines.pop();
 
-      m_tasksCompleted += 1;
+        // Chained wake-up: If there are still items left in the queue, 
+        // instantly flag the next thread while we hold the lock.
+        if (!m_queuedPipelines.empty()) {
+          m_queueCond.notify_one();
+        }
+      } // Lock is cleanly released here
+
+      // Compile exactly 1 pipeline safely outside the lock
+      if (p) {
+        if (p->computePipeline)
+          p->computePipeline->compilePipeline(p->computeState);
+        else if (p->graphicsPipeline)
+          p->graphicsPipeline->compilePipeline(p->graphicsState);
+
+        m_pendingTasks.fetch_sub(1, std::memory_order_relaxed);
+      }
     }
   }
 
@@ -186,23 +173,19 @@ namespace dxvk {
   DxvkPipelineManager::DxvkPipelineManager(
           DxvkDevice*         device)
   : m_device    (device),
-    m_workers   (device),
-    m_stateCache(device, this, &m_workers) {
-    Logger::info(str::format("DXVK: Graphics pipeline libraries ",
-      (m_device->canUseGraphicsPipelineLibrary() ? "supported" : "not supported")));
+    m_workers   (device) {
+    if (device->config().enableAsync)
+      m_compiler = new DxvkPipelineCompiler(device);
 
-    if (m_device->canUseGraphicsPipelineLibrary()) {
-      auto library = createNullFsPipelineLibrary();
-      library->compilePipeline();
-    }
   }
-  
-  
+
+
   DxvkPipelineManager::~DxvkPipelineManager() {
-    
+    this->stopWorkerThreads();
+
   }
-  
-  
+
+
   DxvkComputePipeline* DxvkPipelineManager::createComputePipeline(
     const DxvkComputePipelineShaders& shaders) {
     if (shaders.cs == nullptr)
@@ -214,19 +197,14 @@ namespace dxvk {
     if (pair != m_computePipelines.end())
       return &pair->second;
 
-    DxvkShaderPipelineLibraryKey key;
-    key.addShader(shaders.cs);
-
-    auto library = findPipelineLibraryLocked(key);
-
     auto iter = m_computePipelines.emplace(
       std::piecewise_construct,
       std::tuple(shaders),
-      std::tuple(m_device, this, shaders, library));
+      std::tuple(m_device, this, shaders));
     return &iter.first->second;
   }
-  
-  
+
+
   DxvkGraphicsPipeline* DxvkPipelineManager::createGraphicsPipeline(
     const DxvkGraphicsPipelineShaders& shaders) {
     if (shaders.vs == nullptr)
@@ -238,143 +216,26 @@ namespace dxvk {
     if (pair != m_graphicsPipelines.end())
       return &pair->second;
 
-    DxvkShaderPipelineLibrary* vsLibrary = nullptr;
-    DxvkShaderPipelineLibrary* fsLibrary = nullptr;
-
-    if (m_device->canUseGraphicsPipelineLibrary()) {
-      DxvkShaderPipelineLibraryKey vsKey;
-      vsKey.addShader(shaders.vs);
-
-      if (shaders.tcs != nullptr) vsKey.addShader(shaders.tcs);
-      if (shaders.tes != nullptr) vsKey.addShader(shaders.tes);
-      if (shaders.gs  != nullptr) vsKey.addShader(shaders.gs);
-
-      if (vsKey.canUsePipelineLibrary()) {
-        vsLibrary = findPipelineLibraryLocked(vsKey);
-
-        if (!vsLibrary) {
-          // If multiple shader stages are participating, create a
-          // pipeline library so that it can potentially be reused.
-          // Don't dispatch the pipeline library to a worker thread
-          // since it should be compiled on demand anyway.
-          vsLibrary = createPipelineLibraryLocked(vsKey);
-
-          // Register the pipeline library with the state cache
-          // so that subsequent runs can still compile it early
-          DxvkStateCacheKey shaderKeys;
-          shaderKeys.vs = shaders.vs->getShaderKey();
-
-          if (shaders.tcs != nullptr) shaderKeys.tcs = shaders.tcs->getShaderKey();
-          if (shaders.tes != nullptr) shaderKeys.tes = shaders.tes->getShaderKey();
-          if (shaders.gs  != nullptr) shaderKeys.gs  = shaders.gs->getShaderKey();
-
-          m_stateCache.addPipelineLibrary(shaderKeys);
-        }
-      }
-
-      if (vsLibrary) {
-        DxvkShaderPipelineLibraryKey fsKey;
-
-        if (shaders.fs != nullptr)
-          fsKey.addShader(shaders.fs);
-
-        fsLibrary = findPipelineLibraryLocked(fsKey);
-      }
-    }
-
     auto iter = m_graphicsPipelines.emplace(
       std::piecewise_construct,
       std::tuple(shaders),
-      std::tuple(m_device, this, shaders, vsLibrary, fsLibrary));
+      std::tuple(m_device, this, shaders));
     return &iter.first->second;
-  }
-
-  
-  DxvkShaderPipelineLibrary* DxvkPipelineManager::createShaderPipelineLibrary(
-    const DxvkShaderPipelineLibraryKey& key) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    return createPipelineLibraryLocked(key);
-  }
-
-
-  DxvkGraphicsPipelineVertexInputLibrary* DxvkPipelineManager::createVertexInputLibrary(
-    const DxvkGraphicsPipelineVertexInputState& state) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-
-    auto pair = m_vertexInputLibraries.find(state);
-    if (pair != m_vertexInputLibraries.end())
-      return &pair->second;
-
-    auto iter = m_vertexInputLibraries.emplace(
-      std::piecewise_construct,
-      std::tuple(state),
-      std::tuple(m_device, state));
-    return &iter.first->second;
-  }
-
-
-  DxvkGraphicsPipelineFragmentOutputLibrary* DxvkPipelineManager::createFragmentOutputLibrary(
-    const DxvkGraphicsPipelineFragmentOutputState& state) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-
-    auto pair = m_fragmentOutputLibraries.find(state);
-    if (pair != m_fragmentOutputLibraries.end())
-      return &pair->second;
-
-    auto iter = m_fragmentOutputLibraries.emplace(
-      std::piecewise_construct,
-      std::tuple(state),
-      std::tuple(m_device, state));
-    return &iter.first->second;
-  }
-  
-  
-  void DxvkPipelineManager::registerShader(
-    const Rc<DxvkShader>&         shader) {
-    if (canPrecompileShader(shader)) {
-      DxvkShaderPipelineLibraryKey key;
-      key.addShader(shader);
-
-      auto library = createShaderPipelineLibrary(key);
-      m_workers.compilePipelineLibrary(library, DxvkPipelinePriority::Normal);
-    }
-
-    m_stateCache.registerShader(shader);
-  }
-
-
-  void DxvkPipelineManager::requestCompileShader(
-    const Rc<DxvkShader>&         shader) {
-    if (!shader->needsLibraryCompile())
-      return;
-
-    // Dispatch high-priority compile job
-    DxvkShaderPipelineLibraryKey key;
-    key.addShader(shader);
-
-    auto library = findPipelineLibrary(key);
-
-    if (library)
-      m_workers.compilePipelineLibrary(library, DxvkPipelinePriority::High);
-
-    // Notify immediately so that this only gets called
-    // once, even if compilation does ot start immediately
-    shader->notifyLibraryCompile();
   }
 
 
   DxvkPipelineCount DxvkPipelineManager::getPipelineCount() const {
     DxvkPipelineCount result;
     result.numGraphicsPipelines = m_stats.numGraphicsPipelines.load();
-    result.numGraphicsLibraries = m_stats.numGraphicsLibraries.load();
     result.numComputePipelines  = m_stats.numComputePipelines.load();
     return result;
   }
 
 
   void DxvkPipelineManager::stopWorkerThreads() {
+    if (m_compiler != nullptr)
+      m_compiler->stopWorkerThreads();
     m_workers.stopWorkers();
-    m_stateCache.stopWorkers();
   }
 
 
@@ -405,56 +266,5 @@ namespace dxvk {
     return &iter.first->second;
   }
 
-
-  DxvkShaderPipelineLibrary* DxvkPipelineManager::createPipelineLibraryLocked(
-    const DxvkShaderPipelineLibraryKey& key) {
-
-    auto iter = m_shaderLibraries.emplace(
-      std::piecewise_construct,
-      std::tuple(key),
-      std::tuple(m_device, this, key));
-    return &iter.first->second;
-  }
-
-
-  DxvkShaderPipelineLibrary* DxvkPipelineManager::createNullFsPipelineLibrary() {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    DxvkShaderPipelineLibraryKey key;
-
-    auto iter = m_shaderLibraries.emplace(
-      std::piecewise_construct,
-      std::tuple(key),
-      std::tuple(m_device, this, key));
-    return &iter.first->second;
-  }
-
-
-  DxvkShaderPipelineLibrary* DxvkPipelineManager::findPipelineLibrary(
-    const DxvkShaderPipelineLibraryKey& key) {
-    std::lock_guard<dxvk::mutex> lock(m_mutex);
-    return findPipelineLibraryLocked(key);
-  }
-
-
-  DxvkShaderPipelineLibrary* DxvkPipelineManager::findPipelineLibraryLocked(
-    const DxvkShaderPipelineLibraryKey& key) {
-    auto pair = m_shaderLibraries.find(key);
-    if (pair == m_shaderLibraries.end())
-      return nullptr;
-
-    return &pair->second;
-  }
-
-
-  bool DxvkPipelineManager::canPrecompileShader(
-    const Rc<DxvkShader>& shader) const {
-    if (!shader->canUsePipelineLibrary(true))
-      return false;
-
-    if (shader->info().stage == VK_SHADER_STAGE_COMPUTE_BIT)
-      return true;
-
-    return m_device->canUseGraphicsPipelineLibrary();
-  }
 
 }

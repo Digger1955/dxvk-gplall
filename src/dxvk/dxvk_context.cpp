@@ -42,11 +42,6 @@ namespace dxvk {
     if (m_device->features().extTransformFeedback.transformFeedback)
       m_renderPassBarrierDst.stages |= VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
 
-    // Store the lifetime tracking bit as a context feature so
-    // that we don't have to scan device features at draw time
-    if (m_device->mustTrackPipelineLifetime())
-      m_features.set(DxvkContextFeature::TrackGraphicsPipeline);
-
     // Variable multisample rate is needed to efficiently support
     // rendering without bound render targets, otherwise we may
     // have to interrupt the current render pass whenever the
@@ -361,7 +356,7 @@ namespace dxvk {
     // Create a descriptor set pointing to the view
     VkBufferView viewObject = bufferView->handle();
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     VkWriteDescriptorSet descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -815,7 +810,7 @@ namespace dxvk {
 
     auto pipeInfo = m_common->metaCopy().getCopyFormattedBufferPipeline();
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkWriteDescriptorSet, 2> descriptorWrites;
@@ -1410,7 +1405,7 @@ namespace dxvk {
       mipGenerator.getSrcViewType(), imageView->info().format,
       VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT, resolveMode);
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
 
     for (uint32_t i = 0; i < mipGenerator.getPassCount(); i++) {
       // Width, height and layer count for the current pass
@@ -3556,7 +3551,7 @@ namespace dxvk {
       srcView->image()->info().sampleCount,
       dstView->image()->info().sampleCount, resolveMode);
 
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
 
     m_cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeInfo.pipeline);
@@ -4026,7 +4021,7 @@ namespace dxvk {
     DxvkMetaCopyPipeline pipeline = m_common->metaCopy().getCopyBufferToImagePipeline(
       image->info().format, bufferFormat, imageSubresource.aspectMask);
 
-    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout();
 
     VkWriteDescriptorSet descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
     descriptorWrite.dstSet = m_descriptorPool->alloc(pipeline.layout->getDescriptorSetLayout(0));
@@ -4295,7 +4290,7 @@ namespace dxvk {
       stencilDescriptor.imageLayout = imageLayout;
     }
 
-    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeline.layout->getPipelineLayout();
     VkDescriptorSet set = m_descriptorPool->alloc(pipeline.layout->getDescriptorSetLayout(0));
 
     std::array<VkWriteDescriptorSet, 3> descriptorWrites = {{
@@ -4530,7 +4525,7 @@ namespace dxvk {
       imageView->type(), lookupFormatInfo(imageView->info().format)->flags);
 
     // Create a descriptor set pointing to the view
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
     
     VkDescriptorImageInfo viewInfo;
@@ -4783,7 +4778,7 @@ namespace dxvk {
       views.srcImageView->info().viewType, viewFormats.dstFormat, dstImage->info().sampleCount);
 
     // Create and initialize descriptor set
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkDescriptorImageInfo, 2> descriptorImages = {{
@@ -5354,7 +5349,7 @@ namespace dxvk {
       dstFormat, srcImage->info().sampleCount, depthMode, stencilMode);
 
     // Create and initialize descriptor set
-    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = pipeInfo.layout->getPipelineLayout();
     VkDescriptorSet descriptorSet = m_descriptorPool->alloc(pipeInfo.layout->getDescriptorSetLayout(0));
 
     std::array<VkDescriptorImageInfo, 2> descriptorImages = {{
@@ -6391,9 +6386,6 @@ namespace dxvk {
       return false;
     }
 
-    if (m_features.test(DxvkContextFeature::TrackGraphicsPipeline))
-      m_cmd->trackGraphicsPipeline(newPipeline);
-
     if (unlikely(newPipeline->getSpecConstantMask() != m_state.gp.constants.mask))
       this->resetSpecConstants<VK_PIPELINE_BIND_POINT_GRAPHICS>(newPipeline->getSpecConstantMask());
 
@@ -6433,8 +6425,7 @@ namespace dxvk {
 
     // Retrieve and bind actual Vulkan pipeline handle
     auto pipelineInfo = m_state.gp.pipeline->getPipelineHandle(m_state.gp.state,
-      this->checkAsyncCompilationCompat(),
-      m_state.dyn.depthStencilState);
+      this->checkAsyncCompilationCompat());
 
     if (unlikely(!pipelineInfo.handle))
       return false;
@@ -6450,10 +6441,6 @@ namespace dxvk {
       m_lastBoundGraphicsPipeline = pipelineInfo.handle;
     }
 
-    // Independent pipeline layout affects all resource updates
-    if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline)
-      m_flags.set(DxvkContextFlag::GpIndependentSets);
-
     if (!m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasRasterizerDiscard)) {
       // Some state is aways dynamic when used
       m_flags.set(DxvkContextFlag::GpDynamicRasterizerState,
@@ -6464,29 +6451,6 @@ namespace dxvk {
         ? DxvkContextFlag::GpDynamicBlendConstants
         : DxvkContextFlag::GpDirtyBlendConstants);
 
-      if (pipelineInfo.type == DxvkGraphicsPipelineType::BasePipeline) {
-        // For pipelines created from graphics pipeline libraries, we need to
-        // apply a bunch of dynamic state that is otherwise static or unused
-        m_flags.set(DxvkContextFlag::GpDynamicDepthBias,
-                    DxvkContextFlag::GpDynamicDepthTest,
-                    DxvkContextFlag::GpDynamicStencilTest);
-
-        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3DepthClipEnable)
-          m_flags.set(DxvkContextFlag::GpDynamicDepthClip);
-
-        if (m_device->features().core.features.depthBounds)
-          m_flags.set(DxvkContextFlag::GpDynamicDepthBounds);
-
-        if (m_device->features().extExtendedDynamicState3.extendedDynamicState3RasterizationSamples
-         && m_device->features().extExtendedDynamicState3.extendedDynamicState3SampleMask) {
-          m_flags.set(m_state.gp.flags.test(DxvkGraphicsPipelineFlag::HasSampleRateShading)
-            ? DxvkContextFlag::GpDynamicMultisampleState
-            : DxvkContextFlag::GpDirtyMultisampleState);
-        }
-
-        if (m_device->canUseSampleLocations(0u))
-          m_flags.set(DxvkContextFlag::GpDynamicSampleLocations);
-      } else {
         // Conditionally set up dynamic state based on pipeline state.
         // Must match DxvkGraphicsPipelineDynamicState behaviour exactly.
         if (m_device->features().core.features.depthBounds) {
@@ -6515,7 +6479,8 @@ namespace dxvk {
           m_flags.set(DxvkContextFlag::GpDirtyDepthClip);
 
         m_flags.set(DxvkContextFlag::GpDirtyMultisampleState);
-      }
+
+
     } else {
       // If rasterization is disabled, none of the raster-related
       // dynamic state is used either so mark all of that as dirty.
@@ -6634,8 +6599,12 @@ namespace dxvk {
     if (unlikely(layout->getDescriptorCount() > m_descriptorInfos.size()))
       this->resizeDescriptorArrays(layout->getDescriptorCount());
 
+/*  Part of code that was used by GPL
+
     bool independentSets = BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
                         && m_flags.test(DxvkContextFlag::GpIndependentSets);
+
+*/
 
     uint32_t dirtySetMask = BindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS
       ? m_descriptorState.getDirtyGraphicsSets()
@@ -6896,7 +6865,7 @@ namespace dxvk {
         dirtySetMask &= (~1u) << setIndex;
 
         m_cmd->cmdBindDescriptorSets(DxvkCmdBuffer::ExecBuffer,
-          BindPoint, layout->getLayout()->getPipelineLayout(independentSets),
+          BindPoint, layout->getLayout()->getPipelineLayout(),
           firstSet, setIndex - firstSet + 1, &sets[firstSet],
           0, nullptr);
       }
@@ -7588,7 +7557,7 @@ namespace dxvk {
       return;
 
     m_cmd->cmdPushConstants(DxvkCmdBuffer::ExecBuffer,
-      bindings->getLayout()->getPipelineLayout(independentSets),
+      bindings->getLayout()->getPipelineLayout(),
       pushConstRange.stageFlags,
       pushConstRange.offset,
       pushConstRange.size,
@@ -7596,11 +7565,15 @@ namespace dxvk {
   }
 
   bool DxvkContext::checkAsyncCompilationCompat() const {
+    const uint32_t frameCountThreshold = uint32_t(m_device->config().asyncCompileThreshold);
+
     for (uint32_t i = 0; i < m_state.om.framebufferInfo.numAttachments(); i++) {
       const auto& attachment = m_state.om.framebufferInfo.getAttachment(i);
-      if (!attachment.view->getRtBindingAsyncCompilationCompat())
+
+      if (!attachment.view->getRtBindingAsyncCompilationCompat(frameCountThreshold))
         return false;
     }
+
     return true;
   }
 

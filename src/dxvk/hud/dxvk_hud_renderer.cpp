@@ -241,7 +241,7 @@ namespace dxvk::hud {
       descriptorWrites.size(),
       descriptorWrites.data());
 
-    VkPipelineLayout pipelineLayout = m_textPipelineLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_textPipelineLayout->getPipelineLayout();
 
     ctx.cmd->cmdBindDescriptorSet(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS,

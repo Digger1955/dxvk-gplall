@@ -351,7 +351,6 @@ namespace dxvk {
     Rc<DxvkShader> shader = generator.finalize();
 
     shader->setShaderKey(key);
-    pDevice->GetDXVKDevice()->registerShader(shader);
 
     const std::string& dumpPath = pDevice->GetOptions()->shaderDumpPath;
 

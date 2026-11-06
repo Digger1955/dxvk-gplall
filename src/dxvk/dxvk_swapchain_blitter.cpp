@@ -303,7 +303,7 @@ namespace dxvk {
     ctx.cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    VkPipelineLayout pipelineLayout = m_blitLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_blitLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_blitLayout->getDescriptorSetLayout(0));
 
     VkDescriptorImageInfo imageDescriptor = { };
@@ -550,7 +550,7 @@ namespace dxvk {
     ctx.cmd->cmdBindPipeline(DxvkCmdBuffer::ExecBuffer,
       VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    VkPipelineLayout pipelineLayout = m_cursorLayout->getPipelineLayout(false);
+    VkPipelineLayout pipelineLayout = m_cursorLayout->getPipelineLayout();
     VkDescriptorSet set = ctx.descriptorPool->alloc(m_cursorLayout->getDescriptorSetLayout(0));
 
     VkExtent3D cursorExtent = m_cursorImage->info().extent;

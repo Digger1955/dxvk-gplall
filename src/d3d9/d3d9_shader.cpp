@@ -86,8 +86,6 @@ namespace dxvk {
       
       m_shader->dump(dumpStream);
     }
-
-    pDevice->GetDXVKDevice()->registerShader(m_shader);
   }
 
 

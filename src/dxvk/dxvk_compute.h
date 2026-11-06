@@ -11,7 +11,6 @@
 namespace dxvk {
   
   class DxvkDevice;
-  class DxvkStateCache;
   class DxvkPipelineManager;
   struct DxvkPipelineStats;
 
@@ -59,8 +58,7 @@ namespace dxvk {
     DxvkComputePipeline(
             DxvkDevice*                 device,
             DxvkPipelineManager*        pipeMgr,
-            DxvkComputePipelineShaders  shaders,
-            DxvkShaderPipelineLibrary*  library);
+            DxvkComputePipelineShaders  shaders);
 
     ~DxvkComputePipeline();
     
@@ -121,13 +119,9 @@ namespace dxvk {
     }
 
   private:
-    
-    DxvkDevice*                 m_device;    
-    DxvkStateCache*             m_stateCache;
-    DxvkPipelineStats*          m_stats;
 
-    DxvkShaderPipelineLibrary*  m_library;
-    VkPipeline                  m_libraryHandle;
+    DxvkDevice*                 m_device;
+    DxvkPipelineStats*          m_stats;
 
     DxvkComputePipelineShaders  m_shaders;
 
@@ -152,10 +146,6 @@ namespace dxvk {
 
     void destroyPipeline(
             VkPipeline                    pipeline);
-
-    void logPipelineState(
-            LogLevel                      level,
-      const DxvkComputePipelineStateInfo& state) const;
 
     std::string createDebugName() const;
 
