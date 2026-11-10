@@ -8676,7 +8676,7 @@ namespace dxvk {
     rs[D3DRS_ALPHAFUNC]                  = D3DCMP_ALWAYS;
     BindAlphaTestState();
     rs[D3DRS_ALPHAREF]                   = 0;
-    m_pushData.shared.alphaRef           = rs[D3DRS_ALPHAREF];
+    UpdatePushConstant<D3D9RenderStateItem::AlphaRef>();
 
     rs[D3DRS_MULTISAMPLEANTIALIAS]       = TRUE;
     rs[D3DRS_MULTISAMPLEMASK]            = 0xffffffff;
