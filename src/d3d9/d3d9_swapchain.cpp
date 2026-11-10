@@ -633,6 +633,11 @@ namespace dxvk {
     bool changeFullscreen = m_presentParams.Windowed != pPresentParams->Windowed;
 
     if (m_window != pPresentParams->hDeviceWindow) {
+      if (!m_presentParams.Windowed) {
+        this->LeaveFullscreenMode();
+        if (!pPresentParams->Windowed)
+          changeFullscreen = true;
+      }
       m_window = pPresentParams->hDeviceWindow;
       m_displayRefreshRateDirty = true;
     }
@@ -1036,7 +1041,7 @@ namespace dxvk {
     // creating a new one to free up resources
     DestroyBackBuffers();
 
-    int frontBufferCount = (SwapWithFrontBuffer() || m_parent->GetOptions()->extraFrontbuffer) ? 1 : 0;
+    const uint32_t frontBufferCount = (SwapWithFrontBuffer() || m_parent->GetOptions()->extraFrontbuffer) ? 1 : 0;
     const uint32_t bufferCount = NumBackBuffers + frontBufferCount;
 
     m_backBuffers.reserve(bufferCount);
