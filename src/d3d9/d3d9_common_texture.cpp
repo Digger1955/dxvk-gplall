@@ -334,6 +334,9 @@ namespace dxvk {
     if (likely(m_buffer != nullptr))
       return m_buffer;
 
+    if (unlikely(m_locked.any() && m_data))
+      Logger::err("Switching from memory file to buffer while one of the subresources is locked!");
+
     DxvkBufferCreateInfo info;
     info.size   = GetTotalSize();
     info.usage  = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
@@ -822,16 +825,11 @@ namespace dxvk {
   }
 
 
-  const Rc<DxvkBuffer>& D3D9CommonTexture::GetBuffer() {
-    return m_buffer;
-  }
-
-
   DxvkBufferSlice D3D9CommonTexture::GetBufferSlice(UINT Subresource) {
     return DxvkBufferSlice(GetBuffer(), m_memoryOffset[Subresource], GetSubresourceSize(Subresource));
   }
 
-  
+
   uint32_t D3D9CommonTexture::GetPlaneCount() const {
     const DxvkFormatInfo* formatInfo = m_mapping.Format != VK_FORMAT_UNDEFINED
       ? lookupFormatInfo(m_mapping.Format)

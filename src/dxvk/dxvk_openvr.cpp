@@ -185,10 +185,10 @@ namespace dxvk {
         extensionList.resize(len);
         len = m_compositor->GetVulkanInstanceExtensionsRequired(extensionList.data(), len);
     }
-    return parseExtensionList(std::string(extensionList.data(), len));
+    return parseExtensionList(std::string(extensionList.data()));
   }
-  
-  
+
+
   DxvkExtensionList VrInstance::queryDeviceExtensions(Rc<DxvkAdapter> adapter) const {
     std::vector<char> extensionList;
     DWORD len;
@@ -227,10 +227,10 @@ namespace dxvk {
       len = m_compositor->GetVulkanDeviceExtensionsRequired(adapter->handle(), extensionList.data(), len);
     }
 
-    return parseExtensionList(std::string(extensionList.data(), len));
+    return parseExtensionList(std::string(extensionList.data()));
   }
-  
-  
+
+
   DxvkExtensionList VrInstance::parseExtensionList(const std::string& str) const {
     DxvkExtensionList result;
     
@@ -242,11 +242,11 @@ namespace dxvk {
     
     return result;
   }
-  
-  
+
+
   vr::IVRCompositor* VrInstance::getCompositor() {
     // Skip OpenVR initialization if requested
-    
+
     // Locate the OpenVR DLL if loaded by the process. Some
     // applications may not have OpenVR loaded at the time
     // they create the DXGI instance, so we try our own DLL.

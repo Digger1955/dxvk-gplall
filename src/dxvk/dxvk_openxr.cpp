@@ -103,10 +103,10 @@ namespace dxvk {
       return DxvkExtensionList();
     }
 
-    return parseExtensionList(std::string(extensionList.data(), len));
+    return parseExtensionList(std::string(extensionList.data()));
   }
-  
-  
+
+
   DxvkExtensionList DxvkXrProvider::queryDeviceExtensions() const {
     int res;
 
@@ -128,27 +128,27 @@ namespace dxvk {
       return DxvkExtensionList();
     }
 
-    return parseExtensionList(std::string(extensionList.data(), len));
+    return parseExtensionList(std::string(extensionList.data()));
   }
-  
-  
+
+
   DxvkExtensionList DxvkXrProvider::parseExtensionList(const std::string& str) const {
     DxvkExtensionList result;
-    
+
     std::stringstream strstream(str);
     std::string       section;
-    
+
     while (std::getline(strstream, section, ' '))
       result.push_back(vk::makeExtension(section.c_str()));
-    
+
     return result;
   }
-  
-  
+
+
   void DxvkXrProvider::shutdown() {
     if (m_loadedOxrApi)
       this->freeLibrary();
-    
+
     m_loadedOxrApi      = false;
     m_wineOxr = nullptr;
   }

@@ -1218,9 +1218,7 @@ namespace dxvk {
     if (unlikely(srcTexInfo->Desc()->Pool != D3DPOOL_DEFAULT))
       return D3DERR_INVALIDCALL;
 
-    // Our D3D8 implementation uses it in CopyRects to copy DEFAULT -> SYSTEMMEM/SCRATCH/MANAGED.
-    // TODO: Using it for MANAGED is problematic because it doesn't update the image of a MANAGED texture.
-    if (unlikely(!m_d3dCompatibility.test(D3DCompatibility::D3D8) && dstTexInfo->Desc()->Pool != D3DPOOL_SYSTEMMEM))
+    if (unlikely(dstTexInfo->Desc()->Pool != D3DPOOL_SYSTEMMEM))
       return D3DERR_INVALIDCALL;
 
     if (unlikely(srcTexInfo->Desc()->MultiSample != D3DMULTISAMPLE_NONE))
@@ -5057,33 +5055,32 @@ namespace dxvk {
     if (desc.Usage & D3DUSAGE_WRITEONLY)
       Flags &= ~D3DLOCK_READONLY;
 
-    // If we recently wrote to the texture on the gpu,
-    // then we need to copy -> buffer
-    // We are also always dirty if we are a render target,
-    // a depth stencil, or auto generate mipmaps.
+    // If we recently wrote to the texture on the gpu, then we need to copy -> buffer
+    // We are also always dirty if we are a render target, a depth stencil.
     bool renderable = desc.Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL);
     bool needsReadback = pResource->NeedsReadback(Subresource) || renderable;
+
+    // Don't use MapTexture here to keep the mapped list small while the resource is still locked.
+    void* mapPtr = pResource->GetData(Subresource);
+
+    bool needsBuffer = mapPtr == nullptr;
+    needsBuffer |= pResource->GetBuffer() == nullptr && (pResource->NeedsAnyReadback() || renderable);
+    if (unlikely(needsBuffer)) {
+      // Creating a buffer (or switching from a MemoryFile to a buffer) is done for the entire resource and invalidates
+      // the pointers. So do it once for the entire resource if any subresource gives us a reason.
+      // Do it even if we might be able to bypass the readback for this subresource later.
+      pResource->EnsureBufferExists(true);
+      mapPtr = pResource->GetData(Subresource);
+    }
 
     // Skip readback if we discard is specified. We can only do this for textures that have an associated Vulkan image.
     // Any other texture might write to the Vulkan staging buffer directly. (GetBackbufferData for example)
     needsReadback &= pResource->GetImage() != nullptr || !(Flags & D3DLOCK_DISCARD);
     pResource->SetNeedsReadback(Subresource, false);
 
-    if (unlikely(pResource->GetImage() != nullptr || needsReadback)) {
-      // Create mapping buffer if it doesn't exist yet. (POOL_DEFAULT)
-      pResource->EnsureBufferExists(!needsReadback);
-    }
-
-    // Don't use MapTexture here to keep the mapped list small while the resource is still locked.
-    void* mapPtr = pResource->GetData(Subresource);
-
     if (unlikely(needsReadback)) {
-      // The texture was written to on the GPU.
-      // This can be either the image (for D3DPOOL_DEFAULT)
-      // or the buffer directly (for D3DPOOL_SYSTEMMEM).
-
-      DxvkBufferSlice mappedBufferSlice = pResource->GetBufferSlice(Subresource);
-      const Rc<DxvkBuffer> mappedBuffer = pResource->GetBuffer();
+      // The texture (or the buffer) was written to on the GPU.
+      // This can be either the image (for D3DPOOL_DEFAULT) or the buffer directly (for D3DPOOL_SYSTEMMEM).
 
 /*
       if (unlikely(pResource->GetFormatMapping().ConversionFormatInfo.FormatType != D3D9ConversionFormat_None)) {
@@ -5092,12 +5089,14 @@ namespace dxvk {
 */
 
       if (pResource->GetImage() != nullptr) {
+        // If an image exists, all GPU writes modify that. Copy it to the mapping buffer.
+
         // if packedFormat is VK_FORMAT_UNDEFINED
         // DxvkContext::copyImageToBuffer will automatically take the format from the image
         VkFormat packedFormat = GetPackedDepthStencilFormat(desc.Format);
 
         EmitCs([
-          cImageBufferSlice = std::move(mappedBufferSlice),
+          cImageBufferSlice = pResource->GetBufferSlice(Subresource),
           cImage            = pResource->GetImage(),
           cSubresources     = vk::makeSubresourceLayers(subresource),
           cLevelExtent      = levelExtent,
@@ -5112,7 +5111,7 @@ namespace dxvk {
       }
 
       // Wait until the buffer is idle which may include the copy (and resolve) we just issued.
-      if (!WaitForResource(*mappedBuffer, pResource->GetMappingBufferSequenceNumber(Subresource), Flags))
+      if (!WaitForResource(*pResource->GetBuffer(), pResource->GetMappingBufferSequenceNumber(Subresource), Flags))
         return D3DERR_WASSTILLDRAWING;
     }
 
@@ -5258,6 +5257,10 @@ namespace dxvk {
     if (pResource->IsAutomaticMip())
       MarkTextureMipsDirty(pResource);
 
+    pResource->SetNeedsUpload(Subresource, false);
+    if (!pResource->NeedsAnyUpload())
+      MarkTextureUploaded(pResource);
+
     return D3D_OK;
   }
 
@@ -5291,14 +5294,19 @@ namespace dxvk {
 
     auto convertFormat = pDestTexture->GetFormatMapping().ConversionFormatInfo;
 
-    if (unlikely(pSrcTexture->NeedsReadback(SrcSubresource))) {
+    const Rc<DxvkBuffer>& buffer = pSrcTexture->GetBuffer();
+    if (unlikely(pSrcTexture->NeedsReadback(SrcSubresource))
+      && !WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), D3DLOCK_DONOTWAIT | D3DLOCK_READONLY)) {
       // The src texture has to be in POOL_SYSTEMEM, so it cannot use AUTOMIPGEN.
       // That means that NeedsReadback is only true if the texture has been used with GetRTData or GetFrontbufferData before.
       // Those functions create a buffer, so the buffer always exists here.
-      const Rc<DxvkBuffer>& buffer = pSrcTexture->GetBuffer();
-      WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), 0);
-      pSrcTexture->SetNeedsReadback(SrcSubresource, false);
+
+      // If we run into this frequently, consider dynamically skipping the staging buffer if the src texture needs a sync.
+      Logger::warn("Stalling in UpdateTextureFromBuffer.");
+
+      WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), D3DLOCK_READONLY);
     }
+    pSrcTexture->SetNeedsReadback(SrcSubresource, false);
 
     if (likely(convertFormat.FormatType == D3D9ConversionFormat_None)) {
       // The texture does not use a format that needs to be converted in a compute shader.
@@ -6621,7 +6629,6 @@ namespace dxvk {
     }
 
     pResource->ClearDirtyBoxes();
-    pResource->ClearNeedsUpload();
   }
 
 
