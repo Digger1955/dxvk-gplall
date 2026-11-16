@@ -52,32 +52,35 @@ namespace dxvk {
     std::unique_lock<dxvk::mutex> lock(m_mutex);
     auto interval = m_targetInterval;
 
-    if (interval == TimerDuration::zero()) {
+    // Guard against negative values
+    if (interval <= TimerDuration::zero()) {
       m_nextFrame = TimePoint(); // Reset
       return;
     }
 
     auto t1 = dxvk::high_resolution_clock::now();
 
-    // Check for massive long-term engine stall / drop
-    if (t1 > m_nextFrame + (interval * 2)) {
-      m_nextFrame = t1;
+    // First frame: initialize cleanly without a burst
+    if (m_nextFrame == TimePoint()) {
+      TimePoint sleepTarget = t1 + interval;
+      m_nextFrame = sleepTarget + interval;
+      lock.unlock();
+      Sleep::sleepUntil(t1, sleepTarget);
+      return;
     }
 
     // Capture current sleep target safely under the lock
     TimePoint sleepTarget = m_nextFrame;
 
-    // Increment the baseline. If t1 is early, advance by exactly one interval.
-    // If t1 is already late, advance the baseline relative to t1 to prevent pipeline stall cascades.
-    m_nextFrame = (t1 < sleepTarget + interval)
-      ? sleepTarget + interval
-      : t1 + interval;
-
-    // Decide whether to sleep based on the calculated timeline
     if (t1 < sleepTarget) {
-      // Safe to unlock - m_nextFrame has already been pushed forward for concurrent threads
+      // On time: maintain strict phase grid to prevent clock drift
+      m_nextFrame = sleepTarget + interval;
       lock.unlock();
       Sleep::sleepUntil(t1, sleepTarget);
+    } else {
+      // Late (minor or major stall): present immediately to avoid adding latency,
+      // and re-anchor the deadline to t1 so the next frame gets a full interval
+      m_nextFrame = t1 + interval;
     }
   }
 
