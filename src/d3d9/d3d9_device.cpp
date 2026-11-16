@@ -319,6 +319,10 @@ namespace dxvk {
 
     // When in SWVP mode, 256 matrices can be used for indexed vertex blending
     pCaps->MaxVertexBlendMatrixIndex = m_isSWVP ? 255 : 8;
+    // When in SWVP mode, 8192 vertex shader constants can be used,
+    // however D3D8 always reports the programmable VS constant limits
+    if (m_isSWVP && !m_d3dCompatibility.test(D3DCompatibility::D3D8))
+      pCaps->MaxVertexShaderConst = caps::MaxFloatConstantsSoftware;
 
     return D3D_OK;
   }
@@ -495,18 +499,7 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::Reset(D3DPRESENT_PARAMETERS* pPresentationParameters) {
     D3D9DeviceLock lock = LockDevice();
 
-    Logger::info("Device reset");
     m_deviceLostState = D3D9DeviceLostState::Ok;
-
-    HRESULT hr;
-    // Black Desert creates a D3DDEVTYPE_NULLREF device and
-    // expects reset to work despite passing invalid parameters.
-    if (likely(m_deviceType != D3DDEVTYPE_NULLREF)) {
-      hr = m_parent->ValidatePresentationParameters(pPresentationParameters);
-
-      if (unlikely(FAILED(hr)))
-        return hr;
-    }
 
     if (!m_d3dCompatibility.test(D3DCompatibility::D3D9Ex)) {
       // The internal references are always cleared, regardless of whether the Reset call succeeds.
@@ -545,9 +538,21 @@ namespace dxvk {
       SetDepthStencilSurface(nullptr);
     }
 
-    m_cursor.ResetCursor();
-
     const bool isExtended = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex);
+
+    HRESULT hr;
+    // Black Desert creates a D3DDEVTYPE_NULLREF device and
+    // expects reset to work despite passing invalid parameters.
+    if (likely(m_deviceType != D3DDEVTYPE_NULLREF)) {
+      hr = m_parent->ValidatePresentationParameters(pPresentationParameters);
+      if (unlikely(FAILED(hr))) {
+        if (!isExtended)
+          m_deviceLostState = D3D9DeviceLostState::NotReset;
+        return hr;
+      }
+    }
+
+    m_cursor.ResetCursor();
 
     /*
       * Before calling the IDirect3DDevice9::Reset method for a device,
@@ -559,7 +564,7 @@ namespace dxvk {
       * This matches what Windows D3D9 does.
     */
     if (unlikely(m_losableResourceCounter.load() != 0 && !isExtended && m_d3d9Options.countLosableResources)) {
-      Logger::warn(str::format("Device reset failed because device still has alive losable resources: Device not reset. Remaining resources: ", m_losableResourceCounter.load()));
+      Logger::warn(str::format("D3D9DeviceEx::Reset: Device reset failed due to pending losable resources. Remaining resources: ", m_losableResourceCounter.load()));
       m_deviceLostState = D3D9DeviceLostState::NotReset;
       // D3D8 returns D3DERR_DEVICELOST here, whereas D3D9 returns D3DERR_INVALIDCALL.
       return m_d3dCompatibility.test(D3DCompatibility::D3D8) ? D3DERR_DEVICELOST : D3DERR_INVALIDCALL;
@@ -567,10 +572,8 @@ namespace dxvk {
 
     hr = ResetSwapChain(pPresentationParameters, nullptr);
     if (unlikely(FAILED(hr))) {
-      if (!isExtended) {
-        Logger::warn("Device reset failed: Device not reset");
+      if (!isExtended)
         m_deviceLostState = D3D9DeviceLostState::NotReset;
-      }
       return hr;
     }
 
@@ -672,9 +675,8 @@ namespace dxvk {
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
-    // Docs:
-    // Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
-    // unless they are dynamic textures or they are private, FOURCC, driver formats.
+    // Docs: "Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
+    // unless they are dynamic textures or they are private, FOURCC, driver formats."
     desc.IsLockable         = Pool != D3DPOOL_DEFAULT
                             || (Usage & D3DUSAGE_DYNAMIC)
                             || IsVendorFormat(EnumerateFormat(Format));
@@ -757,10 +759,9 @@ namespace dxvk {
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
-    // Docs:
-    // Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
-    // unless they are dynamic textures. Volume textures do not
-    // exempt private, FOURCC, driver formats from these checks.
+    // Docs: "Textures placed in the D3DPOOL_DEFAULT pool cannot be
+    // locked unless they are dynamic textures. Volume textures do
+    // not exempt private, FOURCC, driver formats from these checks."
     desc.IsLockable         = Pool != D3DPOOL_DEFAULT
                             || (Usage & D3DUSAGE_DYNAMIC);
 
@@ -826,9 +827,8 @@ namespace dxvk {
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
-    // Docs:
-    // Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
-    // unless they are dynamic textures or they are private, FOURCC, driver formats.
+    // Docs: "Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
+    // unless they are dynamic textures or they are private, FOURCC, driver formats."
     desc.IsLockable         = Pool != D3DPOOL_DEFAULT
                             || (Usage & D3DUSAGE_DYNAMIC)
                             || IsVendorFormat(EnumerateFormat(Format));
@@ -1218,9 +1218,7 @@ namespace dxvk {
     if (unlikely(srcTexInfo->Desc()->Pool != D3DPOOL_DEFAULT))
       return D3DERR_INVALIDCALL;
 
-    // Our D3D8 implementation uses it in CopyRects to copy DEFAULT -> SYSTEMMEM/SCRATCH/MANAGED.
-    // TODO: Using it for MANAGED is problematic because it doesn't update the image of a MANAGED texture.
-    if (unlikely(!m_d3dCompatibility.test(D3DCompatibility::D3D8) && dstTexInfo->Desc()->Pool != D3DPOOL_SYSTEMMEM))
+    if (unlikely(dstTexInfo->Desc()->Pool != D3DPOOL_SYSTEMMEM))
       return D3DERR_INVALIDCALL;
 
     if (unlikely(srcTexInfo->Desc()->MultiSample != D3DMULTISAMPLE_NONE))
@@ -1233,7 +1231,7 @@ namespace dxvk {
                        || dstTexExtent.width > srcTexExtent.width
                        || dstTexExtent.height > srcTexExtent.height;
 
-    dstTexInfo->CreateBuffer(clearDst, dstTexInfo->GetTotalSize());
+    dstTexInfo->EnsureBufferExists(clearDst);
     DxvkBufferSlice dstBufferSlice      = dstTexInfo->GetBufferSlice(dst->GetSubresource());
     Rc<DxvkImage> srcImage              = srcTexInfo->GetImage();
     const DxvkFormatInfo* srcFormatInfo = lookupFormatInfo(srcImage->info().format);
@@ -1289,11 +1287,6 @@ namespace dxvk {
     if (unlikely(src == nullptr || dst == nullptr))
       return D3DERR_INVALIDCALL;
 
-    if (unlikely(src == dst))
-      return D3DERR_INVALIDCALL;
-
-    bool fastPath = true;
-
     D3D9CommonTexture* dstTextureInfo = dst->GetCommonTexture();
     D3D9CommonTexture* srcTextureInfo = src->GetCommonTexture();
 
@@ -1321,35 +1314,6 @@ namespace dxvk {
 
     D3D9Format srcFormat = srcTextureInfo->Desc()->Format;
     D3D9Format dstFormat = dstTextureInfo->Desc()->Format;
-
-    // We may only fast path copy non identicals one way!
-    // We don't know what garbage could be in the X8 data.
-    bool similar = AreFormatsSimilar(srcFormat, dstFormat);
-
-    // Copies are only supported on similar formats.
-    fastPath &= similar;
-
-    // Copies are only supported if the sample count matches,
-    // otherwise we need to resolve.
-    auto needsResolve = false;
-    if (srcImage->info().sampleCount != dstImage->info().sampleCount) {
-      needsResolve = srcImage->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
-      auto fbBlit = dstImage->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
-      fastPath &= !fbBlit;
-    }
-
-    // Copies would only work if we are block aligned.
-    if (pSourceRect != nullptr) {
-      fastPath       &=  (pSourceRect->left   % srcFormatInfo->blockSize.width  == 0);
-      fastPath       &=  (pSourceRect->right  % srcFormatInfo->blockSize.width  == 0);
-      fastPath       &=  (pSourceRect->top    % srcFormatInfo->blockSize.height == 0);
-      fastPath       &=  (pSourceRect->bottom % srcFormatInfo->blockSize.height == 0);
-    }
-
-    if (pDestRect != nullptr) {
-      fastPath       &=  (pDestRect->left     % dstFormatInfo->blockSize.width  == 0);
-      fastPath       &=  (pDestRect->top      % dstFormatInfo->blockSize.height == 0);
-    }
 
     VkImageSubresourceLayers dstSubresourceLayers = {
       dstSubresource.aspectMask,
@@ -1401,8 +1365,17 @@ namespace dxvk {
       || dstCopyExtent.width == 0 || dstCopyExtent.height == 0))
       return D3D_OK;
 
+    bool stretch = srcCopyExtent != dstCopyExtent;
+
+    bool srcIsSurface = srcTextureInfo->GetType() == D3DRTYPE_SURFACE;
+    bool dstIsSurface = dstTextureInfo->GetType() == D3DRTYPE_SURFACE;
+    bool srcHasAttachmentUsage = (srcTextureInfo->Desc()->Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) != 0;
+    bool dstHasAttachmentUsage = (dstTextureInfo->Desc()->Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) != 0;
+
     bool srcIsDS = IsDepthStencilFormat(srcFormat);
     bool dstIsDS = IsDepthStencilFormat(dstFormat);
+
+    // Additional restrictions for depth stencil surfaces
     if (unlikely(srcIsDS || dstIsDS)) {
       if (unlikely(!srcIsDS || !dstIsDS))
         return D3DERR_INVALIDCALL;
@@ -1410,23 +1383,21 @@ namespace dxvk {
       if (unlikely(srcTextureInfo->Desc()->Discard || dstTextureInfo->Desc()->Discard))
         return D3DERR_INVALIDCALL;
 
-      if (unlikely(srcCopyExtent.width != srcExtent.width || srcCopyExtent.height != srcExtent.height))
+      if (unlikely(stretch))
+        return D3DERR_INVALIDCALL;
+
+      if (unlikely(srcFormat != dstFormat))
+        return D3DERR_INVALIDCALL;
+
+      if (unlikely(!srcIsSurface || !dstIsSurface))
         return D3DERR_INVALIDCALL;
 
       if (unlikely(m_inScene))
         return D3DERR_INVALIDCALL;
     }
 
-    // Copies would only work if the extents match. (ie. no stretching)
-    bool stretch = srcCopyExtent != dstCopyExtent;
-
-    bool dstHasAttachmentUsage = (dstTextureInfo->Desc()->Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) != 0;
-    bool dstIsSurface = dstTextureInfo->GetType() == D3DRTYPE_SURFACE;
     if (stretch) {
       if (unlikely(pSourceSurface == pDestSurface))
-        return D3DERR_INVALIDCALL;
-
-      if (unlikely(dstIsDS))
         return D3DERR_INVALIDCALL;
 
       // The docs say that stretching is only allowed if the destination is either a render target surface or a render target texture.
@@ -1435,14 +1406,10 @@ namespace dxvk {
       if (unlikely(!dstIsSurface && !dstHasAttachmentUsage))
         return D3DERR_INVALIDCALL;
     } else {
-      bool srcIsSurface = srcTextureInfo->GetType() == D3DRTYPE_SURFACE;
-      bool srcHasAttachmentUsage = (srcTextureInfo->Desc()->Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL)) != 0;
 
       // D3D9Ex allows StretchRect to regular (non-RT) textures if it is a simple copy.
       bool isCopy = m_d3dCompatibility.test(D3DCompatibility::D3D9Ex)
         && pSourceRect == nullptr && pDestRect == nullptr // Yes, the rects have to be null. Even passing a rect that is the same size as the texture is invalid.
-        && srcTextureInfo->Desc()->Pool == D3DPOOL_DEFAULT
-        && dstTextureInfo->Desc()->Pool == D3DPOOL_DEFAULT
         && srcTextureInfo->Desc()->Format == dstTextureInfo->Desc()->Format;
 
       // Non-stretching copies are only allowed if:
@@ -1455,7 +1422,33 @@ namespace dxvk {
         return D3DERR_INVALIDCALL;
     }
 
-    fastPath &= !stretch;
+    // Copies would only work if the extents match. (ie. no stretching)
+    bool fastPath = !stretch;
+
+    // Copies are only supported on similar formats.
+    fastPath &= AreFormatsSimilar(srcFormat, dstFormat);
+
+    // Copies are only supported if the sample count matches,
+    // otherwise we need to resolve.
+    auto needsResolve = false;
+    if (srcImage->info().sampleCount != dstImage->info().sampleCount) {
+      needsResolve = srcImage->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
+      auto fbBlit = dstImage->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
+      fastPath &= !fbBlit;
+    }
+
+    // Copies would only work if we are block aligned.
+    if (pSourceRect != nullptr) {
+      fastPath       &=  (pSourceRect->left   % srcFormatInfo->blockSize.width  == 0);
+      fastPath       &=  (pSourceRect->right  % srcFormatInfo->blockSize.width  == 0);
+      fastPath       &=  (pSourceRect->top    % srcFormatInfo->blockSize.height == 0);
+      fastPath       &=  (pSourceRect->bottom % srcFormatInfo->blockSize.height == 0);
+    }
+
+    if (pDestRect != nullptr) {
+      fastPath       &=  (pDestRect->left     % dstFormatInfo->blockSize.width  == 0);
+      fastPath       &=  (pDestRect->top      % dstFormatInfo->blockSize.height == 0);
+    }
 
     if (!fastPath || needsResolve) {
       // Compressed destination formats are forbidden for blits.
@@ -1464,39 +1457,34 @@ namespace dxvk {
     }
 
     if (fastPath) {
-      if (needsResolve) {
-        VkImageResolve region;
-        region.srcSubresource = blitInfo.srcSubresource;
-        region.srcOffset      = blitInfo.srcOffsets[0];
-        region.dstSubresource = blitInfo.dstSubresource;
-        region.dstOffset      = blitInfo.dstOffsets[0];
-        region.extent         = srcCopyExtent;
-
-        EmitCs([
-          cDstImage    = dstImage,
-          cSrcImage    = srcImage,
-          cRegion      = region
-        ] (DxvkContext* ctx) {
-          // Deliberately use AVERAGE even for depth resolves here
-          ctx->resolveImage(cDstImage, cSrcImage, cRegion, cSrcImage->info().format,
-            VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
-        });
-      } else {
-        EmitCs([
-          cDstImage  = dstImage,
-          cSrcImage  = srcImage,
-          cDstLayers = blitInfo.dstSubresource,
-          cSrcLayers = blitInfo.srcSubresource,
-          cDstOffset = blitInfo.dstOffsets[0],
-          cSrcOffset = blitInfo.srcOffsets[0],
-          cExtent    = srcCopyExtent
-        ] (DxvkContext* ctx) {
+      EmitCs([
+        cDstImage  = dstImage,
+        cSrcImage  = srcImage,
+        cDstLayers = blitInfo.dstSubresource,
+        cSrcLayers = blitInfo.srcSubresource,
+        cDstOffset = blitInfo.dstOffsets[0],
+        cSrcOffset = blitInfo.srcOffsets[0],
+        cExtent    = srcCopyExtent,
+        cResolve   = needsResolve
+      ] (DxvkContext* ctx) {
+        if (!cResolve) {
           ctx->copyImage(
             cDstImage, cDstLayers, cDstOffset,
             cSrcImage, cSrcLayers, cSrcOffset,
             cExtent);
-        });
-      }
+        } else {
+          VkImageResolve region;
+          region.srcSubresource = cSrcLayers;
+          region.srcOffset      = cSrcOffset;
+          region.dstSubresource = cDstLayers;
+          region.dstOffset      = cDstOffset;
+          region.extent         = cExtent;
+
+          // Deliberately use AVERAGE even for depth resolves here
+          ctx->resolveImage(cDstImage, cSrcImage, region, cSrcImage->info().format,
+            VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
+        }
+      });
     }
     else {
       DxvkImageViewKey dstViewInfo;
@@ -4528,7 +4516,6 @@ namespace dxvk {
     HRESULT hr;
     if (likely(m_deviceType != D3DDEVTYPE_NULLREF)) {
       hr = m_parent->ValidatePresentationParametersEx(pPresentationParameters, pFullscreenDisplayMode);
-
       if (unlikely(FAILED(hr)))
         return hr;
     }
@@ -5068,33 +5055,32 @@ namespace dxvk {
     if (desc.Usage & D3DUSAGE_WRITEONLY)
       Flags &= ~D3DLOCK_READONLY;
 
-    // If we recently wrote to the texture on the gpu,
-    // then we need to copy -> buffer
-    // We are also always dirty if we are a render target,
-    // a depth stencil, or auto generate mipmaps.
+    // If we recently wrote to the texture on the gpu, then we need to copy -> buffer
+    // We are also always dirty if we are a render target, a depth stencil.
     bool renderable = desc.Usage & (D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL);
     bool needsReadback = pResource->NeedsReadback(Subresource) || renderable;
+
+    // Don't use MapTexture here to keep the mapped list small while the resource is still locked.
+    void* mapPtr = pResource->GetData(Subresource);
+
+    bool needsBuffer = mapPtr == nullptr;
+    needsBuffer |= pResource->GetBuffer() == nullptr && (pResource->NeedsAnyReadback() || renderable);
+    if (unlikely(needsBuffer)) {
+      // Creating a buffer (or switching from a MemoryFile to a buffer) is done for the entire resource and invalidates
+      // the pointers. So do it once for the entire resource if any subresource gives us a reason.
+      // Do it even if we might be able to bypass the readback for this subresource later.
+      pResource->EnsureBufferExists(true);
+      mapPtr = pResource->GetData(Subresource);
+    }
 
     // Skip readback if we discard is specified. We can only do this for textures that have an associated Vulkan image.
     // Any other texture might write to the Vulkan staging buffer directly. (GetBackbufferData for example)
     needsReadback &= pResource->GetImage() != nullptr || !(Flags & D3DLOCK_DISCARD);
     pResource->SetNeedsReadback(Subresource, false);
 
-    if (unlikely(pResource->GetMapMode() == D3D9_COMMON_TEXTURE_MAP_MODE_BACKED || needsReadback)) {
-      // Create mapping buffer if it doesn't exist yet. (POOL_DEFAULT)
-      pResource->CreateBuffer(!needsReadback, pResource->GetTotalSize());
-    }
-
-    // Don't use MapTexture here to keep the mapped list small while the resource is still locked.
-    void* mapPtr = pResource->GetData(Subresource);
-
     if (unlikely(needsReadback)) {
-      // The texture was written to on the GPU.
-      // This can be either the image (for D3DPOOL_DEFAULT)
-      // or the buffer directly (for D3DPOOL_SYSTEMMEM).
-
-      DxvkBufferSlice mappedBufferSlice = pResource->GetBufferSlice(Subresource);
-      const Rc<DxvkBuffer> mappedBuffer = pResource->GetBuffer();
+      // The texture (or the buffer) was written to on the GPU.
+      // This can be either the image (for D3DPOOL_DEFAULT) or the buffer directly (for D3DPOOL_SYSTEMMEM).
 
 /*
       if (unlikely(pResource->GetFormatMapping().ConversionFormatInfo.FormatType != D3D9ConversionFormat_None)) {
@@ -5103,55 +5089,16 @@ namespace dxvk {
 */
 
       if (pResource->GetImage() != nullptr) {
-        Rc<DxvkImage> resourceImage = pResource->GetImage();
-
-        Rc<DxvkImage> mappedImage;
-        if (resourceImage->info().sampleCount != 1) {
-            mappedImage = pResource->GetResolveImage();
-        } else {
-            mappedImage = std::move(resourceImage);
-        }
-
-        // When using any map mode which requires the image contents
-        // to be preserved, and if the GPU has write access to the
-        // image, copy the current image contents into the buffer.
-        auto subresourceLayers = vk::makeSubresourceLayers(subresource);
-
-        // We need to resolve this, some games
-        // lock MSAA render targets even though
-        // that's entirely illegal and they explicitly
-        // tell us that they do NOT want to lock them...
-        //
-        // resourceImage is null because the image reference was moved to mappedImage
-        // for images that need to be resolved.
-        if (resourceImage != nullptr) {
-          EmitCs([
-            cMainImage    = resourceImage,
-            cResolveImage = mappedImage,
-            cSubresource  = subresourceLayers
-          ] (DxvkContext* ctx) {
-            VkFormat format = cMainImage->info().format;
-
-            VkImageResolve region;
-            region.srcSubresource = cSubresource;
-            region.srcOffset      = VkOffset3D { 0, 0, 0 };
-            region.dstSubresource = cSubresource;
-            region.dstOffset      = VkOffset3D { 0, 0, 0 };
-            region.extent         = cMainImage->mipLevelExtent(cSubresource.mipLevel);
-
-            ctx->resolveImage(cResolveImage, cMainImage, region, format,
-              getDefaultResolveMode(format), VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
-          });
-        }
+        // If an image exists, all GPU writes modify that. Copy it to the mapping buffer.
 
         // if packedFormat is VK_FORMAT_UNDEFINED
         // DxvkContext::copyImageToBuffer will automatically take the format from the image
         VkFormat packedFormat = GetPackedDepthStencilFormat(desc.Format);
 
         EmitCs([
-          cImageBufferSlice = std::move(mappedBufferSlice),
-          cImage            = std::move(mappedImage),
-          cSubresources     = subresourceLayers,
+          cImageBufferSlice = pResource->GetBufferSlice(Subresource),
+          cImage            = pResource->GetImage(),
+          cSubresources     = vk::makeSubresourceLayers(subresource),
           cLevelExtent      = levelExtent,
           cPackedFormat     = packedFormat
         ] (DxvkContext* ctx) {
@@ -5164,7 +5111,7 @@ namespace dxvk {
       }
 
       // Wait until the buffer is idle which may include the copy (and resolve) we just issued.
-      if (!WaitForResource(*mappedBuffer, pResource->GetMappingBufferSequenceNumber(Subresource), Flags))
+      if (!WaitForResource(*pResource->GetBuffer(), pResource->GetMappingBufferSequenceNumber(Subresource), Flags))
         return D3DERR_WASSTILLDRAWING;
     }
 
@@ -5310,6 +5257,10 @@ namespace dxvk {
     if (pResource->IsAutomaticMip())
       MarkTextureMipsDirty(pResource);
 
+    pResource->SetNeedsUpload(Subresource, false);
+    if (!pResource->NeedsAnyUpload())
+      MarkTextureUploaded(pResource);
+
     return D3D_OK;
   }
 
@@ -5343,14 +5294,19 @@ namespace dxvk {
 
     auto convertFormat = pDestTexture->GetFormatMapping().ConversionFormatInfo;
 
-    if (unlikely(pSrcTexture->NeedsReadback(SrcSubresource))) {
-      // The src texutre has to be in POOL_SYSTEMEM, so it cannot use AUTOMIPGEN.
+    const Rc<DxvkBuffer>& buffer = pSrcTexture->GetBuffer();
+    if (unlikely(pSrcTexture->NeedsReadback(SrcSubresource))
+      && !WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), D3DLOCK_DONOTWAIT | D3DLOCK_READONLY)) {
+      // The src texture has to be in POOL_SYSTEMEM, so it cannot use AUTOMIPGEN.
       // That means that NeedsReadback is only true if the texture has been used with GetRTData or GetFrontbufferData before.
       // Those functions create a buffer, so the buffer always exists here.
-      const Rc<DxvkBuffer>& buffer = pSrcTexture->GetBuffer();
-      WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), 0);
-      pSrcTexture->SetNeedsReadback(SrcSubresource, false);
+
+      // If we run into this frequently, consider dynamically skipping the staging buffer if the src texture needs a sync.
+      Logger::warn("Stalling in UpdateTextureFromBuffer.");
+
+      WaitForResource(*buffer, pSrcTexture->GetMappingBufferSequenceNumber(SrcSubresource), D3DLOCK_READONLY);
     }
+    pSrcTexture->SetNeedsReadback(SrcSubresource, false);
 
     if (likely(convertFormat.FormatType == D3D9ConversionFormat_None)) {
       // The texture does not use a format that needs to be converted in a compute shader.
@@ -5439,7 +5395,7 @@ namespace dxvk {
       srcBlockCount.height *= std::min(pSrcTexture->GetPlaneCount(), 2u);
 
       // the converter can not handle the 4 aligned pitch so we always repack into a staging buffer
-      D3D9BufferSlice slice = AllocStagingBuffer(pSrcTexture->GetMipSize(SrcSubresource));
+      D3D9BufferSlice slice = AllocStagingBuffer(pSrcTexture->GetSubresourceSize(SrcSubresource));
       VkDeviceSize pitch = align(srcBlockCount.width * formatElementSize, 4);
 
       const DxvkFormatInfo* convertedFormatInfo = lookupFormatInfo(convertFormat.Format);
@@ -6673,7 +6629,6 @@ namespace dxvk {
     }
 
     pResource->ClearDirtyBoxes();
-    pResource->ClearNeedsUpload();
   }
 
 
@@ -8625,81 +8580,82 @@ namespace dxvk {
 
     auto& rs = m_state.renderStates;
 
-    rs[D3DRS_SEPARATEALPHABLENDENABLE] = FALSE;
-    rs[D3DRS_ALPHABLENDENABLE]         = FALSE;
-    rs[D3DRS_BLENDOP]                  = D3DBLENDOP_ADD;
-    rs[D3DRS_BLENDOPALPHA]             = D3DBLENDOP_ADD;
-    rs[D3DRS_DESTBLEND]                = D3DBLEND_ZERO;
-    rs[D3DRS_DESTBLENDALPHA]           = D3DBLEND_ZERO;
-    rs[D3DRS_COLORWRITEENABLE]         = 0x0000000f;
-    rs[D3DRS_COLORWRITEENABLE1]        = 0x0000000f;
-    rs[D3DRS_COLORWRITEENABLE2]        = 0x0000000f;
-    rs[D3DRS_COLORWRITEENABLE3]        = 0x0000000f;
-    rs[D3DRS_SRCBLEND]                 = D3DBLEND_ONE;
-    rs[D3DRS_SRCBLENDALPHA]            = D3DBLEND_ONE;
+    rs[D3DRS_SEPARATEALPHABLENDENABLE]   = FALSE;
+    rs[D3DRS_ALPHABLENDENABLE]           = FALSE;
+    rs[D3DRS_BLENDOP]                    = D3DBLENDOP_ADD;
+    rs[D3DRS_BLENDOPALPHA]               = D3DBLENDOP_ADD;
+    rs[D3DRS_DESTBLEND]                  = D3DBLEND_ZERO;
+    rs[D3DRS_DESTBLENDALPHA]             = D3DBLEND_ZERO;
+    rs[D3DRS_COLORWRITEENABLE]           = 0x0000000f;
+    rs[D3DRS_COLORWRITEENABLE1]          = 0x0000000f;
+    rs[D3DRS_COLORWRITEENABLE2]          = 0x0000000f;
+    rs[D3DRS_COLORWRITEENABLE3]          = 0x0000000f;
+    rs[D3DRS_SRCBLEND]                   = D3DBLEND_ONE;
+    rs[D3DRS_SRCBLENDALPHA]              = D3DBLEND_ONE;
     BindBlendState();
 
-    rs[D3DRS_BLENDFACTOR]              = 0xffffffff;
+    rs[D3DRS_BLENDFACTOR]                = 0xffffffff;
     BindBlendFactor();
 
-    rs[D3DRS_ZENABLE]                  = pPresentationParameters->EnableAutoDepthStencil
-                                       ? D3DZB_TRUE
-                                       : D3DZB_FALSE;
-    rs[D3DRS_ZFUNC]                    = D3DCMP_LESSEQUAL;
-    rs[D3DRS_TWOSIDEDSTENCILMODE]      = FALSE;
-    rs[D3DRS_ZWRITEENABLE]             = TRUE;
-    rs[D3DRS_STENCILENABLE]            = FALSE;
-    rs[D3DRS_STENCILFAIL]              = D3DSTENCILOP_KEEP;
-    rs[D3DRS_STENCILZFAIL]             = D3DSTENCILOP_KEEP;
-    rs[D3DRS_STENCILPASS]              = D3DSTENCILOP_KEEP;
-    rs[D3DRS_STENCILFUNC]              = D3DCMP_ALWAYS;
-    rs[D3DRS_CCW_STENCILFAIL]          = D3DSTENCILOP_KEEP;
-    rs[D3DRS_CCW_STENCILZFAIL]         = D3DSTENCILOP_KEEP;
-    rs[D3DRS_CCW_STENCILPASS]          = D3DSTENCILOP_KEEP;
-    rs[D3DRS_CCW_STENCILFUNC]          = D3DCMP_ALWAYS;
-    rs[D3DRS_STENCILMASK]              = 0xFFFFFFFF;
-    rs[D3DRS_STENCILWRITEMASK]         = 0xFFFFFFFF;
+    rs[D3DRS_ZENABLE]                    = pPresentationParameters->EnableAutoDepthStencil
+                                         ? D3DZB_TRUE
+                                         : D3DZB_FALSE;
+    rs[D3DRS_ZFUNC]                      = D3DCMP_LESSEQUAL;
+    rs[D3DRS_TWOSIDEDSTENCILMODE]        = FALSE;
+    rs[D3DRS_ZWRITEENABLE]               = TRUE;
+    rs[D3DRS_STENCILENABLE]              = FALSE;
+    rs[D3DRS_STENCILFAIL]                = D3DSTENCILOP_KEEP;
+    rs[D3DRS_STENCILZFAIL]               = D3DSTENCILOP_KEEP;
+    rs[D3DRS_STENCILPASS]                = D3DSTENCILOP_KEEP;
+    rs[D3DRS_STENCILFUNC]                = D3DCMP_ALWAYS;
+    rs[D3DRS_CCW_STENCILFAIL]            = D3DSTENCILOP_KEEP;
+    rs[D3DRS_CCW_STENCILZFAIL]           = D3DSTENCILOP_KEEP;
+    rs[D3DRS_CCW_STENCILPASS]            = D3DSTENCILOP_KEEP;
+    rs[D3DRS_CCW_STENCILFUNC]            = D3DCMP_ALWAYS;
+    rs[D3DRS_STENCILMASK]                = 0xFFFFFFFF;
+    rs[D3DRS_STENCILWRITEMASK]           = 0xFFFFFFFF;
     BindDepthStencilState();
 
-    rs[D3DRS_STENCILREF] = 0;
+    rs[D3DRS_STENCILREF]                 = 0;
     BindDepthStencilReference();
 
-    rs[D3DRS_FILLMODE]            = D3DFILL_SOLID;
-    rs[D3DRS_CULLMODE]            = D3DCULL_CCW;
-    rs[D3DRS_DEPTHBIAS]           = bit::cast<DWORD>(0.0f);
-    rs[D3DRS_SLOPESCALEDEPTHBIAS] = bit::cast<DWORD>(0.0f);
+    rs[D3DRS_FILLMODE]                   = D3DFILL_SOLID;
+    rs[D3DRS_CULLMODE]                   = D3DCULL_CCW;
+    rs[D3DRS_DEPTHBIAS]                  = bit::cast<DWORD>(0.0f);
+    rs[D3DRS_SLOPESCALEDEPTHBIAS]        = bit::cast<DWORD>(0.0f);
     BindRasterizerState();
     BindDepthBias();
 
-    rs[D3DRS_SCISSORTESTENABLE]   = FALSE;
+    rs[D3DRS_SCISSORTESTENABLE]          = FALSE;
 
-    rs[D3DRS_ALPHATESTENABLE]     = FALSE;
-    rs[D3DRS_ALPHAFUNC]           = D3DCMP_ALWAYS;
+    rs[D3DRS_ALPHATESTENABLE]            = FALSE;
+    rs[D3DRS_ALPHAFUNC]                  = D3DCMP_ALWAYS;
     BindAlphaTestState();
-    rs[D3DRS_ALPHAREF]            = 0;
+    rs[D3DRS_ALPHAREF]                   = 0;
     UpdatePushConstant<D3D9RenderStateItem::AlphaRef>();
 
-    rs[D3DRS_MULTISAMPLEMASK]     = 0xffffffff;
+    rs[D3DRS_MULTISAMPLEANTIALIAS]       = TRUE;
+    rs[D3DRS_MULTISAMPLEMASK]            = 0xffffffff;
     BindMultiSampleState();
 
-    rs[D3DRS_TEXTUREFACTOR]       = 0xffffffff;
+    rs[D3DRS_TEXTUREFACTOR]              = 0xffffffff;
     m_dirty.set(D3D9DeviceDirtyFlag::FFPixelData);
 
-    rs[D3DRS_DIFFUSEMATERIALSOURCE]  = D3DMCS_COLOR1;
-    rs[D3DRS_SPECULARMATERIALSOURCE] = D3DMCS_COLOR2;
-    rs[D3DRS_AMBIENTMATERIALSOURCE]  = D3DMCS_MATERIAL;
-    rs[D3DRS_EMISSIVEMATERIALSOURCE] = D3DMCS_MATERIAL;
-    rs[D3DRS_LIGHTING]               = TRUE;
-    rs[D3DRS_COLORVERTEX]            = TRUE;
-    rs[D3DRS_LOCALVIEWER]            = TRUE;
-    rs[D3DRS_RANGEFOGENABLE]         = FALSE;
-    rs[D3DRS_NORMALIZENORMALS]       = FALSE;
+    rs[D3DRS_DIFFUSEMATERIALSOURCE]      = D3DMCS_COLOR1;
+    rs[D3DRS_SPECULARMATERIALSOURCE]     = D3DMCS_COLOR2;
+    rs[D3DRS_AMBIENTMATERIALSOURCE]      = D3DMCS_MATERIAL;
+    rs[D3DRS_EMISSIVEMATERIALSOURCE]     = D3DMCS_MATERIAL;
+    rs[D3DRS_LIGHTING]                   = TRUE;
+    rs[D3DRS_COLORVERTEX]                = TRUE;
+    rs[D3DRS_LOCALVIEWER]                = TRUE;
+    rs[D3DRS_RANGEFOGENABLE]             = FALSE;
+    rs[D3DRS_NORMALIZENORMALS]           = FALSE;
     m_dirty.set(D3D9DeviceDirtyFlag::FFVertexShader);
 
     // PS
-    rs[D3DRS_SPECULARENABLE] = FALSE;
+    rs[D3DRS_SPECULARENABLE]             = FALSE;
 
-    rs[D3DRS_AMBIENT]                = 0;
+    rs[D3DRS_AMBIENT]                    = 0;
     m_dirty.set(D3D9DeviceDirtyFlag::FFVertexData);
 
     rs[D3DRS_FOGENABLE]                  = FALSE;
@@ -8715,7 +8671,7 @@ namespace dxvk {
     m_dirty.set(D3D9DeviceDirtyFlag::FogScale);
     m_dirty.set(D3D9DeviceDirtyFlag::FogState);
 
-    rs[D3DRS_CLIPPLANEENABLE] = 0;
+    rs[D3DRS_CLIPPLANEENABLE]            = 0;
     m_dirty.set(D3D9DeviceDirtyFlag::ClipPlanes);
 
     const auto& limits = m_dxvkDevice->properties().core.properties.limits;
@@ -8755,7 +8711,6 @@ namespace dxvk {
     rs[D3DRS_WRAP6]                      = 0;
     rs[D3DRS_WRAP7]                      = 0;
     rs[D3DRS_CLIPPING]                   = TRUE;
-    rs[D3DRS_MULTISAMPLEANTIALIAS]       = TRUE;
     rs[D3DRS_PATCHEDGESTYLE]             = D3DPATCHEDGE_DISCRETE;
     rs[D3DRS_DEBUGMONITORTOKEN]          = D3DDMT_ENABLE;
     rs[D3DRS_POSITIONDEGREE]             = D3DDEGREE_CUBIC;
