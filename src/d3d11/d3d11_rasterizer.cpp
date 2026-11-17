@@ -2,7 +2,7 @@
 #include "d3d11_rasterizer.h"
 
 namespace dxvk {
-  
+
   D3D11RasterizerState::D3D11RasterizerState(
           D3D11Device*                    device,
     const D3D11_RASTERIZER_DESC2&         desc,
@@ -16,7 +16,7 @@ namespace dxvk {
       case D3D11_FILL_SOLID:     m_state.setPolygonMode(VK_POLYGON_MODE_FILL); break;
       case D3D11_FILL_WIREFRAME: m_state.setPolygonMode(VK_POLYGON_MODE_LINE); break;
     }
-    
+
     // Face culling properties. The rasterizer may discard
     // polygons that are facing towards or away from the
     // viewer, depending on the options below.
@@ -55,10 +55,10 @@ namespace dxvk {
         m_state.setLineMode(VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT);
     }
   }
-  
-  
+
+
   D3D11RasterizerState::~D3D11RasterizerState() {
-    
+
   }
 
 
@@ -67,7 +67,7 @@ namespace dxvk {
       return E_POINTER;
 
     *ppvObject = nullptr;
-    
+
     if (riid == __uuidof(IUnknown)
      || riid == __uuidof(ID3D11DeviceChild)
      || riid == __uuidof(ID3D11RasterizerState)
@@ -76,7 +76,7 @@ namespace dxvk {
       *ppvObject = ref(this);
       return S_OK;
     }
-    
+
     if (riid == __uuidof(ID3D10DeviceChild)
      || riid == __uuidof(ID3D10RasterizerState)) {
       *ppvObject = ref(&m_d3d10);
@@ -111,8 +111,8 @@ namespace dxvk {
     pDesc->MultisampleEnable      = m_desc.MultisampleEnable;
     pDesc->AntialiasedLineEnable  = m_desc.AntialiasedLineEnable;
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11RasterizerState::GetDesc1(D3D11_RASTERIZER_DESC1* pDesc) {
     pDesc->FillMode               = m_desc.FillMode;
     pDesc->CullMode               = m_desc.CullMode;
@@ -126,8 +126,8 @@ namespace dxvk {
     pDesc->AntialiasedLineEnable  = m_desc.AntialiasedLineEnable;
     pDesc->ForcedSampleCount      = m_desc.ForcedSampleCount;
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11RasterizerState::GetDesc2(D3D11_RASTERIZER_DESC2* pDesc) {
     *pDesc = m_desc;
   }
@@ -150,8 +150,8 @@ namespace dxvk {
     dstDesc.ConservativeRaster    = D3D11_CONSERVATIVE_RASTERIZATION_MODE_OFF;
     return dstDesc;
   }
-  
-  
+
+
   D3D11_RASTERIZER_DESC2 D3D11RasterizerState::PromoteDesc(
     const D3D11_RASTERIZER_DESC1*  pSrcDesc) {
     D3D11_RASTERIZER_DESC2 dstDesc;
@@ -165,37 +165,37 @@ namespace dxvk {
     dstDesc.ScissorEnable         = pSrcDesc->ScissorEnable;
     dstDesc.MultisampleEnable     = pSrcDesc->MultisampleEnable;
     dstDesc.AntialiasedLineEnable = pSrcDesc->AntialiasedLineEnable;
-    dstDesc.ForcedSampleCount     = 0;
+    dstDesc.ForcedSampleCount     = pSrcDesc->ForcedSampleCount;
     dstDesc.ConservativeRaster    = D3D11_CONSERVATIVE_RASTERIZATION_MODE_OFF;
     return dstDesc;
   }
-  
-  
+
+
   HRESULT D3D11RasterizerState::NormalizeDesc(
           D3D11_RASTERIZER_DESC2* pDesc) {
     if (pDesc->FillMode < D3D11_FILL_WIREFRAME
      || pDesc->FillMode > D3D11_FILL_SOLID)
       return E_INVALIDARG;
-    
+
     if (pDesc->CullMode < D3D11_CULL_NONE
      || pDesc->CullMode > D3D11_CULL_BACK)
       return E_INVALIDARG;
-    
+
     if (pDesc->FrontCounterClockwise)
       pDesc->FrontCounterClockwise = TRUE;
-    
+
     if (pDesc->DepthClipEnable)
       pDesc->DepthClipEnable = TRUE;
-    
+
     if (pDesc->ScissorEnable)
       pDesc->ScissorEnable = TRUE;
-    
+
     if (pDesc->MultisampleEnable)
       pDesc->MultisampleEnable = TRUE;
-    
+
     if (pDesc->AntialiasedLineEnable)
       pDesc->AntialiasedLineEnable = TRUE;
-    
+
     if (pDesc->ForcedSampleCount != 0) {
       if (FAILED(DecodeSampleCount(pDesc->ForcedSampleCount, nullptr)))
         return E_INVALIDARG;
@@ -203,5 +203,5 @@ namespace dxvk {
 
     return S_OK;
   }
-  
+
 }

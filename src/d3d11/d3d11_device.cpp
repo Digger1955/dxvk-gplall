@@ -1861,26 +1861,26 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11Device::GetImmediateContext1(ID3D11DeviceContext1** ppImmediateContext) {
     *ppImmediateContext = m_context.ref();
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11Device::GetImmediateContext2(ID3D11DeviceContext2** ppImmediateContext) {
     *ppImmediateContext = m_context.ref();
   }
-  
-  
+
+
   void STDMETHODCALLTYPE D3D11Device::GetImmediateContext3(ID3D11DeviceContext3** ppImmediateContext) {
     *ppImmediateContext = m_context.ref();
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11Device::SetExceptionMode(UINT RaiseFlags) {
 /*
     Logger::err("D3D11Device::SetExceptionMode: Not implemented");
 */
-    return E_NOTIMPL;
+    return S_OK;
   }
-  
-  
+
+
   UINT STDMETHODCALLTYPE D3D11Device::GetExceptionMode() {
 /*
     Logger::err("D3D11Device::GetExceptionMode: Not implemented");

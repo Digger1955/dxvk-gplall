@@ -257,7 +257,7 @@ namespace dxvk {
             auto& counter = isHighPrio ? m_seqHighPrio : m_seqOrdered;
             counter.store(entry.seq, std::memory_order_release);
 
-            m_condOnSync.notify_one();
+            m_condOnSync.notify_all();
           }
 
           // Immediately free the chunk to release
