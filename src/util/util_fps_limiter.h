@@ -56,6 +56,7 @@ namespace dxvk {
     dxvk::mutex     m_mutex;
 
     TimerDuration   m_targetInterval  = TimerDuration::zero();
+    TimerDuration   m_deviation       = TimerDuration::zero();
     TimePoint       m_nextFrame       = TimePoint();
 
     bool            m_envOverride     = false;
