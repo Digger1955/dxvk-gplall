@@ -1143,11 +1143,6 @@ namespace dxvk {
     if (!GetPendingCsChunks() && !hEvent)
       return;
 
-    // Throttle submissions to avoid queueing up too many command
-    // buffers in case the app never presents
-    if (m_submissionId >= MaxNumQueuedCommandBuffers)
-      m_device->waitForSubmission(m_submissionId - MaxNumQueuedCommandBuffers);
-
     // Unbind unused resources
     ApplyDirtyNullBindings();
 
