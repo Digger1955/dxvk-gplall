@@ -14,7 +14,7 @@ namespace dxvk {
     MaxNumUniformBufferSlots    =   128,
     MaxNumSamplerSlots          =   128,
     MaxNumResourceSlots         =  1024,
-    MaxNumQueuedCommandBuffers  =    32,
+    MaxNumQueuedCommandBuffers  =     8,
     MaxNumQueryCountPerPool     =   128,
     MaxNumSpecConstants         =    20,
     MaxUniformBufferSize        = 65536,
