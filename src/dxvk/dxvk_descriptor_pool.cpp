@@ -268,12 +268,7 @@ namespace dxvk {
 
 
   Rc<DxvkDescriptorPool> DxvkDescriptorPoolSet::getDescriptorPool() {
-    Rc<DxvkDescriptorPool> pool = m_pools.retrieveObject();
-
-    if (pool == nullptr)
-      pool = new DxvkDescriptorPool(m_device, this);
-
-    return pool;
+    return m_pools.retrieveObject(m_device, this);
   }
 
 
