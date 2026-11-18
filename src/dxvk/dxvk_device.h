@@ -618,9 +618,9 @@ namespace dxvk {
      * used by the GPU can be safely destroyed.
      */
     void waitForIdle();
-    
+
   private:
-    
+
     DxvkOptions                 m_options;
 
     Rc<DxvkInstance>            m_instance;
@@ -633,22 +633,22 @@ namespace dxvk {
 
     DxvkDeviceFeatures          m_features;
     DxvkDeviceInfo              m_properties;
-    
+
     DxvkDevicePerfHints         m_perfHints;
     DxvkObjects                 m_objects;
 
     sync::Spinlock              m_statLock;
     DxvkStatCounters            m_statCounters;
-    
-    DxvkRecycler<DxvkCommandList, 16> m_recycledCommandLists;
-    
+
+    DxvkRecycler<DxvkCommandList, MaxNumQueuedCommandBuffers> m_recycledCommandLists;
+
     DxvkSubmissionQueue         m_submissionQueue;
 
     DxvkDevicePerfHints getPerfHints();
-    
+
     void recycleCommandList(
       const Rc<DxvkCommandList>& cmdList);
 
   };
-  
+
 }
