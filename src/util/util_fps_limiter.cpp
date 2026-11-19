@@ -43,12 +43,9 @@ namespace dxvk {
         m_nextFrame = TimePoint();
 
         if (interval > TimerDuration::zero()) {
-          // Heuristic - 12 ms is approx 83.3FPS
-          bool isHighFps = (interval <= 12ms);
-
           // maxCorrection - total correction window - percentage of interval.
-          // 12.5% for more than 83.3FPS; 3.125% for less than 83.3FPS
-          m_maxCorrection      = isHighFps ? (interval / 8) : (interval / 32);
+          // 12.5% for any FPS target
+          m_maxCorrection      = interval / 8;
         } else {
           m_maxCorrection      = TimerDuration::zero();
         }
@@ -61,11 +58,11 @@ namespace dxvk {
     TimerDuration sleepError = std::clamp(std::chrono::duration_cast<TimerDuration>(wake - target), TimerDuration::zero(), m_maxCorrection);
 
     // EWMA-based sleep overshoot estimate.
-    // 0.05/0.95 (alphaNumerator = 5/alphaDenominator = 100) favors smoothness and jitter suppression over adjustment speed.
+    // 0.1/0.9 (alphaNumerator = 10/alphaDenominator = 100)
     // Measures the sleep time itself, rather than frame time, which also includes rendering and presentation delays.
 
     // Avoids floating-point arithmetic in delay().
-    constexpr int64_t alphaNumerator = 5;
+    constexpr int64_t alphaNumerator = 10;
     constexpr int64_t alphaDenominator = 100;
     m_deviation = TimerDuration((int64_t(m_deviation.count()) * (alphaDenominator - alphaNumerator) + int64_t(sleepError.count()) * alphaNumerator) / alphaDenominator);
 
@@ -80,6 +77,7 @@ namespace dxvk {
     std::unique_lock<dxvk::mutex> lock(m_mutex);
     auto interval = m_targetInterval;
 
+    // Guard against negative values
     if (interval <= TimerDuration::zero()) {
       // Reset
       m_nextFrame = TimePoint();
