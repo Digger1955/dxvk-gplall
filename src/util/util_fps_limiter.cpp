@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <thread>
 
 #include "thread.h"
@@ -5,7 +6,7 @@
 #include "util_fps_limiter.h"
 #include "util_sleep.h"
 #include "util_string.h"
-#include "../dxvk/framepacer/dxvk_framepacer.h"
+#include "../dxvk/dxvk_latency.h"
 
 #include "./log/log.h"
 
@@ -32,55 +33,112 @@ namespace dxvk {
     std::lock_guard<dxvk::mutex> lock(m_mutex);
 
     if (!m_envOverride) {
-      TimerDuration interval = frameRate != 0.0
+      TimerDuration interval = frameRate > 0.0
         ? TimerDuration(int64_t(double(TimerDuration::period::den) / frameRate))
         : TimerDuration::zero();
 
       if (m_targetInterval != interval) {
         m_targetInterval = interval;
+        m_deviation = TimerDuration::zero();
+        m_nextFrame = TimePoint();
+
+        if (interval > TimerDuration::zero()) {
+          // Heuristic - 12 ms is approx 83.3FPS
+          bool isHighFps = (interval <= 12ms);
+
+          // maxCorrection - total correction window - percentage of interval.
+          // 12.5% for more than 83.3FPS; 3.125% for less than 83.3FPS
+          m_maxCorrection      = isHighFps ? (interval / 8) : (interval / 32);
+        } else {
+          m_maxCorrection      = TimerDuration::zero();
+        }
       }
     }
   }
 
 
+  void FpsLimiter::updateDeviation(TimePoint target, TimePoint wake) {
+    TimerDuration sleepError = std::clamp(std::chrono::duration_cast<TimerDuration>(wake - target), TimerDuration::zero(), m_maxCorrection);
+
+    // EWMA-based sleep overshoot estimate.
+    // 0.05/0.95 (alphaNumerator = 5/alphaDenominator = 100) favors smoothness and jitter suppression over adjustment speed.
+    // Measures the sleep time itself, rather than frame time, which also includes rendering and presentation delays.
+
+    // Avoids floating-point arithmetic in delay().
+    constexpr int64_t alphaNumerator = 5;
+    constexpr int64_t alphaDenominator = 100;
+    m_deviation = TimerDuration((int64_t(m_deviation.count()) * (alphaDenominator - alphaNumerator) + int64_t(sleepError.count()) * alphaNumerator) / alphaDenominator);
+
+    m_deviation = std::clamp(m_deviation, TimerDuration::zero(), m_maxCorrection);
+  }
+
+
   void FpsLimiter::delay(const Rc<DxvkLatencyTracker>& tracker) {
-    FramePacer* framePacer = dynamic_cast<FramePacer*>(tracker.ptr());
-    if (framePacer && framePacer->getMode()) {
+    if (tracker != nullptr && tracker->isFramePacingEnabled())
       return;
-    }
 
     std::unique_lock<dxvk::mutex> lock(m_mutex);
     auto interval = m_targetInterval;
 
     // Guard against negative values
     if (interval <= TimerDuration::zero()) {
-      m_nextFrame = TimePoint(); // Reset
+      // Reset
+      m_nextFrame = TimePoint();
+      m_deviation = TimerDuration::zero();
       return;
     }
 
-    auto t1 = dxvk::high_resolution_clock::now();
+    auto now = dxvk::high_resolution_clock::now();
 
-    // First frame: initialize cleanly without a burst
+    // First frame after init or rate change: present immediately and anchor next deadline.
     if (m_nextFrame == TimePoint()) {
-      TimePoint sleepTarget = t1 + interval;
-      m_nextFrame = sleepTarget + interval;
-      lock.unlock();
-      Sleep::sleepUntil(t1, sleepTarget);
+      m_nextFrame = now + interval;
       return;
     }
 
     // Capture current sleep target safely under the lock
     TimePoint sleepTarget = m_nextFrame;
 
-    if (t1 < sleepTarget) {
-      // On time: maintain strict phase grid to prevent clock drift
-      m_nextFrame = sleepTarget + interval;
-      lock.unlock();
-      Sleep::sleepUntil(t1, sleepTarget);
-    } else {
-      // Late (minor or major stall): present immediately to avoid adding latency,
-      // and re-anchor the deadline to t1 so the next frame gets a full interval
-      m_nextFrame = t1 + interval;
+    if (now >= sleepTarget) {
+      TimePoint nextFrame = sleepTarget + interval;
+
+      if (nextFrame <= now) {
+        // Stall (>= 1 full frame lost): reset overshoot estimate and
+        // re-anchor the deadline grid to prevent a catch-up burst.
+        m_deviation = TimerDuration::zero();
+        m_nextFrame = now + interval;
+      } else {
+        // Sub-frame slip (< 1 interval): preserve both the phase grid and the
+        // learned OS sleep overshoot estimate so brief spikes don't cause oscillation.
+        m_nextFrame = nextFrame;
+      }
+
+      return;
+    }
+
+    // Advance the nominal deadline independently of sleep correction.
+    TimePoint nextFrame = sleepTarget + interval;
+    m_nextFrame = nextFrame;
+
+    // Apply the accumulated sleep overshoot estimate to the requested wake time.
+    TimePoint correctedSleepTarget = sleepTarget - m_deviation;
+
+    if (correctedSleepTarget <= now) {
+      // Already within the wakeup margin of the deadline: present immediately
+      // without sleeping, and feed a zero-overshoot sample into the EWMA so
+      // m_deviation does not remain frozen if frame times hover near the limit.
+      updateDeviation(now, now);
+      return;
+    }
+
+    lock.unlock();
+    Sleep::sleepUntil(now, correctedSleepTarget);
+    TimePoint wakeTime = dxvk::high_resolution_clock::now();
+    lock.lock();
+
+    // Do not apply a stale sample if another call changed the target or deadline changed while sleeping.
+    if (m_targetInterval == interval && m_nextFrame == nextFrame) {
+      updateDeviation(correctedSleepTarget, wakeTime);
     }
   }
 

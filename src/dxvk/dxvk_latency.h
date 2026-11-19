@@ -228,6 +228,16 @@ namespace dxvk {
     virtual void freeSubmitQueryPool(
             VkQueryPool*              queryPool ) { }
 
+    /**
+     * \brief Queries whether active frame pacing is enabled
+     *
+     * Used by the built-in FPS limiter to yield pacing control
+     * when an active frame pacer is managing frame delivery.
+     */
+    virtual bool isFramePacingEnabled() const {
+      return false;
+    }
+
   private:
 
     std::atomic<uint64_t> m_refCount = { 0u };

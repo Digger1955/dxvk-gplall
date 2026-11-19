@@ -195,6 +195,9 @@ namespace dxvk {
     DxvkLatencyStats getStatistics( uint64_t frameId ) override
       { return DxvkLatencyStats(); }
 
+    bool isFramePacingEnabled() const override {
+      return true;
+    }
 
     // non-overriding methods
 
