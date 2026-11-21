@@ -623,6 +623,23 @@ namespace dxvk {
     }
 
     /**
+     * \brief Assigns resource cookie
+     *
+     * Used to rotate storage between resources. We still
+     * need to assign cookies on allocation regardless, or
+     * otherwise resource relocation will get confused.
+     *
+     * There is a small chance that requesting relocation
+     * for a rotating resource will hit the wrong resource,
+     * but that does not lead to correctness issues since we
+     * allocate new storage for the resource on demand anyway.
+     * \param [in] cookie Resource cookie
+     */
+    void assignResource(uint64_t cookie) {
+      m_resourceCookie.store(cookie, std::memory_order_relaxed);
+    }
+
+    /**
      * \brief Creates buffer view
      *
      * \param [in] key View properties
@@ -645,7 +662,7 @@ namespace dxvk {
     std::atomic<uint32_t>       m_useCount = { 0u };
     DxvkAllocationFlags         m_flags = 0u;
 
-    uint64_t                    m_resourceCookie = 0u;
+    std::atomic<uint64_t>       m_resourceCookie = { 0u };
 
     VkDeviceMemory              m_memory = VK_NULL_HANDLE;
     VkDeviceSize                m_address = 0u;
@@ -1102,13 +1119,15 @@ namespace dxvk {
    */
   struct DxvkRelocationEntry {
     DxvkRelocationEntry() = default;
-    DxvkRelocationEntry(Rc<DxvkPagedResource>&& r, DxvkAllocationModes m)
-    : resource(std::move(r)), mode(m) { }
+    DxvkRelocationEntry(Rc<DxvkPagedResource>&& r, DxvkAllocationModes m, bool c)
+    : resource(std::move(r)), mode(m), changesResidency(c) { }
 
     /// Resource to relocate
     Rc<DxvkPagedResource> resource;
     /// Resource to relocate
     DxvkAllocationModes mode = 0u;
+    /// Relocation request changes resource residency
+    bool changesResidency = false;
   };
 
 
@@ -1142,14 +1161,21 @@ namespace dxvk {
     /**
      * \brief Adds relocation entry to the list
      *
+     * If a resource is already queued for relocation,
+     * the previous entry will be overwritten.
      * \param [in] resource Resource to add
      * \param [in] allocation Resource storage
      * \param [in] mode Allocation mode
+     * \param [in] changesResidency Set to \c true if the relocation
+     *    request is done to alter the resource residency status.
+     * \returns \c true if the request was added, and
+     *    \c false if a stronger request already exists.
      */
-    void addResource(
+    bool addResource(
             Rc<DxvkPagedResource>&&     resource,
       const DxvkResourceAllocation*     allocation,
-            DxvkAllocationModes         mode);
+            DxvkAllocationModes         mode,
+            bool                        changesResidency);
 
     /**
      * \brief Clears list
@@ -1182,6 +1208,11 @@ namespace dxvk {
       DxvkResourceMemoryInfo,
       DxvkRelocationEntry,
       RelocationOrdering>       m_entries;
+
+    std::unordered_map<
+      Rc<DxvkPagedResource>,
+      DxvkResourceMemoryInfo,
+      RcHash>                   m_resources;
 
     DxvkResourceMemoryInfo      m_lastKey = {};
 
