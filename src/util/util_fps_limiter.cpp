@@ -125,8 +125,7 @@ namespace dxvk {
     }
 
     lock.unlock();
-    Sleep::sleepFor(now, sleepDuration);
-    TimePoint wakeTime = dxvk::high_resolution_clock::now();
+    TimePoint wakeTime = Sleep::sleepFor(now, sleepDuration);
     lock.lock();
 
     // Do not apply a stale sample if another call changed the target or deadline changed while sleeping.
