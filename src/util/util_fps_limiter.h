@@ -52,14 +52,14 @@ namespace dxvk {
     using TimePoint = dxvk::high_resolution_clock::time_point;
     using TimerDuration = std::chrono::nanoseconds;
 
-    void updateDeviation(TimePoint target, TimePoint wake);
+    void updateDeviation(TimerDuration rawError);
 
     dxvk::mutex     m_mutex;
 
-    TimerDuration   m_targetInterval     = TimerDuration::zero();
-    TimerDuration   m_maxCorrection      = TimerDuration::zero();
-    TimerDuration   m_deviation          = TimerDuration::zero();
-    TimePoint       m_nextFrame          = TimePoint();
+    TimerDuration   m_targetInterval  = TimerDuration::zero();
+    TimerDuration   m_maxCorrection   = TimerDuration::zero();
+    TimerDuration   m_deviation       = TimerDuration::zero();
+    TimePoint       m_lastFrame       = TimePoint();
 
     bool            m_envOverride     = false;
 
