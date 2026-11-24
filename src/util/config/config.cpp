@@ -1217,6 +1217,11 @@ namespace dxvk {
     { R"(\\splintercell3\.exe$)", {{
       { "d3d9.ignoreDefaultBufferLockRange", "True" },
     }} },
+    /* Call of Duty: World at War                 *
+     * Improves performance                       */
+    { R"(\\CoDWaW\.exe$)", {{
+      { "d3d9.cachedWriteOnlyBuffers",       "True" },
+    }} },
 
     /**********************************************/
     /* D3D8 GAMES                                 */
