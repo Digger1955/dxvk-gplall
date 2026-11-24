@@ -1,4 +1,4 @@
-# DXVK-GPLALL (DXVK-General-Program-Level-Async-LowLatency)
+# DXVK-Async-LowLatency
 
 A Vulkan 1.3-based translation layer for Direct3D 8/9/10/11 which allows running 3D applications on: 
 
@@ -11,55 +11,55 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 
 ### Additional Info
 
- - [DXVK-GPLALL Wiki](https://github.com/Digger1955/dxvk-gplall/wiki)
+ - [Wiki](https://github.com/Digger1955/dxvk-gplall/wiki)
 
  - [Detailed Changelog](https://github.com/Digger1955/dxvk-gplall/wiki/Detailed-Changelog)
 
- - [Builds Reference Guide](https://github.com/Digger1955/dxvk-gplall/wiki/Builds-Reference-Guide) - recommended to read to achieve the best results on the end-user system and **REQUIRED TO READ BEFORE PROVIDING DXVK-GPLALL AS A PART OF WINE/PROTON.**
+ - [Builds Reference Guide](https://github.com/Digger1955/dxvk-gplall/wiki/Builds-Reference-Guide) - recommended to read to achieve the best results on the end-user system and **REQUIRED TO READ BEFORE PROVIDING AS A PART OF WINE/PROTON.**
 
  - [Benchmarks](https://github.com/Digger1955/dxvk-gplall/wiki/Benchmarks)
 
- - [Frequently Asked Questions (FAQ)](https://github.com/Digger1955/dxvk-gplall/wiki/Frequently-Asked-Questions-(FAQ)) - **REQUIRED TO READ BEFORE PROVIDING DXVK-GPLALL AS A PART OF WINE/PROTON.**
+ - [Frequently Asked Questions (FAQ)](https://github.com/Digger1955/dxvk-gplall/wiki/Frequently-Asked-Questions-(FAQ)) - **REQUIRED TO READ BEFORE PROVIDING AS A PART OF WINE/PROTON.**
 
- - [`dxvk.conf` Options Guide](https://github.com/Digger1955/dxvk-gplall/wiki/dxvk.conf-Options-Guide) - recommended to read to achieve the best results on the end-user system and **REQUIRED TO READ BEFORE PROVIDING DXVK-GPLALL AS A PART OF WINE/PROTON.**
+ - [`dxvk.conf` Options Guide](https://github.com/Digger1955/dxvk-gplall/wiki/dxvk.conf-Options-Guide) - recommended to read to achieve the best results on the end-user system and **REQUIRED TO READ BEFORE PROVIDING AS A PART OF WINE/PROTON.**
 
  - [Contributing Guidelines](https://github.com/Digger1955/dxvk-gplall/wiki/Contributing-Guidelines)
 
 ## Major changes compared to [upstream DXVK](https://github.com/doitsujin/dxvk)
 
-1. Implemented `DXVK-Async 1.10.3-style`, highly-parallelizable asynchronous pipeline compilation (Async) for the DXVK 2.6.x codebase, which replaces upstream DXVK's Graphics Pipeline Library (GPL) and State Cache implementations, starting from DXVK-GPLALL 2.6.10-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases). Contributors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack), [Sporif](https://github.com/Sporif/dxvk-async), [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/), [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
+1. Implemented `DXVK-Async 1.10.3-style`, highly-parallelizable asynchronous pipeline compilation (Async) for the DXVK 2.6.x codebase, which replaces upstream DXVK's Graphics Pipeline Library (GPL) and State Cache implementations, starting from 2.6.10-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases). Contributors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack), [Sporif](https://github.com/Sporif/dxvk-async), [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/), [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
 
 2. Implemented Low Latency frame pacing mode that aims to greatly reduce latency with minimal impact in fps. Author - [netborg-afps](https://github.com/netborg-afps/dxvk/releases)
 
-3. Implemented high-precision energy efficient FPS Limiter starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+3. Implemented high-precision energy efficient FPS Limiter starting from 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-4. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from DXVK-GPLALL 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+4. Implemented high-performance MSAA shader for devices without support for `shaderInt64` starting from 2.6.8-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-5. Implemented `SSE2` SIMD intrinsics in appropriate functions starting from DXVK-GPLALL 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
+5. Implemented `SSE2` SIMD intrinsics in appropriate functions starting from 2.6.9-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-6. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows starting from DXVK-GPLALL 2.6.9-1. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
+6. Implemented changes that improve Fullscreen Exclusive (FSE) behaviour on Windows starting from 2.6.9-1. Author - [KaitouJoker](https://github.com/KaitouJoker/dxvk-gplall)
 
-7. Implemented changes that allow to detect HDR state per monitor starting from DXVK-GPLALL 2.6.9-1. Author - [nanomatters](https://github.com/nanomatters/dxvk-salkim/)
+7. Implemented changes that allow to detect HDR state per monitor starting from 2.6.9-1. Author - [nanomatters](https://github.com/nanomatters/dxvk-salkim/)
 
 8. Implemented all of aforementioned in one DXVK package. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-9. Provided various GCC (for any OS) builds of DXVK-GPLALL:
+9. Provided various GCC (for any OS) builds of:
 
-   a) optimized for `SSE2` (`-march=x86-64`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`-mtune=amdfam10`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+ - optimized for `SSE2` (`-march=x86-64`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`-mtune=amdfam10`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
 
-   b) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for AMD Zen 3 and newer AMD CPUs (`-mtune=znver3`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
+ - optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for AMD Zen 3 and newer AMD CPUs (`-mtune=znver3`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level;
 
-   c) optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for Intel Skylake and newer Intel CPUs (`-mtune=skylake`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level.
+ - optimized for `SSE4.2` (`-march=x86-64-v2`) and tuned for Intel Skylake and newer Intel CPUs (`-mtune=skylake`) with Link-Time Optimization (`LTO`, a.k.a. `-flto=auto`) and `-O3` optimization level.
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
-10. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-GPLALL:
+10. Provided various MSVC (requires [MSVCRT](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/)) builds of DXVK-Async-LowLatency:
 
-   a) optimized for `SSE2` (`/arch:SSE2`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`/favor:blend`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
+ - optimized for `SSE2` (`/arch:SSE2`) and tuned for any CPU, older than AMD Zen 3 or Intel Skylake (`/favor:blend`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
 
-   b) optimized for `AVX2` (`/arch:AVX2`) and tuned for AMD Zen 3 and newer AMD CPUs (`/favor:AMD64`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
+ - optimized for `AVX2` (`/arch:AVX2`) and tuned for AMD Zen 3 and newer AMD CPUs (`/favor:AMD64`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level;
 
-   c) optimized for `SSE4.2` (`/arch:SSE4.2`) and tuned for Intel Skylake and newer Intel CPUs (`/favor:INTEL64` a.k.a. `/favor:EM64T`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level.
+ - optimized for `SSE4.2` (`/arch:SSE4.2`) and tuned for Intel Skylake and newer Intel CPUs (`/favor:INTEL64` a.k.a. `/favor:EM64T`) with Link-Time Optimization (`LTO`, a.k.a. `/LTCG`) and `/O1, /Oi, /Ob3` optimization level.
 
 Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
@@ -67,14 +67,14 @@ Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases)
 
 ## How to use (Windows 10/11)
 
-1. Download DXVK-GPLALL package from [release](https://github.com/Digger1955/dxvk-gplall/releases) page.
+1. Download DXVK-Async-LowLatency package from [release](https://github.com/Digger1955/dxvk-gplall/releases) page.
 2. Copy appropriate [DLL dependencies](https://github.com/Digger1955/dxvk-gplall?tab=readme-ov-file#dll-dependencies) to the location of application's main executable folder.
 3. Run application.
 
 **Important**: It is **STRONGLY RECOMMENDED** to create `dxvk.conf` at application's main executable folder (per-application configuration file - first priority) or at `%APPDATA%/dxvk.conf` (one global configuration file - second priority) with your desired DXVK settings. Please refer to [Quick Start Guide](https://github.com/Digger1955/dxvk-gplall/wiki/dxvk.conf-Options-Guide#quick-start-guide) to achieve the best results on the end-user system.
 
 ## How to use (Linux/MacOS)
-In order to install a DXVK-GPLALL package obtained from the [release](https://github.com/Digger1955/dxvk-gplall/releases) page into a given wine prefix, copy or symlink the DLLs into the following directories as follows, then open `winecfg` and manually add `native` DLL overrides for `d3d8`, `d3d9`, `d3d10core`, `d3d11` and `dxgi` under the Libraries tab.
+In order to install a DXVK-Async-LowLatency package obtained from the [release](https://github.com/Digger1955/dxvk-gplall/releases) page into a given wine prefix, copy or symlink the DLLs into the following directories as follows, then open `winecfg` and manually add `native` DLL overrides for `d3d8`, `d3d9`, `d3d10core`, `d3d11` and `dxgi` under the Libraries tab.
 
 In a default Wine prefix that would be as follows:
 ```
@@ -178,19 +178,16 @@ Asynchronous pipeline compilation is enabled with `dxvk.enableAsync = True` in `
 
 Asynchronous pipeline compilation is disabled with `dxvk.enableAsync = False` in `dxvk.conf`.
 
-**Important**: After a few (3-5) application's sessions, in which most of the shaders (models, effects, etc.) will be captured (seen) and the GPU's shader cache will be created, Async can be disabled, but pipeline's (not shader's) compilation may produce stuttering (depends on GPU Vendor/Driver).
-
 `dxvk.asyncCompileThreshold` option in `dxvk.conf` controls the amount of pipelines, which will be compiled asynchronously. Value specifies required number of previous frames, in which there were draw calls to the render target, to trigger asynchronous pipeline compilation.
 
 The lower this value is, the more pipelines will be compiled asynchronously, the less amount of stutters from pipeline compilation will be happening, but the more graphical issues (not necessarily) may occur.
 
-**Common rule is**: the older the game - the lower the value can be set, in order to get the best performance, without any critical rendering issues.
+**Common rule is**: the older the game - the lower the value can be set, in order to get the best performance, without any critical issues.
 
 Based on testing, for the vast majority of applications:
 
  - **D3D8/D3D9**-applications: `dxvk.asyncCompileThreshold = 0`
- - **D3D10/D3D11**-applications and **Unity Engine** applications: `dxvk.asyncCompileThreshold = 1`
- - **D3D10/D3D11**-applications and **Unreal Engine 4** applications: `dxvk.asyncCompileThreshold = 2`
+ - **D3D10/D3D11**-applications: `dxvk.asyncCompileThreshold = 2`, sometimes `dxvk.asyncCompileThreshold = 1` is possible without any rendering or startup issues.
 
 **Default** value: `dxvk.asyncCompileThreshold = 2`
 
