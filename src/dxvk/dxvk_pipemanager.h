@@ -179,8 +179,7 @@ namespace dxvk {
      * \returns \c true if shaders are being compiled
      */
     bool isCompilingShaders() const {
-      return m_workers.isBusy()
-      || (m_compiler != nullptr && m_compiler->isBusy());
+      return m_workers.isBusy();
     }
 
     /**
