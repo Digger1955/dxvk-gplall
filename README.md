@@ -191,7 +191,12 @@ Based on testing, for the vast majority of applications:
 
 **Default** value: `dxvk.asyncCompileThreshold = 2`
 
-**Note:** **DO NOT** report any issues with this option set to 0 or 1.
+**DO NOT** report any issues with this option set to 0 or 1.
+
+In order to minimize the drawbacks of Async, the recommended course of actions is:
+
+1. On first launch and during first gameplay session - use the lowest possible value of `dxvk.asyncCompileThreshold` for specific application to let the GPU Driver compile Shader Cache.
+2. On subsequent sessions use the value of `dxvk.asyncCompileThreshold`, with which there are no graphical issues and minimal amount of stuttering.
 
 ## Low Latency frame pacing
 
