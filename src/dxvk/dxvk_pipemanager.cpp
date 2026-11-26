@@ -1,5 +1,3 @@
-#include <algorithm>
-
 #include "dxvk_device.h"
 #include "dxvk_pipemanager.h"
 
@@ -17,6 +15,7 @@ namespace dxvk {
     // and tell another thread to go for another pipeline.
     // Also, there are internal Vulkan driver locks exist which are limiting too.
     m_workerCount = 2;
+    this->startWorkers();
 
     Logger::info(str::format("DXVK: Using ", m_workerCount, " threads for synchronous pipeline compilation."));
     }
@@ -33,47 +32,17 @@ namespace dxvk {
     if (pipeline == nullptr)
       return;
 
-    std::unique_lock lock(m_queueLock);
-    this->startWorkers();
+    { std::unique_lock lock(m_queueLock);
+      m_queuedPipelines.push(PipelineEntry{pipeline, state});
+      m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
+    }
 
-    m_queuedPipelines.push(PipelineEntry{
-      pipeline,
-      state
-    });
-
-    m_pendingTasks++;
     m_queueCond.notify_one();
   }
 
 
   bool DxvkPipelineWorkers::isBusy() const {
-    std::unique_lock lock(m_queueLock);
-    return m_pendingTasks != 0ull;
-  }
-
-  void DxvkPipelineWorkers::waitIdle() {
-    std::unique_lock lock(m_queueLock);
-
-    while (m_pendingTasks > 0ull) {
-      if (!m_queuedPipelines.empty()) {
-        // Assist workers: steal a task from the queue and compile it locally
-        PipelineEntry p = std::move(m_queuedPipelines.front());
-        m_queuedPipelines.pop();
-
-        lock.unlock();
-        compileEntry(p);
-        lock.lock();
-
-        if (--m_pendingTasks == 0ull)
-          m_idleCond.notify_all();
-      } else {
-        // Queue is empty, but workers are still compiling the last few tasks.
-        // Sleep without spinning until they finish.
-        m_idleCond.wait(lock, [this] {
-          return m_pendingTasks == 0ull || !m_queuedPipelines.empty();
-        });
-      }
-    }
+    return m_pendingTasks.load(std::memory_order_acquire) != 0ull;
   }
 
 
@@ -126,18 +95,10 @@ namespace dxvk {
         m_queuedPipelines.pop();
       }
 
-      compileEntry(p);
+      p.graphicsPipeline->compilePipeline(p.graphicsState);
 
-      { std::unique_lock lock(m_queueLock);
-        if (--m_pendingTasks == 0ull)
-          m_idleCond.notify_all();
-      }
+      m_pendingTasks.fetch_sub(1, std::memory_order_release);
     }
-  }
-
-  void DxvkPipelineWorkers::compileEntry(const PipelineEntry& entry) {
-    if (entry.graphicsPipeline)
-      entry.graphicsPipeline->compilePipeline(entry.graphicsState);
   }
 
   DxvkPipelineManager::DxvkPipelineManager(

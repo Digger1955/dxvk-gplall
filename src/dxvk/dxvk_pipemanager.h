@@ -63,15 +63,6 @@ namespace dxvk {
     bool isBusy() const;
 
     /**
-     * \brief Waits for all queued pipelines to finish compiling
-     *
-     * Assists worker threads by compiling queued pipelines
-     * on the calling thread until the queue is drained, then
-     * sleeps until active workers finish.
-     */
-    void waitIdle();
-
-    /**
      * \brief Stops all worker threads
      *
      * Stops threads and waits for their current work
@@ -86,11 +77,10 @@ namespace dxvk {
       DxvkGraphicsPipelineStateInfo graphicsState;
     };
 
-    uint64_t                          m_pendingTasks = 0ull;
+    std::atomic<uint64_t>             m_pendingTasks = { 0ull };
 
-    mutable dxvk::mutex               m_queueLock;
+    dxvk::mutex                       m_queueLock;
     dxvk::condition_variable          m_queueCond;
-    dxvk::condition_variable          m_idleCond;
 
     std::queue<PipelineEntry>         m_queuedPipelines;
 
@@ -101,8 +91,6 @@ namespace dxvk {
     void startWorkers();
 
     void runWorker();
-
-    void compileEntry(const PipelineEntry& entry);
 
   };
 
@@ -180,13 +168,6 @@ namespace dxvk {
      */
     bool isCompilingShaders() const {
       return m_workers.isBusy();
-    }
-
-    /**
-     * \brief Waits for all shader compilations to complete
-     */
-    void waitForShaders() {
-      m_workers.waitIdle();
     }
 
     /**

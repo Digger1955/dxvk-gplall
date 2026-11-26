@@ -1,9 +1,7 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
+#include <stack>
 #include <vector>
 
 #include "../util/thread.h"
@@ -19,7 +17,7 @@ namespace dxvk {
    * \brief Pipeline compiler
    *
    * Asynchronous pipeline compiler
-   * Uses a queue and batches work between threads as much as possible
+   * Uses a LIFO stack to minimize shader pop-in
    */
   class DxvkPipelineCompiler : public RcObject {
 
@@ -53,9 +51,9 @@ namespace dxvk {
     };
 
     std::atomic<bool>           m_compilerStop = { false };
-    std::mutex                  m_compilerLock;
-    std::condition_variable     m_compilerCond;
-    std::queue<PipelineEntry>   m_compilerQueue;
+    dxvk::mutex                 m_compilerLock;
+    dxvk::condition_variable    m_compilerCond;
+    std::stack<PipelineEntry>   m_compilerQueue;
     std::vector<dxvk::thread>   m_compilerThreads;
 
     void runCompilerThread();
