@@ -47,19 +47,9 @@ namespace dxvk {
     ~DxvkPipelineWorkers();
 
     /**
-     * \brief Compiles an optimized compute pipeline
-     *
-     * \param [in] pipeline Compute pipeline
-     * \param [in] state Pipeline state
-     */
-    void compileComputePipeline(
-            DxvkComputePipeline*            pipeline,
-      const DxvkComputePipelineStateInfo&   state);
-
-    /**
      * \brief Compiles an optimized graphics pipeline
      *
-     * \param [in] pipeline Compute pipeline
+     * \param [in] pipeline Graphics pipeline
      * \param [in] state Pipeline state
      */
     void compileGraphicsPipeline(
@@ -73,6 +63,15 @@ namespace dxvk {
     bool isBusy() const;
 
     /**
+     * \brief Waits for all queued pipelines to finish compiling
+     *
+     * Assists worker threads by compiling queued pipelines
+     * on the calling thread until the queue is drained, then
+     * sleeps until active workers finish.
+     */
+    void waitIdle();
+
+    /**
      * \brief Stops all worker threads
      *
      * Stops threads and waits for their current work
@@ -83,16 +82,15 @@ namespace dxvk {
   private:
 
     struct PipelineEntry {
-      DxvkComputePipeline*          computePipeline;
       DxvkGraphicsPipeline*         graphicsPipeline;
-      DxvkComputePipelineStateInfo  computeState;
       DxvkGraphicsPipelineStateInfo graphicsState;
     };
 
-    std::atomic<uint64_t>             m_pendingTasks = { 0ull };
+    uint64_t                          m_pendingTasks = 0ull;
 
-    dxvk::mutex                       m_queueLock;
+    mutable dxvk::mutex               m_queueLock;
     dxvk::condition_variable          m_queueCond;
+    dxvk::condition_variable          m_idleCond;
 
     std::queue<PipelineEntry>         m_queuedPipelines;
 
@@ -103,6 +101,8 @@ namespace dxvk {
     void startWorkers();
 
     void runWorker();
+
+    void compileEntry(const PipelineEntry& entry);
 
   };
 
@@ -179,14 +179,22 @@ namespace dxvk {
      * \returns \c true if shaders are being compiled
      */
     bool isCompilingShaders() const {
-      return m_workers.isBusy();
+      return m_workers.isBusy()
+      || (m_compiler != nullptr && m_compiler->isBusy());
+    }
+
+    /**
+     * \brief Waits for all shader compilations to complete
+     */
+    void waitForShaders() {
+      m_workers.waitIdle();
     }
 
     /**
      * \brief Stops async compiler threads
      */
     void stopWorkerThreads();
-    
+
   private:
     
     DxvkDevice*               m_device;
