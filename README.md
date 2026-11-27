@@ -27,7 +27,7 @@ For GPUs that do not have Vulkan 1.3 compliant driver, it is recommended to use 
 
 ## Major changes compared to [upstream DXVK](https://github.com/doitsujin/dxvk)
 
-1. Implemented `DXVK-Async 1.10.3-style`, highly-parallelizable asynchronous pipeline compilation (Async) for the DXVK 2.6.x codebase, which replaces upstream DXVK's Graphics Pipeline Library (GPL) and State Cache implementations, starting from 2.6.10-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases). Contributors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack), [Sporif](https://github.com/Sporif/dxvk-async), [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/), [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
+1. Implemented `DXVK-Async 1.10.3-like` asynchronous pipeline compilation (Async) for the DXVK 2.6.x codebase, which replaces upstream DXVK's Graphics Pipeline Library (GPL) and State Cache implementations, starting from 2.6.10-1. Author - [Digger1955](https://github.com/Digger1955/dxvk-gplall/releases). Contributors - [jomihaka](https://github.com/jomihaka/dxvk-poe-hack), [Sporif](https://github.com/Sporif/dxvk-async), [Ph42oN](https://gitlab.com/Ph42oN/dxvk-gplasync/), [Britt Yazel](https://gitlab.com/Ph42oN/dxvk-gplasync/-/merge_requests/12)
 
 2. Implemented Low Latency frame pacing mode that aims to greatly reduce latency with minimal impact in fps. Author - [netborg-afps](https://github.com/netborg-afps/dxvk/releases)
 
