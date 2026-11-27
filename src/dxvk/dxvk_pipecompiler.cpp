@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 
 #include "dxvk_device.h"
 #include "dxvk_graphics.h"
@@ -6,37 +7,54 @@
 
 namespace dxvk {
 
+  struct DxvkPipelineCompiler::PipelineEntry {
+    DxvkGraphicsPipeline*         pipeline = nullptr;
+    DxvkGraphicsPipelineStateInfo state;
+  };
+
+
+  size_t DxvkPipelineCompiler::PipelineEntryHash::operator () (const PipelineEntry* entry) const {
+    DxvkHashState hash;
+    hash.add(std::hash<DxvkGraphicsPipeline*>()(entry->pipeline));
+    hash.add(entry->state.hash());
+    return hash;
+  }
+
+
+  bool DxvkPipelineCompiler::PipelineEntryEq::operator () (const PipelineEntry* a, const PipelineEntry* b) const {
+    return a->pipeline == b->pipeline
+        && std::memcmp(&a->state, &b->state, sizeof(DxvkGraphicsPipelineStateInfo)) == 0;
+  }
+
+
   DxvkPipelineCompiler::DxvkPipelineCompiler(const DxvkDevice* device) {
       // Determine number of available CPU logical threads, and clamp to a useful
       // range. DXVK is not tested on extremely high core counts, and
       // parallelism may be limited past a certain point.
       // Since application thread is always used by the asynchronous pipeline compilation,
-      // there is no reason to limit the amount of used threads - 
+      // it is reasonable to use more than two threads - 
       // by doing that we are lowering load on application thread and potentially reduce stutters.
       uint32_t coreCount = dxvk::thread::hardware_concurrency();
 
+      // Pipeline compilation paralellism is limited by many things,
+      // so the best strategy is to prevent starvation of OS/Application.
+      // Two threads are always used by synchronous pipeline compilation, 
+      // which can happen in parallel with asynchronous pipeline compilation,
+      // and four threads are reserved for OS/Application.
       // Minimum amount of threads for asynchronous pipeline compilation is 2.
-      // Maximum amount of threads for asynchronous pipeline compilation is 64.
-      coreCount = std::clamp(coreCount, 2u, 64u);
+      // Maximum amount of threads for asynchronous pipeline compilation is 8.
+      uint32_t numWorkers = coreCount > 8 ? std::clamp(coreCount - 6, 2u, 8u) : 2u;
 
-      uint32_t numWorkers = coreCount;
+    // Pre-allocate raw memory capacity without adding any elements.
+    m_compilerThreads.reserve(numWorkers);
+
+    // Spawn the threads completely with the normal priority (by not specifying priority)
+    // Lower priority leads to priority inversion issue
+    for (uint32_t i = 0; i < numWorkers; i++) {
+      m_compilerThreads.emplace_back([this] { this->runCompilerThread(); });
+    }
 
     Logger::info(str::format("DXVK: Using ", numWorkers, " threads for asynchronous pipeline compilation."));
-
-    // Resize the vector safely first while no child threads are active
-    m_compilerThreads.resize(numWorkers);
-
-    // Spawn the threads completely
-    for (uint32_t i = 0; i < numWorkers; i++) {
-      m_compilerThreads.at(i) = dxvk::thread([this] { this->runCompilerThread(); });
-    }
-
-    // Set priorities only after all handles are registered in the vector
-    // Keeps background work from choking the application
-    for (uint32_t i = 0; i < numWorkers; i++) {
-      m_compilerThreads.at(i).set_priority(ThreadPriority::Lowest); 
-    }
-
   }
 
 
@@ -44,17 +62,21 @@ namespace dxvk {
     this->stopWorkerThreads();
   }
 
+
   void DxvkPipelineCompiler::stopWorkerThreads() {
-    { std::lock_guard<std::mutex> lock(m_compilerLock);
-      m_compilerStop.store(true, std::memory_order_release);
+    { std::lock_guard<dxvk::mutex> lock(m_compilerLock);
+      if (m_compilerStop.exchange(true, std::memory_order_release))
+        return;
     }
 
     m_compilerCond.notify_all();
+
     for (auto& thread : m_compilerThreads)
       thread.join();
 
     m_compilerThreads.clear();
   }
+
 
   void DxvkPipelineCompiler::queueCompilation(
     DxvkGraphicsPipeline*                   pipeline,
@@ -62,18 +84,26 @@ namespace dxvk {
     if (pipeline == nullptr)
       return;
 
-    {
-      std::lock_guard<std::mutex> lock(m_compilerLock);
+    PipelineEntry key = { pipeline, state };
+
+    { std::lock_guard<dxvk::mutex> lock(m_compilerLock);
 
       if (m_compilerStop.load(std::memory_order_acquire))
         return;
 
-    // Constructs the PipelineEntry directly inside the queue container slot.
-    m_compilerQueue.emplace(PipelineEntry{ pipeline, state });
+      // Hashes & looks up once: inserts &key temporarily on a miss
+      auto [iter, inserted] = m_compilerSet.emplace(&key);
+      if (!inserted)
+        return;
+
+      // Allocate on the heap only when we know it's a new entry,
+      // then swap the stack pointer for the heap pointer in-place.
+      auto entry = std::make_unique<PipelineEntry>(std::move(key));
+      const_cast<const PipelineEntry*&>(*iter) = entry.get();
+
+      m_compilerQueue.push(std::move(entry));
     }
 
-    // Wake up one thread, let him take his part of queue,
-    // then, if queue is not empty - wake up another (any) thread.
     m_compilerCond.notify_one();
   }
 
@@ -81,13 +111,10 @@ namespace dxvk {
   void DxvkPipelineCompiler::runCompilerThread() {
     env::setThreadName("dxvk-pcompiler");
 
-    std::vector<PipelineEntry> tasks;
-    const size_t MAX_BATCH_PER_THREAD = 2;
-    tasks.reserve(MAX_BATCH_PER_THREAD);
-
     while (true) {
-      {
-        std::unique_lock<std::mutex> lock(m_compilerLock);
+      std::unique_ptr<PipelineEntry> entry;
+
+      { std::unique_lock<dxvk::mutex> lock(m_compilerLock);
 
         m_compilerCond.wait(lock, [this] {
           return m_compilerStop.load(std::memory_order_acquire)
@@ -98,48 +125,18 @@ namespace dxvk {
         if (m_compilerStop.load(std::memory_order_acquire) && m_compilerQueue.empty())
           break;
 
-        // --- DYNAMIC BATCH CALCULATION ---
-        size_t currentQueueSize = m_compilerQueue.size();
-
-        // Default fallback for small bursts
-        // Spreads shader compilation load evenly
-        size_t targetBatchSize = 1; 
-
-        if (currentQueueSize > 1) {
-          // Distribute work proportionally among available threads
-          // IMPORTANT: does not guarantee that each worker gets an equal share. 
-          // It only computes a chunk size based on the queue size at the moment a worker wakes and locks.
-          targetBatchSize = currentQueueSize / m_compilerThreads.size();
-          
-          // Clamp to keep lock contention low during massive loading sequences
-          // Clamp boundaries. Minimum bulk chunk is 1, Max is 2.
-          // It is more efficient to give each thread a small part of queue, 
-          // than to load a bigger part of queue, into less amount of threads, 
-          // in order to avoid stuttering.
-          targetBatchSize = std::clamp(targetBatchSize, size_t(1), MAX_BATCH_PER_THREAD);
-        }
-        // ----------------------------------
-
-        // Pull the dynamically calculated number of tasks from the queue
-        while (!m_compilerQueue.empty() && tasks.size() < targetBatchSize) {
-          tasks.push_back(std::move(m_compilerQueue.front()));
-          m_compilerQueue.pop();
-        }
-
-        // Notify the next thread WHILE HOLDING the lock. 
-        // This ensures the OS readies Thread 2 immediately, preventing Thread 1 
-        // from looping around and stealing the work again.
-        if (!m_compilerQueue.empty()) {
-          m_compilerCond.notify_one();
-        }
+        entry = std::move(m_compilerQueue.top());
+        m_compilerQueue.pop();
       } // Lock is cleanly released here
 
       // Compile safely outside the mutex lock
-      for (auto& entry : tasks) {
-        if (entry.pipeline != nullptr)
-          entry.pipeline->compilePipeline(entry.state);
+      entry->pipeline->compilePipeline(entry->state);
+
+      // Remove from active set after compilation finishes so duplicate
+      // requests arriving mid-compilation are also filtered out
+      { std::lock_guard<dxvk::mutex> lock(m_compilerLock);
+        m_compilerSet.erase(entry.get());
       }
-      tasks.clear();
     }
   }
 

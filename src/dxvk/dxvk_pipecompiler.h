@@ -1,9 +1,9 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
+#include <memory>
+#include <stack>
+#include <unordered_set>
 #include <vector>
 
 #include "../util/thread.h"
@@ -19,7 +19,8 @@ namespace dxvk {
    * \brief Pipeline compiler
    *
    * Asynchronous pipeline compiler
-   * Uses a queue and batches work between threads as much as possible
+   * Uses a LIFO stack to minimize shader pop-in 
+   * and deduplicates in-flight pipeline states
    */
   class DxvkPipelineCompiler : public RcObject {
 
@@ -47,16 +48,22 @@ namespace dxvk {
 
   private:
 
-    struct PipelineEntry {
-      DxvkGraphicsPipeline*                   pipeline = nullptr;
-      DxvkGraphicsPipelineStateInfo           state;
+    struct PipelineEntry;
+
+    struct PipelineEntryHash {
+      size_t operator () (const PipelineEntry* entry) const;
     };
 
-    std::atomic<bool>           m_compilerStop = { false };
-    std::mutex                  m_compilerLock;
-    std::condition_variable     m_compilerCond;
-    std::queue<PipelineEntry>   m_compilerQueue;
-    std::vector<dxvk::thread>   m_compilerThreads;
+    struct PipelineEntryEq {
+      bool operator () (const PipelineEntry* a, const PipelineEntry* b) const;
+    };
+
+    std::atomic<bool>                                                              m_compilerStop = { false };
+    dxvk::mutex                                                                    m_compilerLock;
+    dxvk::condition_variable                                                       m_compilerCond;
+    std::stack<std::unique_ptr<PipelineEntry>>                                     m_compilerQueue;
+    std::unordered_set<const PipelineEntry*, PipelineEntryHash, PipelineEntryEq>   m_compilerSet;
+    std::vector<dxvk::thread>                                                      m_compilerThreads;
 
     void runCompilerThread();
 

@@ -47,19 +47,9 @@ namespace dxvk {
     ~DxvkPipelineWorkers();
 
     /**
-     * \brief Compiles an optimized compute pipeline
-     *
-     * \param [in] pipeline Compute pipeline
-     * \param [in] state Pipeline state
-     */
-    void compileComputePipeline(
-            DxvkComputePipeline*            pipeline,
-      const DxvkComputePipelineStateInfo&   state);
-
-    /**
      * \brief Compiles an optimized graphics pipeline
      *
-     * \param [in] pipeline Compute pipeline
+     * \param [in] pipeline Graphics pipeline
      * \param [in] state Pipeline state
      */
     void compileGraphicsPipeline(
@@ -83,9 +73,7 @@ namespace dxvk {
   private:
 
     struct PipelineEntry {
-      DxvkComputePipeline*          computePipeline;
       DxvkGraphicsPipeline*         graphicsPipeline;
-      DxvkComputePipelineStateInfo  computeState;
       DxvkGraphicsPipelineStateInfo graphicsState;
     };
 
@@ -186,7 +174,7 @@ namespace dxvk {
      * \brief Stops async compiler threads
      */
     void stopWorkerThreads();
-    
+
   private:
     
     DxvkDevice*               m_device;

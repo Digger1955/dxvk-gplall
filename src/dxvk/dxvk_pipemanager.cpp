@@ -1,6 +1,3 @@
-#include <algorithm>
-#include <optional>
-
 #include "dxvk_device.h"
 #include "dxvk_pipemanager.h"
 
@@ -8,26 +5,17 @@ namespace dxvk {
 
   DxvkPipelineWorkers::DxvkPipelineWorkers(
           DxvkDevice*                     device) {
-    // Determine number of available CPU logical threads, and clamp to a useful
-    // range. DXVK is not tested on extremely high core counts, and
-    // parallelism may be limited past a certain point.
     // Since application thread is always used by the synchronous pipeline compilation,
     // we can at least try to change a thread on which it happens - 
     // by doing that we are lowering load on application thread and potentially reduce stutters.
-    uint32_t coreCount = dxvk::thread::hardware_concurrency();
 
-    // Use up to half of CPU logical threads
+    // Use two CPU logical threads.
     // The only reason not to leave synchronous pipeline compilation single-threaded -
-    // Is to win the time which one thread spends compiling one pipeline,
+    // is to win the time which one thread spends compiling one pipeline,
     // and tell another thread to go for another pipeline.
     // Also, there are internal Vulkan driver locks exist which are limiting too.
-    coreCount = coreCount/2;
-
-    // Minimum amount of threads for synchronous pipeline compilation is 2.
-    // Maximum amount of threads for synchronous pipeline compilation is 16.
-    coreCount = std::clamp(coreCount, 2u, 16u);
-
-    m_workerCount = coreCount;
+    m_workerCount = 2;
+    this->startWorkers();
 
     Logger::info(str::format("DXVK: Using ", m_workerCount, " threads for synchronous pipeline compilation."));
     }
@@ -38,54 +26,23 @@ namespace dxvk {
   }
 
 
-  void DxvkPipelineWorkers::compileComputePipeline(
-          DxvkComputePipeline*            pipeline,
-    const DxvkComputePipelineStateInfo&   state) {
-    if (pipeline == nullptr)
-      return;
-
-    std::unique_lock lock(m_queueLock);
-    this->startWorkers();
-
-    // Constructs the PipelineEntry directly inside the queue container slot.
-    m_queuedPipelines.emplace(PipelineEntry{
-      pipeline,  // computePipeline
-      nullptr,   // graphicsPipeline
-      state,     // computeState
-      {}         // graphicsState (Default empty constructor)
-  });
-
-    m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
-
-    m_queueCond.notify_one();
-  }
-
-
   void DxvkPipelineWorkers::compileGraphicsPipeline(
           DxvkGraphicsPipeline*           pipeline,
     const DxvkGraphicsPipelineStateInfo&  state) {
     if (pipeline == nullptr)
       return;
 
-    std::unique_lock lock(m_queueLock);
-    this->startWorkers();
-
-    // Constructs the PipelineEntry directly inside the queue container slot.
-     m_queuedPipelines.emplace(PipelineEntry{
-       nullptr,   // computePipeline
-       pipeline,  // graphicsPipeline
-       {},        // computeState (Default empty constructor)
-       state      // graphicsState
-  });
-
-    m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
+    { std::unique_lock lock(m_queueLock);
+      m_queuedPipelines.push(PipelineEntry{pipeline, state});
+      m_pendingTasks.fetch_add(1, std::memory_order_relaxed);
+    }
 
     m_queueCond.notify_one();
   }
 
 
   bool DxvkPipelineWorkers::isBusy() const {
-    return m_pendingTasks.load(std::memory_order_relaxed) != 0ull;
+    return m_pendingTasks.load(std::memory_order_acquire) != 0ull;
   }
 
 
@@ -110,19 +67,13 @@ namespace dxvk {
   void DxvkPipelineWorkers::startWorkers() {
     if (!m_workersRunning) {
       m_workersRunning = true;
+      // Pre-allocate raw memory capacity without adding any elements.
+      m_workers.reserve(m_workerCount);
 
-      // Resize the vector safely first while no child threads are active
-      m_workers.resize(m_workerCount);
-
-      // Spawn the threads completely
+      // Spawn the threads completely with the normal priority (by not specifying priority)
+      // Lower priority leads to priority inversion issue
       for (uint32_t i = 0; i < m_workerCount; i++) {
-        m_workers[i] = dxvk::thread([this] { runWorker(); });
-      }
-
-      // Set priorities only after all handles are registered in the vector
-      // Keeps background work from choking the application
-      for (uint32_t i = 0; i < m_workerCount; i++) {
-        m_workers[i].set_priority(ThreadPriority::Lowest);
+        m_workers.emplace_back([this] { runWorker(); });
       }
     }
   }
@@ -131,7 +82,7 @@ namespace dxvk {
     env::setThreadName("dxvk-shader");
 
     while (true) {
-      std::optional<PipelineEntry> p;
+      PipelineEntry p;
 
       { std::unique_lock lock(m_queueLock);
 
@@ -149,26 +100,14 @@ namespace dxvk {
         // which is faster than copying, i.e. without std::move
         p = std::move(m_queuedPipelines.front());
         m_queuedPipelines.pop();
-
-        // Chained wake-up: If there are still items left in the queue, 
-        // instantly flag the next thread while we hold the lock.
-        if (!m_queuedPipelines.empty()) {
-          m_queueCond.notify_one();
-        }
       } // Lock is cleanly released here
 
       // Compile exactly 1 pipeline safely outside the lock
-      if (p) {
-        if (p->computePipeline)
-          p->computePipeline->compilePipeline(p->computeState);
-        else if (p->graphicsPipeline)
-          p->graphicsPipeline->compilePipeline(p->graphicsState);
+      p.graphicsPipeline->compilePipeline(p.graphicsState);
 
-        m_pendingTasks.fetch_sub(1, std::memory_order_relaxed);
-      }
+      m_pendingTasks.fetch_sub(1, std::memory_order_release);
     }
   }
-
 
   DxvkPipelineManager::DxvkPipelineManager(
           DxvkDevice*         device)
